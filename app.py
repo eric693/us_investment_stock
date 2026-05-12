@@ -168,6 +168,138 @@ def gen_strategy(price, ma5, ma20, ma60, rsi, levels):
 def index():
     return render_template('index.html')
 
+
+@app.route('/api/market')
+def get_market():
+    """VIX, major indices, gold — loaded async by frontend."""
+    syms = {
+        'vix':    '^VIX',
+        'sp500':  '^GSPC',
+        'nasdaq': '^IXIC',
+        'dow':    '^DJI',
+        'gold':   'GC=F',
+        'dxy':    'DX-Y.NYB',
+    }
+    result = {}
+    for key, sym in syms.items():
+        try:
+            h = yf.Ticker(sym).history(period='2d')
+            if len(h) >= 2:
+                cur  = safe_float(h['Close'].iloc[-1])
+                prev = safe_float(h['Close'].iloc[-2])
+                pct  = (cur / prev - 1) * 100 if prev else 0
+                result[key] = {'v': round(cur, 2), 'pct': round(pct, 2)}
+            elif len(h) == 1:
+                result[key] = {'v': round(safe_float(h['Close'].iloc[-1]), 2), 'pct': 0}
+            else:
+                result[key] = None
+        except:
+            result[key] = None
+
+    vix_val = (result.get('vix') or {}).get('v', 20)
+    if   vix_val < 15: label, cls = '極度貪婪', 'greed-hi'
+    elif vix_val < 20: label, cls = '貪婪',     'greed'
+    elif vix_val < 25: label, cls = '中性',     'neutral-m'
+    elif vix_val < 30: label, cls = '恐懼',     'fear'
+    else:              label, cls = '極度恐懼', 'fear-hi'
+    result['vixLabel'] = label
+    result['vixCls']   = cls
+    return jsonify(result)
+
+
+@app.route('/api/fundamentals/<ticker>')
+def get_fundamentals(ticker):
+    """Heavy financial data loaded async: cash flow, institutional, earnings."""
+    try:
+        ticker = ticker.upper().strip()
+        stock  = yf.Ticker(ticker)
+        info   = stock.info
+
+        # ── Cash Flow ──
+        ocf_val = fcf_val = 0
+        try:
+            cf = stock.cashflow
+            if cf is not None and not cf.empty:
+                for lbl in ['Operating Cash Flow', 'Total Cash From Operating Activities']:
+                    if lbl in cf.index:
+                        ocf_val = safe_float(cf.loc[lbl].iloc[0]); break
+                for lbl in ['Free Cash Flow']:
+                    if lbl in cf.index:
+                        fcf_val = safe_float(cf.loc[lbl].iloc[0]); break
+                if fcf_val == 0 and ocf_val != 0:
+                    for lbl in ['Capital Expenditure', 'Capital Expenditures']:
+                        if lbl in cf.index:
+                            fcf_val = ocf_val + safe_float(cf.loc[lbl].iloc[0]); break
+        except:
+            pass
+
+        # ── Institutional holders ──
+        top_holders = []
+        try:
+            ih = stock.institutional_holders
+            if ih is not None and not ih.empty:
+                cols = [str(c) for c in ih.columns]
+                # Find the holder name column (non-numeric, non-date column)
+                name_col = next((c for c in cols if 'holder' in c.lower() or 'institution' in c.lower()), None)
+                pct_col  = next((c for c in cols if 'pct' in c.lower() or '%' in c or 'out' in c.lower()), None)
+                val_col  = next((c for c in cols if 'value' in c.lower()), None)
+                if name_col:
+                    for _, row in ih.head(5).iterrows():
+                        holder = str(row[name_col])
+                        if holder and holder != 'nan' and not holder[:4].isdigit():
+                            pct = safe_float(row[pct_col]) if pct_col else 0
+                            val = safe_float(row[val_col]) if val_col else 0
+                            pct_disp = round(pct * 100, 2) if pct < 1 else round(pct, 2)
+                            top_holders.append({
+                                'holder': holder[:35],
+                                'pct':    pct_disp,
+                                'value':  round(val / 1e9, 2),
+                            })
+        except:
+            pass
+
+        # ── Earnings date ──
+        earnings_date = None
+        try:
+            cal = stock.calendar
+            if cal is not None and not cal.empty:
+                col = cal.columns[0]
+                earnings_date = str(col.date()) if hasattr(col, 'date') else str(col)[:10]
+        except:
+            pass
+
+        mktcap = safe_float(info.get('marketCap', 0))
+        fcf_yield = round(fcf_val / mktcap * 100, 2) if mktcap and fcf_val else 0
+        price = safe_float(info.get('currentPrice', info.get('regularMarketPrice', 0)))
+        pfcf = round(mktcap / fcf_val, 1) if fcf_val and fcf_val > 0 else None
+
+        return jsonify({
+            'ticker':       ticker,
+            'ocf':          round(ocf_val / 1e9, 2),
+            'fcf':          round(fcf_val / 1e9, 2),
+            'fcfYield':     fcf_yield,
+            'pfcf':         pfcf,
+            'debtEquity':   round(safe_float(info.get('debtToEquity', 0)), 1),
+            'currentRatio': round(safe_float(info.get('currentRatio', 0)), 2),
+            'roe':          round(safe_float(info.get('returnOnEquity', 0)) * 100, 1),
+            'roa':          round(safe_float(info.get('returnOnAssets', 0)) * 100, 1),
+            'profitMargin': round(safe_float(info.get('profitMargins', 0)) * 100, 1),
+            'grossMargin':  round(safe_float(info.get('grossMargins', 0)) * 100, 1),
+            'instPct':      round(safe_float(info.get('heldPercentInstitutions', 0)) * 100, 1),
+            'insiderPct':   round(safe_float(info.get('heldPercentInsiders', 0)) * 100, 1),
+            'shortRatio':   round(safe_float(info.get('shortRatio', 0)), 1),
+            'shortPct':     round(safe_float(info.get('shortPercentOfFloat', 0)) * 100, 2),
+            'earningsDate': earnings_date,
+            'epsEst':       round(safe_float(info.get('forwardEps', 0)), 2),
+            'revGrowth':    round(safe_float(info.get('revenueGrowth', 0)) * 100, 1),
+            'epsGrowth':    round(safe_float(info.get('earningsGrowth', 0)) * 100, 1),
+            'topHolders':   top_holders,
+        })
+    except Exception as e:
+        import traceback; traceback.print_exc()
+        return jsonify({'error': str(e)}), 500
+
+
 @app.route('/api/stock/<ticker>')
 def get_stock(ticker):
     try:
@@ -216,14 +348,12 @@ def get_stock(ticker):
         week52h = safe_float(info.get('fiftyTwoWeekHigh', hist['High'].max()))
         week52l = safe_float(info.get('fiftyTwoWeekLow',  hist['Low'].min()))
 
-        # Bollinger current state
         bb_u = safe_float(hist['BB_upper'].iloc[-1])
         bb_m = safe_float(hist['BB_mid'].iloc[-1])
         bb_l = safe_float(hist['BB_lower'].iloc[-1])
         bb_width = round((bb_u - bb_l) / bb_m * 100, 2) if bb_m else 0
         bb_pos   = round((price - bb_l) / (bb_u - bb_l) * 100, 1) if (bb_u - bb_l) else 50
 
-        # Analysis
         levels      = get_levels(hist)
         conclusions = gen_conclusions(price, ma5, ma20, ma60, macd_v, dea_v, rsi_v, vol_ratio)
         catalysts   = gen_catalysts(price, ma5, ma20, ma60, macd_v, dea_v, rsi_v, vol_ratio, week52h, info)
@@ -231,7 +361,20 @@ def get_stock(ticker):
         strategy    = gen_strategy(price, ma5, ma20, ma60, rsi_v, levels)
         returns     = calc_returns(hist)
 
-        # Quarterly revenue
+        # ── Quick financials from info (fast) ──
+        short_ratio = round(safe_float(info.get('shortRatio', 0)), 1)
+        short_pct   = round(safe_float(info.get('shortPercentOfFloat', 0)) * 100, 2)
+        profit_margin = round(safe_float(info.get('profitMargins', 0)) * 100, 1)
+        roe           = round(safe_float(info.get('returnOnEquity', 0)) * 100, 1)
+        gross_margin  = round(safe_float(info.get('grossMargins', 0)) * 100, 1)
+        debt_equity   = round(safe_float(info.get('debtToEquity', 0)), 1)
+        inst_pct      = round(safe_float(info.get('heldPercentInstitutions', 0)) * 100, 1)
+        insider_pct   = round(safe_float(info.get('heldPercentInsiders', 0)) * 100, 1)
+        rev_growth    = round(safe_float(info.get('revenueGrowth', 0)) * 100, 1)
+        eps_growth    = round(safe_float(info.get('earningsGrowth', 0)) * 100, 1)
+        fwd_eps       = round(safe_float(info.get('forwardEps', 0)), 2)
+
+        # ── Quarterly revenue ──
         quarterly = []
         try:
             qf = stock.quarterly_financials
@@ -242,10 +385,7 @@ def get_stock(ticker):
                         for col in row.index[:5]:
                             v = safe_float(row[col])
                             if v > 0:
-                                quarterly.append({
-                                    'period':  str(col)[:7],
-                                    'revenue': round(v / 1e6, 1)
-                                })
+                                quarterly.append({'period': str(col)[:7], 'revenue': round(v / 1e6, 1)})
                         break
         except:
             pass
@@ -283,6 +423,7 @@ def get_stock(ticker):
             'pe':           round(safe_float(info.get('trailingPE', 0)), 2),
             'forwardPe':    round(safe_float(info.get('forwardPE', 0)), 2),
             'eps':          round(safe_float(info.get('trailingEps', 0)), 2),
+            'fwdEps':       fwd_eps,
             'beta':         round(safe_float(info.get('beta', 0)), 2),
             'divYield':     round(safe_float(info.get('dividendYield', 0)) * 100, 2),
             'sharesOut':    safe_int(info.get('sharesOutstanding', 0)),
@@ -293,6 +434,16 @@ def get_stock(ticker):
             'analystLow':    round(safe_float(info.get('targetLowPrice', 0)), 2),
             'recMean':       round(safe_float(info.get('recommendationMean', 3)), 2),
             'numAnalysts':   safe_int(info.get('numberOfAnalystOpinions', 0)),
+            'shortRatio':   short_ratio,
+            'shortPct':     short_pct,
+            'profitMargin': profit_margin,
+            'grossMargin':  gross_margin,
+            'roe':          roe,
+            'debtEquity':   debt_equity,
+            'instPct':      inst_pct,
+            'insiderPct':   insider_pct,
+            'revGrowth':    rev_growth,
+            'epsGrowth':    eps_growth,
             'ma5':    round(ma5, 2),
             'ma20':   round(ma20, 2),
             'ma60':   round(ma60, 2),

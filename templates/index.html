@@ -11,7 +11,7 @@
 
 <!-- Navigation -->
 <nav class="topnav">
-  <div class="brand">US STOCK</div>
+  <div class="brand">US<span>STOCK</span></div>
   <div class="search-wrap">
     <input id="tickerInput" type="text" placeholder="輸入股票代碼 (AAPL, NVDA, TSLA...)" autocomplete="off" spellcheck="false">
     <button onclick="searchStock()">查詢</button>
@@ -28,19 +28,123 @@
   </div>
 </nav>
 
+<!-- Market Pulse Bar -->
+<div id="marketBar" class="market-bar">
+  <div class="mb-item mb-vix" id="mb-vix">
+    <span class="mb-lbl">恐慌指數 VIX</span>
+    <span class="mb-val" id="mbVixVal">--</span>
+    <span class="mb-badge" id="mbVixLabel">--</span>
+  </div>
+  <div class="mb-sep"></div>
+  <div class="mb-item" id="mb-sp500">
+    <span class="mb-lbl">S&amp;P 500</span>
+    <span class="mb-val" id="mbSp500">--</span>
+    <span class="mb-pct" id="mbSp500P">--</span>
+  </div>
+  <div class="mb-item" id="mb-nasdaq">
+    <span class="mb-lbl">NASDAQ</span>
+    <span class="mb-val" id="mbNasdaq">--</span>
+    <span class="mb-pct" id="mbNasdaqP">--</span>
+  </div>
+  <div class="mb-item" id="mb-dow">
+    <span class="mb-lbl">DOW</span>
+    <span class="mb-val" id="mbDow">--</span>
+    <span class="mb-pct" id="mbDowP">--</span>
+  </div>
+  <div class="mb-sep"></div>
+  <div class="mb-item" id="mb-gold">
+    <span class="mb-lbl">黃金</span>
+    <span class="mb-val" id="mbGold">--</span>
+    <span class="mb-pct" id="mbGoldP">--</span>
+  </div>
+  <div class="mb-item" id="mb-dxy">
+    <span class="mb-lbl">美元指數</span>
+    <span class="mb-val" id="mbDxy">--</span>
+    <span class="mb-pct" id="mbDxyP">--</span>
+  </div>
+  <div class="mb-time" id="mbTime"></div>
+</div>
+
 <!-- Welcome -->
 <div id="welcome" class="welcome-screen">
+  <div class="hero-bg"></div>
   <div class="welcome-inner">
-    <div class="welcome-logo">US</div>
-    <h1>美股投資分析儀表板</h1>
-    <p>輸入股票代碼，獲取完整技術分析、財務指標、關鍵價位、策略建議與最新新聞</p>
-    <div class="sample-grid">
-      <div class="sample-card" onclick="loadStock('NVDA')"><div class="s-ticker">NVDA</div><div class="s-name">輝達 NVIDIA</div></div>
-      <div class="sample-card" onclick="loadStock('AAPL')"><div class="s-ticker">AAPL</div><div class="s-name">蘋果 Apple</div></div>
-      <div class="sample-card" onclick="loadStock('TSLA')"><div class="s-ticker">TSLA</div><div class="s-name">特斯拉 Tesla</div></div>
-      <div class="sample-card" onclick="loadStock('MSFT')"><div class="s-ticker">MSFT</div><div class="s-name">微軟 Microsoft</div></div>
-      <div class="sample-card" onclick="loadStock('CRCL')"><div class="s-ticker">CRCL</div><div class="s-name">Circle Internet</div></div>
-      <div class="sample-card" onclick="loadStock('RKLB')"><div class="s-ticker">RKLB</div><div class="s-name">火箭實驗室</div></div>
+    <div class="hero-eyebrow">美股投資研究平台</div>
+    <h1 class="hero-title">智能選股<br><span class="hero-accent">深度分析</span></h1>
+    <p class="hero-sub">技術指標 · 基本面 · 市場情緒 · 法人籌碼，四維視角全方位解析美股</p>
+
+    <div class="hero-search">
+      <input id="heroInput" type="text" placeholder="輸入股票代碼，例如 AAPL、NVDA、TSLA..." autocomplete="off" spellcheck="false">
+      <button onclick="searchFromHero()">開始分析</button>
+    </div>
+
+    <div class="feature-row">
+      <div class="feat-card">
+        <div class="feat-icon tech-icon"></div>
+        <div class="feat-title">技術分析</div>
+        <div class="feat-desc">K線、均線、MACD、RSI、布林通道，全套技術指標即時計算</div>
+      </div>
+      <div class="feat-card">
+        <div class="feat-icon fund-icon"></div>
+        <div class="feat-title">基本面</div>
+        <div class="feat-desc">本益比、自由現金流、資產負債、季度營收趨勢一覽</div>
+      </div>
+      <div class="feat-card">
+        <div class="feat-icon sent-icon"></div>
+        <div class="feat-title">市場情緒</div>
+        <div class="feat-desc">VIX 恐慌指數、空頭比例、法人籌碼、市場情緒即時解讀</div>
+      </div>
+      <div class="feat-card">
+        <div class="feat-icon strat-icon"></div>
+        <div class="feat-title">策略建議</div>
+        <div class="feat-desc">長線、波段、短線三大策略，結合支撐壓力位具體操作建議</div>
+      </div>
+    </div>
+
+    <div class="stocks-section">
+      <div class="stocks-title">熱門股票</div>
+      <div class="sample-grid">
+        <div class="sample-card" onclick="loadStock('NVDA')">
+          <div class="sc-top"><span class="s-ticker">NVDA</span><span class="s-tag">半導體</span></div>
+          <div class="s-name">輝達 NVIDIA</div>
+          <div class="s-desc">AI 晶片龍頭，GPU 運算市場主宰者</div>
+        </div>
+        <div class="sample-card" onclick="loadStock('AAPL')">
+          <div class="sc-top"><span class="s-ticker">AAPL</span><span class="s-tag">科技</span></div>
+          <div class="s-name">蘋果 Apple</div>
+          <div class="s-desc">全球市值最大公司，生態系護城河深厚</div>
+        </div>
+        <div class="sample-card" onclick="loadStock('TSLA')">
+          <div class="sc-top"><span class="s-ticker">TSLA</span><span class="s-tag">電動車</span></div>
+          <div class="s-name">特斯拉 Tesla</div>
+          <div class="s-desc">電動車龍頭，AI 與自駕多元布局</div>
+        </div>
+        <div class="sample-card" onclick="loadStock('MSFT')">
+          <div class="sc-top"><span class="s-ticker">MSFT</span><span class="s-tag">雲端</span></div>
+          <div class="s-name">微軟 Microsoft</div>
+          <div class="s-desc">Azure + AI Copilot，企業軟體霸主</div>
+        </div>
+        <div class="sample-card" onclick="loadStock('AMZN')">
+          <div class="sc-top"><span class="s-ticker">AMZN</span><span class="s-tag">電商</span></div>
+          <div class="s-name">亞馬遜 Amazon</div>
+          <div class="s-desc">AWS 雲端 + 電商 + 廣告三引擎驅動</div>
+        </div>
+        <div class="sample-card" onclick="loadStock('META')">
+          <div class="sc-top"><span class="s-ticker">META</span><span class="s-tag">社群</span></div>
+          <div class="s-name">Meta Platforms</div>
+          <div class="s-desc">社群媒體帝國，AI 廣告高速成長</div>
+        </div>
+        <div class="sample-card" onclick="loadStock('GOOGL')">
+          <div class="sc-top"><span class="s-ticker">GOOGL</span><span class="s-tag">廣告</span></div>
+          <div class="s-name">字母 Alphabet</div>
+          <div class="s-desc">搜尋引擎 + YouTube + GCP 雲端</div>
+        </div>
+        <div class="sample-card" onclick="loadStock('CRCL')">
+          <div class="sc-top"><span class="s-ticker">CRCL</span><span class="s-tag">加密</span></div>
+          <div class="s-name">Circle Internet</div>
+          <div class="s-desc">USDC 穩定幣發行商，加密金融基礎設施</div>
+        </div>
+      </div>
     </div>
   </div>
 </div>
@@ -97,8 +201,28 @@
     <div class="perf-row" id="perfRow"></div>
   </div>
 
-  <!-- 3. Chart + Right Panel -->
-  <div class="two-col">
+  <!-- 3. Short Interest + Earnings + Financial Health + Institutional -->
+  <div class="four-col" id="extraInfoRow">
+    <div class="card" id="shortCard">
+      <div class="card-title">空頭數據</div>
+      <div id="shortPanel"></div>
+    </div>
+    <div class="card" id="earningsCard">
+      <div class="card-title">財報日程</div>
+      <div id="earningsPanel"><div class="mini-loading">載入中...</div></div>
+    </div>
+    <div class="card" id="finHealthCard">
+      <div class="card-title">財務健康</div>
+      <div id="finHealthPanel"><div class="mini-loading">載入中...</div></div>
+    </div>
+    <div class="card" id="instCard">
+      <div class="card-title">法人籌碼</div>
+      <div id="instPanel"><div class="mini-loading">載入中...</div></div>
+    </div>
+  </div>
+
+  <!-- 4. Chart + Right Panel -->
+  <div class="two-col chart-row">
 
     <!-- Left: Charts -->
     <div class="card chart-card">
@@ -132,48 +256,40 @@
 
   </div>
 
-  <!-- 4. Tech Indicators + Key Levels + Analyst -->
+  <!-- 5. Tech Indicators + Key Levels + Analyst -->
   <div class="three-col">
-
     <div class="card">
       <div class="card-title">技術指標總覽</div>
       <div id="techStats"></div>
       <div class="rsi-gauge-wrap" id="rsiGauge"></div>
     </div>
-
     <div class="card">
       <div class="card-title">關鍵價位</div>
       <div id="keyLevels"></div>
     </div>
-
     <div class="card">
       <div class="card-title">分析師觀點</div>
       <div id="analystSection"></div>
     </div>
-
   </div>
 
-  <!-- 5. Bollinger + Volume + Quarterly -->
+  <!-- 6. Bollinger + Volume + Quarterly -->
   <div class="three-col">
-
     <div class="card">
       <div class="card-title">布林通道 (Bollinger Bands)</div>
       <div id="bollingerPanel"></div>
     </div>
-
     <div class="card">
       <div class="card-title">量能分析</div>
       <div id="volumePanel"></div>
     </div>
-
     <div class="card">
       <div class="card-title">季度營收趨勢</div>
       <div id="quarterlyPanel"></div>
     </div>
-
   </div>
 
-  <!-- 6. Scenarios + Risks -->
+  <!-- 7. Scenarios + Risks -->
   <div class="two-col">
     <div class="card">
       <div class="card-title">未來情境推演</div>
@@ -185,13 +301,13 @@
     </div>
   </div>
 
-  <!-- 7. Investment Strategy -->
+  <!-- 8. Investment Strategy -->
   <div class="card">
     <div class="card-title">投資策略建議</div>
     <div id="strategy"></div>
   </div>
 
-  <!-- 8. News -->
+  <!-- 9. News -->
   <div class="card" id="newsCard">
     <div class="news-header">
       <div class="card-title">最新相關新聞</div>
@@ -205,23 +321,32 @@
 </div><!-- /#dashboard -->
 
 <script>
-// ── Utilities ─────────────────────────────────────────────────────
+// ── Utilities ──────────────────────────────────────────────────────
 function fmtVol(v) {
   if (!v) return 'N/A';
-  if (v >= 1e8) return (v/1e8).toFixed(2) + ' 億';
-  if (v >= 1e4) return (v/1e4).toFixed(2) + ' 萬';
+  if (v >= 1e9) return (v/1e9).toFixed(2) + 'B';
+  if (v >= 1e6) return (v/1e6).toFixed(2) + 'M';
+  if (v >= 1e3) return (v/1e3).toFixed(1) + 'K';
   return v.toLocaleString();
 }
 function fmtMktCap(v) {
   if (!v) return 'N/A';
-  if (v >= 1e12) return (v/1e12).toFixed(2) + ' 兆';
-  if (v >= 1e8)  return (v/1e8).toFixed(2) + ' 億';
-  return (v/1e6).toFixed(0) + ' 百萬';
+  if (v >= 1e12) return (v/1e12).toFixed(2) + 'T';
+  if (v >= 1e9)  return (v/1e9).toFixed(2) + 'B';
+  if (v >= 1e6)  return (v/1e6).toFixed(0) + 'M';
+  return 'N/A';
+}
+function fmtBillion(v) {
+  if (!v || v === 0) return 'N/A';
+  const abs = Math.abs(v);
+  if (abs >= 1e3) return (v/1e3).toFixed(2) + 'T';
+  if (abs >= 1)   return v.toFixed(2) + 'B';
+  return (v * 1000).toFixed(0) + 'M';
 }
 function fmtShares(v) {
   if (!v) return 'N/A';
-  if (v >= 1e9) return (v/1e9).toFixed(2) + ' B';
-  if (v >= 1e6) return (v/1e6).toFixed(1) + ' M';
+  if (v >= 1e9) return (v/1e9).toFixed(2) + 'B';
+  if (v >= 1e6) return (v/1e6).toFixed(1) + 'M';
   return v.toLocaleString();
 }
 function recLabel(m) {
@@ -241,10 +366,15 @@ function timeAgo(iso) {
   if (s < 86400) return Math.floor(s/3600) + ' 小時前';
   return Math.floor(s/86400) + ' 天前';
 }
+function pctColor(v) { return v > 0 ? 'green' : v < 0 ? 'red' : ''; }
+function pctStr(v, digits=2) {
+  if (v === null || v === undefined) return 'N/A';
+  return (v >= 0 ? '+' : '') + v.toFixed(digits) + '%';
+}
 function show(id) { document.getElementById(id).classList.remove('hidden'); }
 function hide(id) { document.getElementById(id).classList.add('hidden'); }
 function $(id)    { return document.getElementById(id); }
-function setHTML(id, h) { $(id).innerHTML = h; }
+function setHTML(id, h) { const el=$(id); if(el) el.innerHTML = h; }
 function clamp(v, lo, hi) { return Math.max(lo, Math.min(hi, v)); }
 
 // ── State ──────────────────────────────────────────────────────────
@@ -254,22 +384,67 @@ let currentPeriod = '1Y';
 // ── Entry ──────────────────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', () => {
   $('tickerInput').addEventListener('keypress', e => { if (e.key === 'Enter') searchStock(); });
+  $('heroInput').addEventListener('keypress', e => { if (e.key === 'Enter') searchFromHero(); });
+  loadMarket();
 });
 
+function searchFromHero() {
+  const t = $('heroInput').value.trim().toUpperCase();
+  if (!t) return;
+  $('tickerInput').value = t;
+  loadStock(t);
+}
 function searchStock() {
   const t = $('tickerInput').value.trim().toUpperCase();
   if (!t) return;
   loadStock(t);
 }
 
+// ── Market Bar ──────────────────────────────────────────────────────
+async function loadMarket() {
+  try {
+    const r = await fetch('/api/market');
+    const d = await r.json();
+    if (d.error) return;
+
+    function setMB(idVal, idPct, data) {
+      if (!data) return;
+      const el = $(idVal), ep = $(idPct);
+      if (el) el.textContent = data.v.toLocaleString();
+      if (ep) {
+        const sign = data.pct >= 0 ? '+' : '';
+        ep.textContent = sign + data.pct.toFixed(2) + '%';
+        ep.className = 'mb-pct ' + (data.pct >= 0 ? 'up' : 'dn');
+      }
+    }
+
+    if (d.vix) {
+      $('mbVixVal').textContent = d.vix.v.toFixed(2);
+      const badge = $('mbVixLabel');
+      badge.textContent = d.vixLabel || '';
+      badge.className   = 'mb-badge vix-' + (d.vixCls || 'neutral-m');
+      const pctEl = document.createElement('span');
+      pctEl.className = 'mb-pct ' + (d.vix.pct >= 0 ? 'up' : 'dn');
+      pctEl.textContent = (d.vix.pct >= 0 ? '+' : '') + d.vix.pct.toFixed(2) + '%';
+      $('mbVixVal').after(pctEl);
+    }
+    setMB('mbSp500',  'mbSp500P',  d.sp500);
+    setMB('mbNasdaq', 'mbNasdaqP', d.nasdaq);
+    setMB('mbDow',    'mbDowP',    d.dow);
+    setMB('mbGold',   'mbGoldP',   d.gold);
+    setMB('mbDxy',    'mbDxyP',    d.dxy);
+
+    $('mbTime').textContent = new Date().toLocaleTimeString('zh-TW', {hour:'2-digit',minute:'2-digit'}) + ' 更新';
+  } catch(e) {}
+}
+
+// ── Load Stock ──────────────────────────────────────────────────────
 async function loadStock(ticker) {
   $('tickerInput').value = ticker;
   hide('welcome'); hide('dashboard'); hide('errorDiv');
   show('loading');
   currentPeriod = '1Y';
-  document.querySelectorAll('.ptab').forEach(b => {
-    b.classList.toggle('active', b.dataset.period === '1Y');
-  });
+  document.querySelectorAll('.ptab').forEach(b => b.classList.toggle('active', b.dataset.period === '1Y'));
 
   try {
     const r = await fetch('/api/stock/' + ticker);
@@ -279,6 +454,7 @@ async function loadStock(ticker) {
     renderDashboard(d);
     hide('loading'); show('dashboard');
     loadNews(ticker);
+    loadFundamentals(ticker, d);
   } catch(e) {
     showError('網路錯誤，請稍後再試：' + e.message);
   }
@@ -287,10 +463,10 @@ async function loadStock(ticker) {
 function showError(msg) {
   hide('loading'); hide('dashboard');
   $('errorDiv').textContent = msg;
-  show('errorDiv');
+  show('errorDiv'); show('welcome');
 }
 
-// ── Period ─────────────────────────────────────────────────────────
+// ── Period ──────────────────────────────────────────────────────────
 function changePeriod(period) {
   if (!currentData) return;
   currentPeriod = period;
@@ -311,12 +487,12 @@ function changePeriod(period) {
   renderCharts(sliced);
 }
 
-// ── Main Render ────────────────────────────────────────────────────
-
+// ── Main Render ─────────────────────────────────────────────────────
 function renderDashboard(d) {
   renderHeader(d);
   renderConclusions(d);
   renderPerf(d);
+  renderShortInfo(d);
   renderCharts(d);
   renderCatalysts(d);
   renderBiz(d);
@@ -331,7 +507,7 @@ function renderDashboard(d) {
   renderStrategy(d);
 }
 
-// ── Header ─────────────────────────────────────────────────────────
+// ── Header ──────────────────────────────────────────────────────────
 function renderHeader(d) {
   $('hTicker').textContent = d.ticker;
   $('hName').textContent   = d.name;
@@ -353,14 +529,14 @@ function renderHeader(d) {
   $('sDiv').textContent    = d.divYield ? d.divYield.toFixed(2) + '%' : 'N/A';
 }
 
-// ── Conclusions ────────────────────────────────────────────────────
+// ── Conclusions ──────────────────────────────────────────────────────
 function renderConclusions(d) {
   setHTML('conclusionsRow', d.conclusions.map(c =>
     `<div class="con-item ${c.type}"><span class="con-dot"></span><span class="con-text">${c.text}</span></div>`
   ).join(''));
 }
 
-// ── Performance Returns ────────────────────────────────────────────
+// ── Performance Returns ──────────────────────────────────────────────
 function renderPerf(d) {
   const r = d.returns;
   const chips = [
@@ -382,9 +558,39 @@ function renderPerf(d) {
   }).join(''));
 }
 
-// ── Charts ─────────────────────────────────────────────────────────
+// ── Short Interest (fast data from main API) ─────────────────────────
+function renderShortInfo(d) {
+  const shortColor = d.shortPct > 20 ? 'var(--red)' : d.shortPct > 10 ? 'var(--yellow)' : 'var(--green)';
+  const shortLabel = d.shortPct > 20 ? '高空頭壓力' : d.shortPct > 10 ? '中等空頭' : '空頭比例低';
+  setHTML('shortPanel', `
+    <div class="info-metric">
+      <span class="im-label">空頭比例（Float）</span>
+      <span class="im-value" style="color:${shortColor}">${d.shortPct > 0 ? d.shortPct.toFixed(2) + '%' : 'N/A'}</span>
+    </div>
+    <div class="im-bar-wrap">
+      <div class="im-bar-fill" style="width:${Math.min(d.shortPct*2,100)}%;background:${shortColor}"></div>
+    </div>
+    <div class="info-metric">
+      <span class="im-label">空頭回補天數</span>
+      <span class="im-value">${d.shortRatio > 0 ? d.shortRatio + ' 天' : 'N/A'}</span>
+    </div>
+    <div class="info-metric">
+      <span class="im-label">空頭研判</span>
+      <span class="im-value" style="color:${shortColor};font-size:0.78rem">${d.shortPct > 0 ? shortLabel : 'N/A'}</span>
+    </div>
+    <div class="info-metric">
+      <span class="im-label">法人持股</span>
+      <span class="im-value">${d.instPct > 0 ? d.instPct + '%' : 'N/A'}</span>
+    </div>
+    <div class="info-metric">
+      <span class="im-label">內部人持股</span>
+      <span class="im-value">${d.insiderPct > 0 ? d.insiderPct + '%' : 'N/A'}</span>
+    </div>
+  `);
+}
+
+// ── Charts ──────────────────────────────────────────────────────────
 function renderCharts(d) {
-  // MA pills
   setHTML('maPills',
     `<span class="pill ma5">MA5: ${d.ma5}</span>` +
     `<span class="pill ma20">MA20: ${d.ma20}</span>` +
@@ -401,51 +607,46 @@ function renderCharts(d) {
     c >= d.ohlcv.close[i-1] ? 'rgba(232,70,70,0.5)' : 'rgba(0,214,143,0.5)'
   );
 
-  // ── Price Chart (candlestick + MA + Bollinger only) ──
+  // ── Price Chart ──
   Plotly.newPlot('priceChart', [
-    // Bollinger fill rendered first (background layer)
     { type:'scatter', mode:'lines', x:dates, y:d.bollinger.upper,
-      line:{color:'rgba(100,180,80,0.35)',width:1,dash:'dot'},
+      line:{color:'rgba(100,180,80,0.4)',width:1,dash:'dot'},
       connectgaps:false, showlegend:false, hoverinfo:'skip' },
     { type:'scatter', mode:'lines', x:dates, y:d.bollinger.lower,
-      line:{color:'rgba(100,180,80,0.35)',width:1,dash:'dot'},
+      line:{color:'rgba(100,180,80,0.4)',width:1,dash:'dot'},
       fill:'tonexty', fillcolor:'rgba(100,180,80,0.05)',
       connectgaps:false, showlegend:false, hoverinfo:'skip' },
-    // Candlestick on top of BB fill
-    {
-      type: 'candlestick', name: d.ticker,
-      x: dates, open: d.ohlcv.open, high: d.ohlcv.high, low: d.ohlcv.low, close: d.ohlcv.close,
-      increasing: { line: { color: '#e84646', width: 1 }, fillcolor: '#e84646' },
-      decreasing: { line: { color: '#00d68f', width: 1 }, fillcolor: '#00d68f' },
-      showlegend: false,
-    },
-    // MA lines; connectgaps:false prevents phantom lines from leading null values
+    { type:'candlestick', name:d.ticker,
+      x:dates, open:d.ohlcv.open, high:d.ohlcv.high, low:d.ohlcv.low, close:d.ohlcv.close,
+      increasing:{line:{color:'#e84646',width:1}, fillcolor:'#e84646'},
+      decreasing:{line:{color:'#00d68f',width:1}, fillcolor:'#00d68f'},
+      showlegend:false },
     { type:'scatter', mode:'lines', x:dates, y:d.ma.ma5,  name:'MA5',  line:{color:'#ffa000',width:1.5}, connectgaps:false },
     { type:'scatter', mode:'lines', x:dates, y:d.ma.ma20, name:'MA20', line:{color:'#d94fff',width:1.5}, connectgaps:false },
     { type:'scatter', mode:'lines', x:dates, y:d.ma.ma60, name:'MA60', line:{color:'#36c6ff',width:1.5}, connectgaps:false },
   ], {
-    paper_bgcolor: BG, plot_bgcolor: BG,
-    font: { color:'#6888a0', size:11 },
-    showlegend: true,
-    legend: { orientation:'h', x:0, y:1.06, bgcolor:'rgba(0,0,0,0)', font:{size:10,color:'#8aaabf'} },
-    margin: { l:60, r:8, t:24, b:4 },
-    yaxis:  { gridcolor:GRID, zerolinecolor:GRID, tickfont:{color:'#6888a0'}, side:'left', autorange:true },
-    xaxis:  { rangeslider:{visible:false}, gridcolor:GRID, showticklabels:false },
-    hovermode: 'x unified',
-  }, { responsive:true, displayModeBar:false });
+    paper_bgcolor:BG, plot_bgcolor:BG,
+    font:{color:'#6888a0',size:11},
+    showlegend:true,
+    legend:{orientation:'h',x:0,y:1.06,bgcolor:'rgba(0,0,0,0)',font:{size:10,color:'#8aaabf'}},
+    margin:{l:60,r:8,t:24,b:4},
+    yaxis:{gridcolor:GRID,zerolinecolor:GRID,tickfont:{color:'#6888a0'},side:'left',autorange:true},
+    xaxis:{rangeslider:{visible:false},gridcolor:GRID,showticklabels:false},
+    hovermode:'x unified',
+  }, {responsive:true,displayModeBar:false});
 
-  // ── Volume Chart (separate div) ──
+  // ── Volume Chart ──
   Plotly.newPlot('volumeChart', [
-    { type:'bar', x:dates, y:d.ohlcv.volume, name:'成交量',
-      marker:{color:volColors}, showlegend:false },
+    {type:'bar', x:dates, y:d.ohlcv.volume, name:'成交量',
+     marker:{color:volColors}, showlegend:false},
   ], {
-    paper_bgcolor: BG, plot_bgcolor: BG,
-    font: { color:'#6888a0', size:9 },
-    margin: { l:60, r:8, t:2, b:22 },
-    yaxis: { gridcolor:GRID, tickfont:{color:'#6888a0',size:9}, side:'left', tickformat:'.2s' },
-    xaxis: { rangeslider:{visible:false}, gridcolor:GRID, tickfont:{color:'#6888a0'} },
-    hovermode: 'x unified',
-  }, { responsive:true, displayModeBar:false });
+    paper_bgcolor:BG, plot_bgcolor:BG,
+    font:{color:'#6888a0',size:9},
+    margin:{l:60,r:8,t:2,b:22},
+    yaxis:{gridcolor:GRID,tickfont:{color:'#6888a0',size:9},side:'left',tickformat:'.2s'},
+    xaxis:{rangeslider:{visible:false},gridcolor:GRID,tickfont:{color:'#6888a0'}},
+    hovermode:'x unified',
+  }, {responsive:true,displayModeBar:false});
 
   // ── MACD bar ──
   const mc = d.macdHist >= 0 ? '#e84646' : '#00d68f';
@@ -458,48 +659,45 @@ function renderCharts(d) {
   // ── MACD Chart ──
   const hc = d.macd.hist.map(v => v===null?'#333':(v>=0?'rgba(232,70,70,0.8)':'rgba(0,214,143,0.8)'));
   Plotly.newPlot('macdChart', [
-    { type:'bar',     x:dates, y:d.macd.hist, name:'MACD', marker:{color:hc} },
-    { type:'scatter', mode:'lines', x:dates, y:d.macd.dif, name:'DIF', line:{color:'#3d8ef8',width:1.5}, connectgaps:false },
-    { type:'scatter', mode:'lines', x:dates, y:d.macd.dea, name:'DEA', line:{color:'#e8a020',width:1.5}, connectgaps:false },
+    {type:'bar',     x:dates, y:d.macd.hist, name:'MACD', marker:{color:hc}},
+    {type:'scatter', mode:'lines', x:dates, y:d.macd.dif, name:'DIF', line:{color:'#3d8ef8',width:1.5}, connectgaps:false},
+    {type:'scatter', mode:'lines', x:dates, y:d.macd.dea, name:'DEA', line:{color:'#e8a020',width:1.5}, connectgaps:false},
   ], {
-    paper_bgcolor: BG, plot_bgcolor: BG,
-    font: { color:'#6888a0', size:10 },
-    showlegend: true,
-    legend: { orientation:'h', x:0, y:1.18, bgcolor:'rgba(0,0,0,0)', font:{size:10,color:'#8aaabf'} },
-    margin: { l:60, r:8, t:8, b:22 },
-    yaxis:  { gridcolor:GRID, zerolinecolor:'#1e3050', tickfont:{color:'#6888a0'}, side:'left' },
-    xaxis:  { rangeslider:{visible:false}, gridcolor:GRID, tickfont:{color:'#6888a0'} },
-    hovermode: 'x unified',
-  }, { responsive:true, displayModeBar:false });
+    paper_bgcolor:BG, plot_bgcolor:BG,
+    font:{color:'#6888a0',size:10},
+    showlegend:true,
+    legend:{orientation:'h',x:0,y:1.18,bgcolor:'rgba(0,0,0,0)',font:{size:10,color:'#8aaabf'}},
+    margin:{l:60,r:8,t:8,b:22},
+    yaxis:{gridcolor:GRID,zerolinecolor:'#1e3050',tickfont:{color:'#6888a0'},side:'left'},
+    xaxis:{rangeslider:{visible:false},gridcolor:GRID,tickfont:{color:'#6888a0'}},
+    hovermode:'x unified',
+  }, {responsive:true,displayModeBar:false});
 
   // ── RSI Chart ──
   Plotly.newPlot('rsiChart', [
-    { type:'scatter', mode:'lines', x:dates, y:d.rsiSeries, name:'RSI(14)',
-      line:{color:'#f0b429',width:1.5}, connectgaps:false },
-    { type:'scatter', mode:'lines', x:dates, y:Array(dates.length).fill(70),
-      line:{color:'rgba(232,70,70,0.5)',width:1,dash:'dash'}, showlegend:false, hoverinfo:'skip' },
-    { type:'scatter', mode:'lines', x:dates, y:Array(dates.length).fill(30),
-      line:{color:'rgba(0,214,143,0.5)',width:1,dash:'dash'}, showlegend:false, hoverinfo:'skip' },
+    {type:'scatter', mode:'lines', x:dates, y:d.rsiSeries, name:'RSI(14)',
+     line:{color:'#f0b429',width:1.5}, connectgaps:false},
+    {type:'scatter', mode:'lines', x:dates, y:Array(dates.length).fill(70),
+     line:{color:'rgba(232,70,70,0.5)',width:1,dash:'dash'}, showlegend:false, hoverinfo:'skip'},
+    {type:'scatter', mode:'lines', x:dates, y:Array(dates.length).fill(30),
+     line:{color:'rgba(0,214,143,0.5)',width:1,dash:'dash'}, showlegend:false, hoverinfo:'skip'},
   ], {
-    paper_bgcolor: BG, plot_bgcolor: BG,
-    font: { color:'#6888a0', size:10 },
-    showlegend: true,
-    legend: { x:0, y:1.18, bgcolor:'rgba(0,0,0,0)', font:{size:10,color:'#8aaabf'} },
-    margin: { l:60, r:8, t:4, b:28 },
-    yaxis:  { gridcolor:GRID, tickfont:{color:'#6888a0'}, range:[0,100],
-              tickvals:[0,30,50,70,100], side:'left' },
-    xaxis:  { rangeslider:{visible:false}, gridcolor:GRID, tickfont:{color:'#6888a0'} },
-    hovermode: 'x unified',
-    shapes: [
-      { type:'line', xref:'paper', x0:0, x1:1, yref:'y', y0:70, y1:70,
-        line:{color:'rgba(232,70,70,0.25)',width:1} },
-      { type:'line', xref:'paper', x0:0, x1:1, yref:'y', y0:30, y1:30,
-        line:{color:'rgba(0,214,143,0.25)',width:1} },
+    paper_bgcolor:BG, plot_bgcolor:BG,
+    font:{color:'#6888a0',size:10},
+    showlegend:true,
+    legend:{x:0,y:1.18,bgcolor:'rgba(0,0,0,0)',font:{size:10,color:'#8aaabf'}},
+    margin:{l:60,r:8,t:4,b:28},
+    yaxis:{gridcolor:GRID,tickfont:{color:'#6888a0'},range:[0,100],tickvals:[0,30,50,70,100],side:'left'},
+    xaxis:{rangeslider:{visible:false},gridcolor:GRID,tickfont:{color:'#6888a0'}},
+    hovermode:'x unified',
+    shapes:[
+      {type:'line',xref:'paper',x0:0,x1:1,yref:'y',y0:70,y1:70,line:{color:'rgba(232,70,70,0.25)',width:1}},
+      {type:'line',xref:'paper',x0:0,x1:1,yref:'y',y0:30,y1:30,line:{color:'rgba(0,214,143,0.25)',width:1}},
     ],
-  }, { responsive:true, displayModeBar:false });
+  }, {responsive:true,displayModeBar:false});
 }
 
-// ── Catalysts ──────────────────────────────────────────────────────
+// ── Catalysts ────────────────────────────────────────────────────────
 function renderCatalysts(d) {
   setHTML('catalysts', d.catalysts.map(c =>
     `<div class="catalyst-item">
@@ -509,17 +707,19 @@ function renderCatalysts(d) {
   ).join(''));
 }
 
-// ── Business ────────────────────────────────────────────────────────
+// ── Business ──────────────────────────────────────────────────────────
 function renderBiz(d) {
   const items = [
-    { label: '市值',         value: fmtMktCap(d.marketCap) + ' 美元' },
+    { label: '市值',         value: fmtMktCap(d.marketCap) + ' USD' },
     { label: '本益比 (TTM)', value: d.pe        ? d.pe.toFixed(2)          : 'N/A' },
     { label: '預期本益比',   value: d.forwardPe  ? d.forwardPe.toFixed(2)  : 'N/A' },
     { label: '每股盈餘',     value: d.eps        ? '$' + d.eps.toFixed(2)  : 'N/A' },
     { label: '52週最高',     value: '$' + d.week52High },
     { label: '52週最低',     value: '$' + d.week52Low  },
-    { label: '流通股數',     value: fmtShares(d.sharesOut) },
-    { label: '年殖利率',     value: d.divYield   ? d.divYield + '%'        : 'N/A' },
+    { label: '毛利率',       value: d.grossMargin ? d.grossMargin + '%'    : 'N/A' },
+    { label: '淨利率',       value: d.profitMargin ? d.profitMargin + '%'  : 'N/A' },
+    { label: '股東權益報酬', value: d.roe         ? d.roe + '%'            : 'N/A' },
+    { label: '負債比',       value: d.debtEquity  ? d.debtEquity           : 'N/A' },
   ];
   setHTML('bizHighlights',
     `<div class="biz-grid">${
@@ -528,7 +728,7 @@ function renderBiz(d) {
   );
 }
 
-// ── Tech Stats ─────────────────────────────────────────────────────
+// ── Tech Stats ────────────────────────────────────────────────────────
 function renderTechStats(d) {
   const rows = [
     ['MA5',   '$'+d.ma5,              d.price > d.ma5  ? 'green':'red',    d.price > d.ma5  ? '站上':'跌破'],
@@ -548,7 +748,6 @@ function renderTechStats(d) {
     }</table>`
   );
 
-  // RSI gauge
   const rsi = d.rsi;
   const pct  = clamp(rsi, 0, 100);
   const col  = rsi > 70 ? 'var(--red)' : rsi < 30 ? 'var(--green)' : 'var(--yellow)';
@@ -557,15 +756,13 @@ function renderTechStats(d) {
       <div style="display:flex;justify-content:space-between;font-size:0.74rem;color:var(--text-dim);margin-bottom:5px;">
         <span>RSI 指標</span><span style="color:${col};font-weight:800;">${rsi.toFixed(1)} &nbsp; ${rsi>70?'超買':rsi<30?'超賣':'健康'}</span>
       </div>
-      <div class="rsi-gauge-track">
-        <div class="rsi-gauge-cursor" style="left:${pct}%"></div>
-      </div>
+      <div class="rsi-gauge-track"><div class="rsi-gauge-cursor" style="left:${pct}%"></div></div>
       <div class="rsi-gauge-labels"><span>0</span><span>超賣 30</span><span>50</span><span>超買 70</span><span>100</span></div>
     </div>`
   );
 }
 
-// ── Key Levels ─────────────────────────────────────────────────────
+// ── Key Levels ────────────────────────────────────────────────────────
 function renderKeyLevels(d) {
   const lv = d.levels, price = d.price;
   const all = [lv.resistance2, lv.resistance1, price, lv.support1, lv.support2];
@@ -573,11 +770,11 @@ function renderKeyLevels(d) {
   const pct = v => ((v - mn) / (mx - mn) * 88 + 6).toFixed(1);
 
   const items = [
-    { label:'壓力區 II', value: lv.resistance2, cls:'resist2', tag:'52週高點' },
-    { label:'壓力區 I',  value: lv.resistance1, cls:'resist1', tag:'20日高點' },
-    { label:'當前價格',  value: price,           cls:'current', tag:'' },
-    { label:'支撐區 I',  value: lv.support1,    cls:'supp1',   tag:'20日低點' },
-    { label:'支撐區 II', value: lv.support2,    cls:'supp2',   tag:'60日低點' },
+    { label:'壓力區 II', value:lv.resistance2, cls:'resist2', tag:'52週高點' },
+    { label:'壓力區 I',  value:lv.resistance1, cls:'resist1', tag:'20日高點' },
+    { label:'當前價格',  value:price,           cls:'current', tag:'' },
+    { label:'支撐區 I',  value:lv.support1,    cls:'supp1',   tag:'20日低點' },
+    { label:'支撐區 II', value:lv.support2,    cls:'supp2',   tag:'60日低點' },
   ];
 
   setHTML('keyLevels', `<div class="levels-wrap">${
@@ -594,7 +791,7 @@ function renderKeyLevels(d) {
   }</div>`);
 }
 
-// ── Analyst ────────────────────────────────────────────────────────
+// ── Analyst ────────────────────────────────────────────────────────────
 function renderAnalyst(d) {
   const rec = recLabel(d.recMean);
   const up  = d.analystTarget && d.price ? ((d.analystTarget/d.price - 1)*100).toFixed(1) : null;
@@ -610,30 +807,28 @@ function renderAnalyst(d) {
   </div>`);
 }
 
-// ── Bollinger ──────────────────────────────────────────────────────
+// ── Bollinger ──────────────────────────────────────────────────────────
 function renderBollinger(d) {
   const pos  = clamp(d.bbPos, 0, 100);
   const zone = d.bbPos > 80 ? '上軌附近，注意壓力' : d.bbPos < 20 ? '下軌附近，可能支撐' : '中軌區間整理';
   setHTML('bollingerPanel', `
     <div class="bb-grid">
       <div class="bb-row"><span class="bb-l">上軌 (Upper)</span><span class="bb-v red">$${d.bbUpper}</span></div>
-      <div class="bb-row"><span class="bb-l">中軌 (Mid/MA20)</span><span class="bb-v">$${d.bbMid}</span></div>
+      <div class="bb-row"><span class="bb-l">中軌 (MA20)</span><span class="bb-v">$${d.bbMid}</span></div>
       <div class="bb-row"><span class="bb-l">下軌 (Lower)</span><span class="bb-v green">$${d.bbLower}</span></div>
       <div class="bb-row"><span class="bb-l">帶寬</span><span class="bb-v yellow">${d.bbWidth}%</span></div>
       <div class="bb-row"><span class="bb-l">位置</span><span class="bb-v">${d.bbPos}%</span></div>
       <div class="bb-row"><span class="bb-l">研判</span><span class="bb-v dim" style="font-size:0.76rem">${zone}</span></div>
     </div>
     <div style="margin-top:8px;font-size:0.7rem;color:var(--text-dim);margin-bottom:5px;">股價在布林通道位置</div>
-    <div class="bb-pos-track">
-      <div class="bb-pos-cursor" style="left:${pos}%"></div>
-    </div>
+    <div class="bb-pos-track"><div class="bb-pos-cursor" style="left:${pos}%"></div></div>
     <div style="display:flex;justify-content:space-between;font-size:0.62rem;color:var(--text-dim);margin-top:3px;">
       <span>下軌 0%</span><span>中軌 50%</span><span>上軌 100%</span>
     </div>
   `);
 }
 
-// ── Volume Analysis ────────────────────────────────────────────────
+// ── Volume Analysis ────────────────────────────────────────────────────
 function renderVolume(d) {
   const ratio = d.volRatio;
   const ratioColor = ratio >= 2 ? 'var(--red)' : ratio >= 1.5 ? 'var(--yellow)' : ratio >= 1 ? 'var(--green)' : 'var(--text-dim)';
@@ -663,7 +858,7 @@ function renderVolume(d) {
   `);
 }
 
-// ── Quarterly ──────────────────────────────────────────────────────
+// ── Quarterly ──────────────────────────────────────────────────────────
 function renderQuarterly(d) {
   const q = d.quarterly;
   if (!q || q.length === 0) {
@@ -689,7 +884,7 @@ function renderQuarterly(d) {
   `);
 }
 
-// ── Scenarios ──────────────────────────────────────────────────────
+// ── Scenarios ──────────────────────────────────────────────────────────
 function renderScenarios(d) {
   const s = d.strategy, p = d.price;
   const bullPct = ((s.bullTarget/p-1)*100).toFixed(0);
@@ -714,7 +909,7 @@ function renderScenarios(d) {
   `);
 }
 
-// ── Risks ──────────────────────────────────────────────────────────
+// ── Risks ──────────────────────────────────────────────────────────────
 function renderRisks(d) {
   setHTML('risks', d.risks.map(r =>
     `<div class="risk-item ${r.level}">
@@ -724,7 +919,7 @@ function renderRisks(d) {
   ).join(''));
 }
 
-// ── Strategy ───────────────────────────────────────────────────────
+// ── Strategy ────────────────────────────────────────────────────────────
 function renderStrategy(d) {
   const s = d.strategy;
   setHTML('strategy', `
@@ -749,7 +944,105 @@ function renderStrategy(d) {
   `);
 }
 
-// ── News ───────────────────────────────────────────────────────────
+// ── Fundamentals (async heavy data) ─────────────────────────────────────
+async function loadFundamentals(ticker, stockData) {
+  try {
+    const r = await fetch('/api/fundamentals/' + ticker);
+    const d = await r.json();
+    if (d.error) return;
+    renderEarnings(d);
+    renderFinHealth(d);
+    renderInstitutional(d);
+  } catch(e) {
+    setHTML('earningsPanel', '<div class="no-data">資料暫無</div>');
+    setHTML('finHealthPanel', '<div class="no-data">資料暫無</div>');
+    setHTML('instPanel', '<div class="no-data">資料暫無</div>');
+  }
+}
+
+function renderEarnings(d) {
+  const revGColor = d.revGrowth > 0 ? 'var(--green)' : d.revGrowth < 0 ? 'var(--red)' : 'var(--text-dim)';
+  const epsGColor = d.epsGrowth > 0 ? 'var(--green)' : d.epsGrowth < 0 ? 'var(--red)' : 'var(--text-dim)';
+  setHTML('earningsPanel', `
+    ${d.earningsDate ? `
+      <div class="earn-date-wrap">
+        <span class="earn-date-label">下次財報</span>
+        <span class="earn-date-val">${d.earningsDate}</span>
+      </div>` : '<div class="no-data-sm">財報日期暫無</div>'}
+    <div class="info-metric">
+      <span class="im-label">預期 EPS</span>
+      <span class="im-value">${d.epsEst ? '$' + d.epsEst : 'N/A'}</span>
+    </div>
+    <div class="info-metric">
+      <span class="im-label">營收成長率</span>
+      <span class="im-value" style="color:${revGColor}">${d.revGrowth !== 0 ? pctStr(d.revGrowth) : 'N/A'}</span>
+    </div>
+    <div class="info-metric">
+      <span class="im-label">EPS 成長率</span>
+      <span class="im-value" style="color:${epsGColor}">${d.epsGrowth !== 0 ? pctStr(d.epsGrowth) : 'N/A'}</span>
+    </div>
+  `);
+}
+
+function renderFinHealth(d) {
+  const fcfColor = d.fcf > 0 ? 'var(--green)' : d.fcf < 0 ? 'var(--red)' : 'var(--text-dim)';
+  const deColor  = d.debtEquity > 200 ? 'var(--red)' : d.debtEquity > 100 ? 'var(--yellow)' : 'var(--green)';
+  const roeColor = d.roe > 15 ? 'var(--green)' : d.roe > 0 ? 'var(--yellow)' : 'var(--red)';
+  setHTML('finHealthPanel', `
+    <div class="info-metric">
+      <span class="im-label">自由現金流</span>
+      <span class="im-value" style="color:${fcfColor}">${d.fcf !== 0 ? fmtBillion(d.fcf) : 'N/A'}</span>
+    </div>
+    <div class="info-metric">
+      <span class="im-label">FCF 殖利率</span>
+      <span class="im-value" style="color:${fcfColor}">${d.fcfYield !== 0 ? d.fcfYield + '%' : 'N/A'}</span>
+    </div>
+    <div class="info-metric">
+      <span class="im-label">股東權益報酬 ROE</span>
+      <span class="im-value" style="color:${roeColor}">${d.roe !== 0 ? d.roe + '%' : 'N/A'}</span>
+    </div>
+    <div class="info-metric">
+      <span class="im-label">負債 / 股東權益</span>
+      <span class="im-value" style="color:${deColor}">${d.debtEquity !== 0 ? d.debtEquity : 'N/A'}</span>
+    </div>
+    <div class="info-metric">
+      <span class="im-label">流動比率</span>
+      <span class="im-value">${d.currentRatio !== 0 ? d.currentRatio : 'N/A'}</span>
+    </div>
+    <div class="info-metric">
+      <span class="im-label">毛利率</span>
+      <span class="im-value">${d.grossMargin !== 0 ? d.grossMargin + '%' : 'N/A'}</span>
+    </div>
+  `);
+}
+
+function renderInstitutional(d) {
+  const holders = d.topHolders || [];
+  setHTML('instPanel', `
+    <div class="info-metric">
+      <span class="im-label">法人持股比例</span>
+      <span class="im-value green">${d.instPct > 0 ? d.instPct + '%' : 'N/A'}</span>
+    </div>
+    <div class="im-bar-wrap">
+      <div class="im-bar-fill" style="width:${Math.min(d.instPct, 100)}%;background:var(--blue)"></div>
+    </div>
+    <div class="info-metric">
+      <span class="im-label">內部人持股</span>
+      <span class="im-value">${d.insiderPct > 0 ? d.insiderPct + '%' : 'N/A'}</span>
+    </div>
+    ${holders.length > 0 ? `
+      <div class="holders-title">主要法人持股</div>
+      ${holders.map(h => `
+        <div class="holder-row">
+          <span class="holder-name">${h.holder}</span>
+          <span class="holder-pct">${h.pct > 0 ? h.pct + '%' : ''}</span>
+        </div>
+      `).join('')}
+    ` : ''}
+  `);
+}
+
+// ── News ──────────────────────────────────────────────────────────────
 async function loadNews(ticker) {
   setHTML('newsContainer', '<div class="news-loading">新聞載入中...</div>');
   try {
