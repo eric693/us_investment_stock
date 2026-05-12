@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>美股投資分析儀表板</title>
-<script src="https://cdn.plot.ly/plotly-basic-2.26.0.min.js"></script>
+<script src="https://cdn.plot.ly/plotly-2.26.0.min.js"></script>
 <link rel="stylesheet" href="/static/css/style.css">
 </head>
 <body>
@@ -400,7 +400,18 @@ function renderCharts(d) {
   );
 
   // ── Price Chart ──
-  Plotly.react('priceChart', [
+  // Trace order: BB fill (background) → candlestick → MA lines → volume
+  // connectgaps:false on MA lines to avoid phantom lines from null region
+  Plotly.newPlot('priceChart', [
+    // Bollinger fill rendered first (background layer)
+    { type:'scatter', mode:'lines', x:dates, y:d.bollinger.upper,
+      line:{color:'rgba(100,180,80,0.35)',width:1,dash:'dot'},
+      yaxis:'y', connectgaps:false, showlegend:false, hoverinfo:'skip' },
+    { type:'scatter', mode:'lines', x:dates, y:d.bollinger.lower,
+      line:{color:'rgba(100,180,80,0.35)',width:1,dash:'dot'},
+      fill:'tonexty', fillcolor:'rgba(100,180,80,0.05)',
+      yaxis:'y', connectgaps:false, showlegend:false, hoverinfo:'skip' },
+    // Candlestick on top of BB fill
     {
       type: 'candlestick', name: d.ticker,
       x: dates, open: d.ohlcv.open, high: d.ohlcv.high, low: d.ohlcv.low, close: d.ohlcv.close,
@@ -408,15 +419,11 @@ function renderCharts(d) {
       decreasing: { line: { color: '#00d68f', width: 1 }, fillcolor: '#00d68f' },
       yaxis: 'y', showlegend: false,
     },
-    { type:'scatter', mode:'lines', x:dates, y:d.bollinger.upper, name:'BB上軌',
-      line:{color:'rgba(150,212,100,0.45)',width:1,dash:'dot'}, yaxis:'y', connectgaps:true, showlegend:false },
-    { type:'scatter', mode:'lines', x:dates, y:d.bollinger.lower, name:'BB下軌',
-      line:{color:'rgba(150,212,100,0.45)',width:1,dash:'dot'},
-      fill:'tonexty', fillcolor:'rgba(150,212,100,0.04)',
-      yaxis:'y', connectgaps:true, showlegend:false },
-    { type:'scatter', mode:'lines', x:dates, y:d.ma.ma5,  name:'MA5',  line:{color:'#ffa000',width:1.5}, yaxis:'y', connectgaps:true },
-    { type:'scatter', mode:'lines', x:dates, y:d.ma.ma20, name:'MA20', line:{color:'#d94fff',width:1.5}, yaxis:'y', connectgaps:true },
-    { type:'scatter', mode:'lines', x:dates, y:d.ma.ma60, name:'MA60', line:{color:'#36c6ff',width:1.5}, yaxis:'y', connectgaps:true },
+    // MA lines above candles; connectgaps:false = no phantom line from null values
+    { type:'scatter', mode:'lines', x:dates, y:d.ma.ma5,  name:'MA5',  line:{color:'#ffa000',width:1.5}, yaxis:'y', connectgaps:false },
+    { type:'scatter', mode:'lines', x:dates, y:d.ma.ma20, name:'MA20', line:{color:'#d94fff',width:1.5}, yaxis:'y', connectgaps:false },
+    { type:'scatter', mode:'lines', x:dates, y:d.ma.ma60, name:'MA60', line:{color:'#36c6ff',width:1.5}, yaxis:'y', connectgaps:false },
+    // Volume bars on separate subplot axis
     { type:'bar', x:dates, y:d.ohlcv.volume, name:'成交量',
       marker:{color:volColors}, yaxis:'y2', showlegend:false },
   ], {
@@ -424,9 +431,11 @@ function renderCharts(d) {
     font: { color:'#6888a0', size:11 },
     showlegend: true,
     legend: { orientation:'h', x:0, y:1.04, bgcolor:'rgba(0,0,0,0)', font:{size:10,color:'#8aaabf'} },
-    margin: { l:58, r:12, t:24, b:22 },
-    yaxis:  { domain:[0.22,1],  gridcolor:GRID, zerolinecolor:GRID, tickfont:{color:'#6888a0'}, tickformat:'.2f', side:'right' },
-    yaxis2: { domain:[0,0.18],  gridcolor:GRID, tickfont:{color:'#6888a0',size:9}, side:'right' },
+    margin: { l:10, r:60, t:24, b:22 },
+    yaxis:  { domain:[0.24,1],  gridcolor:GRID, zerolinecolor:GRID,
+              tickfont:{color:'#6888a0'}, side:'right', autorange:true },
+    yaxis2: { domain:[0,0.20],  gridcolor:GRID,
+              tickfont:{color:'#6888a0',size:9}, side:'right' },
     xaxis:  { rangeslider:{visible:false}, gridcolor:GRID, tickfont:{color:'#6888a0'} },
     hovermode: 'x unified',
   }, { responsive:true, displayModeBar:false });
@@ -440,38 +449,46 @@ function renderCharts(d) {
   );
 
   // ── MACD Chart ──
-  const hc = d.macd.hist.map(v => v===null?'#555':(v>=0?'rgba(232,70,70,0.75)':'rgba(0,214,143,0.75)'));
-  Plotly.react('macdChart', [
-    { type:'scatter', mode:'lines', x:dates, y:d.macd.dif,  name:'DIF',  line:{color:'#3d8ef8',width:1.5}, connectgaps:true },
-    { type:'scatter', mode:'lines', x:dates, y:d.macd.dea,  name:'DEA',  line:{color:'#e8a020',width:1.5}, connectgaps:true },
-    { type:'bar',     x:dates, y:d.macd.hist, name:'MACD',  marker:{color:hc} },
+  const hc = d.macd.hist.map(v => v===null?'#333':(v>=0?'rgba(232,70,70,0.8)':'rgba(0,214,143,0.8)'));
+  Plotly.newPlot('macdChart', [
+    { type:'bar',     x:dates, y:d.macd.hist, name:'MACD', marker:{color:hc} },
+    { type:'scatter', mode:'lines', x:dates, y:d.macd.dif, name:'DIF', line:{color:'#3d8ef8',width:1.5}, connectgaps:false },
+    { type:'scatter', mode:'lines', x:dates, y:d.macd.dea, name:'DEA', line:{color:'#e8a020',width:1.5}, connectgaps:false },
   ], {
     paper_bgcolor: BG, plot_bgcolor: BG,
     font: { color:'#6888a0', size:10 },
     showlegend: true,
-    legend: { orientation:'h', x:0, y:1.15, bgcolor:'rgba(0,0,0,0)', font:{size:10,color:'#8aaabf'} },
-    margin: { l:58, r:12, t:8, b:22 },
+    legend: { orientation:'h', x:0, y:1.18, bgcolor:'rgba(0,0,0,0)', font:{size:10,color:'#8aaabf'} },
+    margin: { l:10, r:60, t:8, b:22 },
     yaxis:  { gridcolor:GRID, zerolinecolor:'#1e3050', tickfont:{color:'#6888a0'}, side:'right' },
     xaxis:  { rangeslider:{visible:false}, gridcolor:GRID, tickfont:{color:'#6888a0'} },
     hovermode: 'x unified',
   }, { responsive:true, displayModeBar:false });
 
   // ── RSI Chart ──
-  const rsiColor = d.rsiSeries.map(v => v===null?'#3d8ef8':v>70?'#e84646':v<30?'#00d68f':'#3d8ef8');
-  Plotly.react('rsiChart', [
-    { type:'scatter', mode:'lines', x:dates, y:d.rsiSeries, name:'RSI', line:{color:'#f0b429',width:1.5}, connectgaps:true, fill:'tozeroy', fillcolor:'rgba(240,180,41,0.06)' },
-    { type:'scatter', mode:'lines', x:dates, y:Array(dates.length).fill(70), name:'超買線', line:{color:'rgba(232,70,70,0.4)',width:1,dash:'dot'}, showlegend:false },
-    { type:'scatter', mode:'lines', x:dates, y:Array(dates.length).fill(30), name:'超賣線', line:{color:'rgba(0,214,143,0.4)',width:1,dash:'dot'}, showlegend:false },
+  Plotly.newPlot('rsiChart', [
+    { type:'scatter', mode:'lines', x:dates, y:d.rsiSeries, name:'RSI(14)',
+      line:{color:'#f0b429',width:1.5}, connectgaps:false },
+    { type:'scatter', mode:'lines', x:dates, y:Array(dates.length).fill(70),
+      line:{color:'rgba(232,70,70,0.5)',width:1,dash:'dash'}, showlegend:false, hoverinfo:'skip' },
+    { type:'scatter', mode:'lines', x:dates, y:Array(dates.length).fill(30),
+      line:{color:'rgba(0,214,143,0.5)',width:1,dash:'dash'}, showlegend:false, hoverinfo:'skip' },
   ], {
     paper_bgcolor: BG, plot_bgcolor: BG,
     font: { color:'#6888a0', size:10 },
-    showlegend: false,
-    margin: { l:58, r:12, t:4, b:28 },
-    yaxis:  { gridcolor:GRID, tickfont:{color:'#6888a0'}, range:[0,100], tickvals:[0,30,50,70,100], side:'right' },
+    showlegend: true,
+    legend: { x:0, y:1.18, bgcolor:'rgba(0,0,0,0)', font:{size:10,color:'#8aaabf'} },
+    margin: { l:10, r:60, t:4, b:28 },
+    yaxis:  { gridcolor:GRID, tickfont:{color:'#6888a0'}, range:[0,100],
+              tickvals:[0,30,50,70,100], side:'right' },
     xaxis:  { rangeslider:{visible:false}, gridcolor:GRID, tickfont:{color:'#6888a0'} },
     hovermode: 'x unified',
-    annotations: [{ x:1, xref:'paper', y:70, yref:'y', text:'70', showarrow:false, font:{color:'rgba(232,70,70,0.6)',size:9}, xanchor:'left' },
-                  { x:1, xref:'paper', y:30, yref:'y', text:'30', showarrow:false, font:{color:'rgba(0,214,143,0.6)',size:9}, xanchor:'left' }],
+    shapes: [
+      { type:'line', xref:'paper', x0:0, x1:1, yref:'y', y0:70, y1:70,
+        line:{color:'rgba(232,70,70,0.25)',width:1} },
+      { type:'line', xref:'paper', x0:0, x1:1, yref:'y', y0:30, y1:30,
+        line:{color:'rgba(0,214,143,0.25)',width:1} },
+    ],
   }, { responsive:true, displayModeBar:false });
 }
 
