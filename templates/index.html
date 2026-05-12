@@ -1,0 +1,507 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>美股投資分析儀表板</title>
+<script src="https://cdn.plot.ly/plotly-basic-2.26.0.min.js"></script>
+<link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body>
+
+<!-- Navigation -->
+<nav class="topnav">
+  <div class="brand">📊 美股投資分析</div>
+  <div class="search-wrap">
+    <input id="tickerInput" type="text" placeholder="輸入股票代碼 (AAPL, NVDA, TSLA...)" autocomplete="off" spellcheck="false">
+    <button onclick="searchStock()">查詢</button>
+  </div>
+  <div class="quick-links">
+    <span onclick="loadStock('NVDA')">NVDA</span>
+    <span onclick="loadStock('AAPL')">AAPL</span>
+    <span onclick="loadStock('TSLA')">TSLA</span>
+    <span onclick="loadStock('MSFT')">MSFT</span>
+    <span onclick="loadStock('CRCL')">CRCL</span>
+    <span onclick="loadStock('RKLB')">RKLB</span>
+  </div>
+</nav>
+
+<!-- Welcome -->
+<div id="welcome" class="welcome-screen">
+  <div class="welcome-inner">
+    <div class="welcome-icon">📈</div>
+    <h1>美股投資分析儀表板</h1>
+    <p>輸入股票代碼，獲取完整技術分析、關鍵價位與投資策略建議</p>
+    <div class="sample-grid">
+      <div class="sample-card" onclick="loadStock('NVDA')"><div class="s-ticker">NVDA</div><div class="s-name">輝達 NVIDIA</div></div>
+      <div class="sample-card" onclick="loadStock('AAPL')"><div class="s-ticker">AAPL</div><div class="s-name">蘋果 Apple</div></div>
+      <div class="sample-card" onclick="loadStock('TSLA')"><div class="s-ticker">TSLA</div><div class="s-name">特斯拉 Tesla</div></div>
+      <div class="sample-card" onclick="loadStock('AMZN')"><div class="s-ticker">AMZN</div><div class="s-name">亞馬遜 Amazon</div></div>
+      <div class="sample-card" onclick="loadStock('CRCL')"><div class="s-ticker">CRCL</div><div class="s-name">Circle Internet</div></div>
+      <div class="sample-card" onclick="loadStock('RKLB')"><div class="s-ticker">RKLB</div><div class="s-name">火箭實驗室</div></div>
+    </div>
+  </div>
+</div>
+
+<!-- Loading -->
+<div id="loading" class="loading-screen hidden">
+  <div class="spinner"></div>
+  <div class="loading-text">資料載入中...</div>
+</div>
+
+<!-- Error -->
+<div id="errorDiv" class="error-banner hidden"></div>
+
+<!-- Dashboard -->
+<div id="dashboard" class="dashboard hidden">
+
+  <!-- ── Stock Header ── -->
+  <div class="card stock-header">
+    <div class="header-left">
+      <div class="ticker-badge" id="hTicker"></div>
+      <div class="header-info">
+        <div class="h-name" id="hName"></div>
+        <div class="h-sector" id="hSector"></div>
+        <div class="h-desc" id="hDesc"></div>
+      </div>
+    </div>
+    <div class="header-center">
+      <div class="big-price" id="hPrice"></div>
+      <div class="price-delta" id="hDelta"></div>
+    </div>
+    <div class="header-right">
+      <div class="stat-grid6">
+        <div class="sg-item"><span class="sg-l">開盤</span><span class="sg-v" id="sOpen"></span></div>
+        <div class="sg-item"><span class="sg-l">最高</span><span class="sg-v green" id="sHigh"></span></div>
+        <div class="sg-item"><span class="sg-l">最低</span><span class="sg-v red" id="sLow"></span></div>
+        <div class="sg-item"><span class="sg-l">昨收</span><span class="sg-v" id="sPrev"></span></div>
+        <div class="sg-item"><span class="sg-l">成交量</span><span class="sg-v" id="sVol"></span></div>
+        <div class="sg-item"><span class="sg-l">市值</span><span class="sg-v" id="sMktCap"></span></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Core Conclusions ── -->
+  <div class="card conclusions-card">
+    <div class="card-title">⭐ 投資核心結論</div>
+    <div class="conclusions-row" id="conclusionsRow"></div>
+  </div>
+
+  <!-- ── Main Two-Column ── -->
+  <div class="two-col">
+
+    <!-- Left: Technical Chart -->
+    <div class="card chart-card">
+      <div class="card-title">一、技術面分析（日線）</div>
+      <div class="ma-pills" id="maPills"></div>
+      <div id="priceChart" style="height:360px"></div>
+      <div class="macd-header" id="macdHeader"></div>
+      <div id="macdChart" style="height:130px"></div>
+    </div>
+
+    <!-- Right Column -->
+    <div class="right-col">
+
+      <!-- Catalysts -->
+      <div class="card">
+        <div class="card-title">關鍵催化劑</div>
+        <div id="catalysts"></div>
+      </div>
+
+      <!-- Business Highlights -->
+      <div class="card">
+        <div class="card-title">二、業務與財務重點</div>
+        <div id="bizHighlights"></div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ── Three-Column ── -->
+  <div class="three-col">
+
+    <!-- Technical Indicators -->
+    <div class="card">
+      <div class="card-title">三、技術指標總覽</div>
+      <div id="techStats"></div>
+    </div>
+
+    <!-- Key Levels -->
+    <div class="card">
+      <div class="card-title">四、關鍵價位</div>
+      <div id="keyLevels"></div>
+    </div>
+
+    <!-- Analyst -->
+    <div class="card">
+      <div class="card-title">五、分析師觀點</div>
+      <div id="analystSection"></div>
+    </div>
+
+  </div>
+
+  <!-- ── Scenarios + Risks ── -->
+  <div class="two-col">
+
+    <div class="card">
+      <div class="card-title">六、未來情境推演</div>
+      <div id="scenarios"></div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">七、主要風險</div>
+      <div id="risks"></div>
+    </div>
+
+  </div>
+
+  <!-- ── Investment Strategy ── -->
+  <div class="card strategy-card">
+    <div class="card-title">八、投資策略建議</div>
+    <div id="strategy"></div>
+  </div>
+
+  <div class="footer-note">※ 本分析為技術面自動化計算，僅供參考，投資有風險，請謹慎評估</div>
+
+</div><!-- end dashboard -->
+
+<script>
+// ── Utilities ────────────────────────────────────────────────────
+function fmtVol(v) {
+  if (v >= 1e8) return (v/1e8).toFixed(2) + '億';
+  if (v >= 1e4) return (v/1e4).toFixed(2) + '萬';
+  return v.toLocaleString();
+}
+function fmtMktCap(v) {
+  if (!v) return 'N/A';
+  if (v >= 1e12) return (v/1e12).toFixed(2) + '兆美元';
+  if (v >= 1e8)  return (v/1e8).toFixed(1) + '億美元';
+  return (v/1e6).toFixed(0) + '百萬美元';
+}
+function fmtNum(v, dp=2) {
+  if (!v || v === 0) return 'N/A';
+  return v.toFixed(dp);
+}
+function recText(mean) {
+  if (!mean || mean === 0) return { t: 'N/A', c: '' };
+  if (mean <= 1.5) return { t: '強力買入', c: 'green' };
+  if (mean <= 2.5) return { t: '買入', c: 'green' };
+  if (mean <= 3.5) return { t: '持有', c: 'yellow' };
+  if (mean <= 4.5) return { t: '賣出', c: 'red' };
+  return { t: '強力賣出', c: 'red' };
+}
+function show(id)  { document.getElementById(id).classList.remove('hidden'); }
+function hide(id)  { document.getElementById(id).classList.add('hidden'); }
+function $(id)     { return document.getElementById(id); }
+function setHTML(id, html) { $(id).innerHTML = html; }
+
+// ── State ─────────────────────────────────────────────────────────
+let currentData = null;
+
+// ── Entry ─────────────────────────────────────────────────────────
+document.addEventListener('DOMContentLoaded', () => {
+  $('tickerInput').addEventListener('keypress', e => { if (e.key === 'Enter') searchStock(); });
+});
+
+function searchStock() {
+  const t = $('tickerInput').value.trim().toUpperCase();
+  if (!t) return;
+  loadStock(t);
+}
+
+async function loadStock(ticker) {
+  $('tickerInput').value = ticker;
+  hide('welcome'); hide('dashboard'); hide('errorDiv');
+  show('loading');
+
+  try {
+    const r = await fetch('/api/stock/' + ticker);
+    const d = await r.json();
+    if (d.error) { showError(d.error); return; }
+    currentData = d;
+    renderDashboard(d);
+    hide('loading'); show('dashboard');
+  } catch(e) {
+    showError('網路錯誤，請稍後再試：' + e.message);
+  }
+}
+
+function showError(msg) {
+  hide('loading'); hide('dashboard');
+  $('errorDiv').textContent = '❌ ' + msg;
+  show('errorDiv');
+}
+
+// ── Render Dashboard ──────────────────────────────────────────────
+function renderDashboard(d) {
+  renderHeader(d);
+  renderConclusions(d);
+  renderCharts(d);
+  renderCatalysts(d);
+  renderBiz(d);
+  renderTechStats(d);
+  renderKeyLevels(d);
+  renderAnalyst(d);
+  renderScenarios(d);
+  renderRisks(d);
+  renderStrategy(d);
+}
+
+function renderHeader(d) {
+  $('hTicker').textContent = d.ticker;
+  $('hName').textContent   = d.name;
+  $('hSector').textContent = [d.sector, d.industry].filter(Boolean).join(' · ');
+  $('hDesc').textContent   = d.description ? d.description.substring(0, 120) + '...' : '';
+
+  $('hPrice').textContent  = '$' + d.price.toFixed(3);
+  const up = d.change >= 0;
+  $('hDelta').textContent  = (up ? '+' : '') + d.change.toFixed(3) + '  (' + (up ? '+' : '') + d.changePct.toFixed(2) + '%)';
+  $('hDelta').className    = 'price-delta ' + (up ? 'green' : 'red');
+
+  $('sOpen').textContent   = '$' + d.open;
+  $('sHigh').textContent   = '$' + d.high;
+  $('sLow').textContent    = '$' + d.low;
+  $('sPrev').textContent   = '$' + d.prevClose;
+  $('sVol').textContent    = fmtVol(d.volume);
+  $('sMktCap').textContent = fmtMktCap(d.marketCap);
+}
+
+function renderConclusions(d) {
+  setHTML('conclusionsRow', d.conclusions.map(c =>
+    `<div class="con-item"><span class="con-icon">${c.icon}</span><span class="con-text">${c.text}</span></div>`
+  ).join(''));
+}
+
+function renderCharts(d) {
+  // ── MA Pills ──
+  setHTML('maPills',
+    `<span class="pill ma5">MA5: ${d.ma5}</span>` +
+    `<span class="pill ma20">MA20: ${d.ma20}</span>` +
+    `<span class="pill ma60">MA60: ${d.ma60}</span>` +
+    `<span class="pill rsi">RSI: ${d.rsi}</span>`
+  );
+
+  const dates = d.dates;
+  const BG = '#0d1422', GRID = '#172030';
+
+  // ── Price + Volume Chart ──
+  const volColors = d.ohlcv.close.map((c, i) =>
+    i === 0 ? 'rgba(120,120,120,0.5)' :
+    c >= d.ohlcv.close[i-1] ? 'rgba(239,83,80,0.55)' : 'rgba(38,166,154,0.55)'
+  );
+
+  Plotly.newPlot('priceChart', [
+    {
+      type: 'candlestick', x: dates,
+      open: d.ohlcv.open, high: d.ohlcv.high, low: d.ohlcv.low, close: d.ohlcv.close,
+      name: d.ticker, yaxis: 'y', showlegend: false,
+      increasing: { line: { color: '#ef5350', width: 1 }, fillcolor: '#ef5350' },
+      decreasing: { line: { color: '#26a69a', width: 1 }, fillcolor: '#26a69a' },
+    },
+    { type:'scatter', mode:'lines', x:dates, y:d.ma.ma5,  name:'MA5',  line:{color:'#ffa000',width:1.5}, yaxis:'y', connectgaps:true },
+    { type:'scatter', mode:'lines', x:dates, y:d.ma.ma20, name:'MA20', line:{color:'#e040fb',width:1.5}, yaxis:'y', connectgaps:true },
+    { type:'scatter', mode:'lines', x:dates, y:d.ma.ma60, name:'MA60', line:{color:'#40c4ff',width:1.5}, yaxis:'y', connectgaps:true },
+    { type:'bar', x:dates, y:d.ohlcv.volume, name:'成交量', marker:{color:volColors}, yaxis:'y2', showlegend:false },
+  ], {
+    paper_bgcolor: BG, plot_bgcolor: BG,
+    font: { color:'#7a9ab5', size:11 },
+    showlegend: true,
+    legend: { orientation:'h', x:0, y:1.05, bgcolor:'rgba(0,0,0,0)', font:{size:10,color:'#9ab5cc'} },
+    margin: { l:60, r:15, t:25, b:25 },
+    yaxis:  { domain:[0.22,1],  gridcolor:GRID, zerolinecolor:GRID, tickfont:{color:'#7a9ab5'}, tickformat:'.2f' },
+    yaxis2: { domain:[0,0.18],  gridcolor:GRID, tickfont:{color:'#7a9ab5',size:9} },
+    xaxis:  { rangeslider:{visible:false}, gridcolor:GRID, tickfont:{color:'#7a9ab5'} },
+    hovermode: 'x unified',
+  }, { responsive:true, displayModeBar:false });
+
+  // ── MACD Header ──
+  const macdColor = d.macdHist >= 0 ? '#ef5350' : '#26a69a';
+  setHTML('macdHeader',
+    `<span style="color:#2196f3">DIF: ${d.macdVal}</span>  ` +
+    `<span style="color:#ff9800">DEA: ${d.deaVal}</span>  ` +
+    `<span style="color:${macdColor}">MACD: ${d.macdHist}</span>`
+  );
+
+  // ── MACD Chart ──
+  const hColors = d.macd.hist.map(v => v === null ? '#888' : (v >= 0 ? 'rgba(239,83,80,0.8)' : 'rgba(38,166,154,0.8)'));
+  Plotly.newPlot('macdChart', [
+    { type:'scatter', mode:'lines', x:dates, y:d.macd.dif,  name:'DIF',  line:{color:'#2196f3',width:1.5}, connectgaps:true },
+    { type:'scatter', mode:'lines', x:dates, y:d.macd.dea,  name:'DEA',  line:{color:'#ff9800',width:1.5}, connectgaps:true },
+    { type:'bar',     x:dates,      y:d.macd.hist, name:'MACD', marker:{color:hColors} },
+  ], {
+    paper_bgcolor: BG, plot_bgcolor: BG,
+    font: { color:'#7a9ab5', size:10 },
+    showlegend: true,
+    legend: { orientation:'h', x:0, y:1.1, bgcolor:'rgba(0,0,0,0)', font:{size:10,color:'#9ab5cc'} },
+    margin: { l:60, r:15, t:10, b:30 },
+    yaxis:  { gridcolor:GRID, zerolinecolor:'#2a3f55', tickfont:{color:'#7a9ab5'} },
+    xaxis:  { rangeslider:{visible:false}, gridcolor:GRID, tickfont:{color:'#7a9ab5'} },
+    hovermode: 'x unified',
+  }, { responsive:true, displayModeBar:false });
+}
+
+function renderCatalysts(d) {
+  setHTML('catalysts', d.catalysts.map(c =>
+    `<div class="catalyst-item">
+      <div class="cat-num">${c.num}</div>
+      <div class="cat-body"><div class="cat-title">${c.text}</div><div class="cat-sub">${c.sub}</div></div>
+    </div>`
+  ).join(''));
+}
+
+function renderBiz(d) {
+  const items = [
+    { icon:'💰', label:'市值', value: fmtMktCap(d.marketCap) },
+    { icon:'📊', label:'本益比 (TTM)', value: d.pe ? d.pe.toFixed(2) : 'N/A' },
+    { icon:'📊', label:'預期本益比', value: d.forwardPe ? d.forwardPe.toFixed(2) : 'N/A' },
+    { icon:'💵', label:'每股盈餘 (EPS)', value: d.eps ? '$'+d.eps.toFixed(2) : 'N/A' },
+    { icon:'📈', label:'52週最高', value: '$'+d.week52High },
+    { icon:'📉', label:'52週最低', value: '$'+d.week52Low },
+  ];
+  setHTML('bizHighlights',
+    `<div class="biz-grid">${
+      items.map(i => `<div class="biz-item"><span class="biz-icon">${i.icon}</span><span class="biz-label">${i.label}</span><span class="biz-value">${i.value}</span></div>`).join('')
+    }</div>`
+  );
+}
+
+function renderTechStats(d) {
+  const rows = [
+    ['MA5',    '$'+d.ma5,  d.price > d.ma5  ? 'green':'red', d.price > d.ma5  ? '▲站上':'▼跌破'],
+    ['MA20',   '$'+d.ma20, d.price > d.ma20 ? 'green':'red', d.price > d.ma20 ? '▲站上':'▼跌破'],
+    ['MA60',   '$'+d.ma60, d.price > d.ma60 ? 'green':'red', d.price > d.ma60 ? '▲站上':'▼跌破'],
+    ['DIF',    d.macdVal.toFixed(2), d.macdVal > 0 ? 'green':'red', d.macdVal > 0 ? '零軸上方':'零軸下方'],
+    ['DEA',    d.deaVal.toFixed(2),  d.macdVal > d.deaVal ? 'green':'red', d.macdVal > d.deaVal ? '金叉':'死叉'],
+    ['RSI',    d.rsi.toFixed(1),     d.rsi > 70 ? 'red' : d.rsi < 30 ? 'green' : 'yellow',
+               d.rsi > 70 ? '超買' : d.rsi < 30 ? '超賣' : '正常'],
+    ['量比',   d.volRatio.toFixed(2)+'x', d.volRatio >= 1.5 ? 'green':'dim', d.volRatio >= 1.5 ? '放量':'縮量'],
+  ];
+  setHTML('techStats',
+    `<table class="tech-table">${
+      rows.map(r => `<tr>
+        <td class="tt-label">${r[0]}</td>
+        <td class="tt-value">${r[1]}</td>
+        <td class="tt-status ${r[2]}">${r[3]}</td>
+      </tr>`).join('')
+    }</table>`
+  );
+}
+
+function renderKeyLevels(d) {
+  const lv = d.levels;
+  const price = d.price;
+  const all = [lv.resistance2, lv.resistance1, price, lv.support1, lv.support2];
+  const min_ = Math.min(...all), max_ = Math.max(...all);
+  const pct = v => ((v - min_) / (max_ - min_) * 90 + 5).toFixed(1);
+
+  const items = [
+    { label:'壓力區 ②', value: lv.resistance2, cls:'resist2', tag:'歷史高點壓力' },
+    { label:'壓力區 ①', value: lv.resistance1, cls:'resist1', tag:'短期壓力' },
+    { label:'▶ 當前價格', value: price,          cls:'current',tag:'' },
+    { label:'支撐區 ①', value: lv.support1,     cls:'supp1',  tag:'短期支撐' },
+    { label:'支撐區 ②', value: lv.support2,     cls:'supp2',  tag:'強力支撐' },
+  ];
+
+  setHTML('keyLevels',
+    `<div class="levels-wrap">${
+      items.map(it =>
+        `<div class="level-row ${it.cls}">
+          <div class="lv-bar-wrap"><div class="lv-bar" style="width:${pct(it.value)}%"></div></div>
+          <div class="lv-info">
+            <span class="lv-label">${it.label}</span>
+            <span class="lv-price">$${it.value}</span>
+            ${it.tag ? `<span class="lv-tag">${it.tag}</span>` : ''}
+          </div>
+        </div>`
+      ).join('')
+    }</div>`
+  );
+}
+
+function renderAnalyst(d) {
+  const rec = recText(d.recMean);
+  const upside = d.analystTarget && d.price ? ((d.analystTarget/d.price-1)*100).toFixed(1) : null;
+  setHTML('analystSection',
+    `<div class="analyst-wrap">
+      ${d.numAnalysts > 0 ? `
+        <div class="analyst-rec ${rec.c}">評級：${rec.t}</div>
+        <div class="analyst-count">${d.numAnalysts} 位分析師</div>
+        ${d.analystTarget ? `<div class="analyst-row"><span class="ar-l">平均目標</span><span class="ar-v">$${d.analystTarget}</span></div>` : ''}
+        ${d.analystHigh   ? `<div class="analyst-row"><span class="ar-l">最高目標</span><span class="ar-v green">$${d.analystHigh}</span></div>` : ''}
+        ${d.analystLow    ? `<div class="analyst-row"><span class="ar-l">最低目標</span><span class="ar-v red">$${d.analystLow}</span></div>` : ''}
+        ${upside ? `<div class="analyst-upside ${parseFloat(upside)>=0?'green':'red'}">潛在漲幅：${upside >= 0 ? '+' : ''}${upside}%</div>` : ''}
+      ` : '<div class="no-data">分析師資料暫無</div>'}
+    </div>`
+  );
+}
+
+function renderScenarios(d) {
+  const s = d.strategy;
+  const price = d.price;
+  const bullPct  = ((s.bullTarget/price-1)*100).toFixed(0);
+  const neutPct  = ((s.neutralTarget/price-1)*100).toFixed(0);
+  const bearPct  = ((s.bearTarget/price-1)*100).toFixed(0);
+  setHTML('scenarios',
+    `<div class="scenario bull-s">
+      <div class="sc-header"><span class="sc-icon">🐂</span><span class="sc-name">強勢情境</span><span class="sc-prob green">機率 40%</span></div>
+      <div class="sc-target">目標價 <span class="green">$${s.bullTarget}</span> <small class="green">(+${bullPct}%)</small></div>
+      <div class="sc-cond">技術突破歷史高點，量能持續放大，基本面超預期</div>
+    </div>
+    <div class="scenario neut-s">
+      <div class="sc-header"><span class="sc-icon">📊</span><span class="sc-name">中性情境</span><span class="sc-prob yellow">機率 40%</span></div>
+      <div class="sc-target">目標價 <span class="yellow">$${s.neutralTarget}</span> <small class="yellow">(+${neutPct}%)</small></div>
+      <div class="sc-cond">維持現有趨勢穩步上漲，市場逐步消化估值</div>
+    </div>
+    <div class="scenario bear-s">
+      <div class="sc-header"><span class="sc-icon">🐻</span><span class="sc-name">保守情境</span><span class="sc-prob red">機率 20%</span></div>
+      <div class="sc-target">目標價 <span class="red">$${s.bearTarget}</span> <small class="red">(${bearPct}%)</small></div>
+      <div class="sc-cond">法規趨嚴或市場修正，競爭加劇導致成長放緩</div>
+    </div>`
+  );
+}
+
+function renderRisks(d) {
+  const icon = { high:'🔴', medium:'🟡', low:'🟢' };
+  setHTML('risks', d.risks.map(r =>
+    `<div class="risk-item">
+      <span class="risk-icon">${icon[r.level]||'⚠️'}</span>
+      <span class="risk-text">${r.text}</span>
+    </div>`
+  ).join(''));
+}
+
+function renderStrategy(d) {
+  const s = d.strategy;
+  setHTML('strategy',
+    `<div class="strategy-grid">
+      <div class="strategy-item long-t">
+        <div class="st-icon">🚀</div>
+        <div class="st-body">
+          <div class="st-type">長線投資人</div>
+          <div class="st-desc">${s.long}</div>
+        </div>
+      </div>
+      <div class="strategy-item swing-t">
+        <div class="st-icon">🎯</div>
+        <div class="st-body">
+          <div class="st-type">波段投資人</div>
+          <div class="st-desc">${s.swing}</div>
+        </div>
+      </div>
+      <div class="strategy-item short-t">
+        <div class="st-icon">⚡</div>
+        <div class="st-body">
+          <div class="st-type">短線交易人</div>
+          <div class="st-desc">${s.short}</div>
+        </div>
+      </div>
+    </div>
+    <div class="stop-loss-bar">
+      ⚠️ 失守風險線：<strong class="red">$${s.stopLoss}</strong>（跌破此位視為趨勢轉弱，建議出場觀望）
+    </div>`
+  );
+}
+</script>
+
+</body>
+</html>
