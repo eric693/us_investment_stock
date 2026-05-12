@@ -428,9 +428,9 @@ function renderCharts(d) {
     font: { color:'#6888a0', size:11 },
     showlegend: true,
     legend: { orientation:'h', x:0, y:1.06, bgcolor:'rgba(0,0,0,0)', font:{size:10,color:'#8aaabf'} },
-    margin: { l:10, r:60, t:24, b:8 },
-    yaxis:  { gridcolor:GRID, zerolinecolor:GRID, tickfont:{color:'#6888a0'}, side:'right', autorange:true },
-    xaxis:  { rangeslider:{visible:false}, gridcolor:GRID, tickfont:{color:'#6888a0'} },
+    margin: { l:60, r:8, t:24, b:4 },
+    yaxis:  { gridcolor:GRID, zerolinecolor:GRID, tickfont:{color:'#6888a0'}, side:'left', autorange:true },
+    xaxis:  { rangeslider:{visible:false}, gridcolor:GRID, showticklabels:false },
     hovermode: 'x unified',
   }, { responsive:true, displayModeBar:false });
 
@@ -441,8 +441,8 @@ function renderCharts(d) {
   ], {
     paper_bgcolor: BG, plot_bgcolor: BG,
     font: { color:'#6888a0', size:9 },
-    margin: { l:10, r:60, t:2, b:22 },
-    yaxis: { gridcolor:GRID, tickfont:{color:'#6888a0',size:9}, side:'right' },
+    margin: { l:60, r:8, t:2, b:22 },
+    yaxis: { gridcolor:GRID, tickfont:{color:'#6888a0',size:9}, side:'left', tickformat:'.2s' },
     xaxis: { rangeslider:{visible:false}, gridcolor:GRID, tickfont:{color:'#6888a0'} },
     hovermode: 'x unified',
   }, { responsive:true, displayModeBar:false });
@@ -466,8 +466,8 @@ function renderCharts(d) {
     font: { color:'#6888a0', size:10 },
     showlegend: true,
     legend: { orientation:'h', x:0, y:1.18, bgcolor:'rgba(0,0,0,0)', font:{size:10,color:'#8aaabf'} },
-    margin: { l:10, r:60, t:8, b:22 },
-    yaxis:  { gridcolor:GRID, zerolinecolor:'#1e3050', tickfont:{color:'#6888a0'}, side:'right' },
+    margin: { l:60, r:8, t:8, b:22 },
+    yaxis:  { gridcolor:GRID, zerolinecolor:'#1e3050', tickfont:{color:'#6888a0'}, side:'left' },
     xaxis:  { rangeslider:{visible:false}, gridcolor:GRID, tickfont:{color:'#6888a0'} },
     hovermode: 'x unified',
   }, { responsive:true, displayModeBar:false });
@@ -485,9 +485,9 @@ function renderCharts(d) {
     font: { color:'#6888a0', size:10 },
     showlegend: true,
     legend: { x:0, y:1.18, bgcolor:'rgba(0,0,0,0)', font:{size:10,color:'#8aaabf'} },
-    margin: { l:10, r:60, t:4, b:28 },
+    margin: { l:60, r:8, t:4, b:28 },
     yaxis:  { gridcolor:GRID, tickfont:{color:'#6888a0'}, range:[0,100],
-              tickvals:[0,30,50,70,100], side:'right' },
+              tickvals:[0,30,50,70,100], side:'left' },
     xaxis:  { rangeslider:{visible:false}, gridcolor:GRID, tickfont:{color:'#6888a0'} },
     hovermode: 'x unified',
     shapes: [
