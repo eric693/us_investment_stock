@@ -195,6 +195,12 @@
     <div class="conclusions-row" id="conclusionsRow"></div>
   </div>
 
+  <!-- 1b. Investment Core Value -->
+  <div class="card" id="investValueCard">
+    <div class="card-title">投資核心價值</div>
+    <div id="investValuePanel"></div>
+  </div>
+
   <!-- 2. Performance Returns -->
   <div class="card">
     <div class="card-title">報酬率統計</div>
@@ -229,10 +235,10 @@
       <div class="chart-top">
         <div class="ma-pills" id="maPills"></div>
         <div class="period-tabs">
-          <button class="ptab" data-period="1M" onclick="changePeriod('1M')">1M</button>
+          <button class="ptab active" data-period="1M" onclick="changePeriod('1M')">1M</button>
           <button class="ptab" data-period="3M" onclick="changePeriod('3M')">3M</button>
           <button class="ptab" data-period="6M" onclick="changePeriod('6M')">6M</button>
-          <button class="ptab active" data-period="1M" onclick="changePeriod('1M')">1M</button>
+          <button class="ptab" data-period="1Y" onclick="changePeriod('1Y')">1Y</button>
         </div>
       </div>
       <div id="indicatorBar" class="indicator-bar"></div>
@@ -288,6 +294,12 @@
       <div class="card-title">季度營收趨勢</div>
       <div id="quarterlyPanel"></div>
     </div>
+  </div>
+
+  <!-- 6b. Financial Trends -->
+  <div class="card">
+    <div class="card-title">財務趨勢分析</div>
+    <div id="finTrendsPanel"></div>
   </div>
 
   <!-- 7. Scenarios + Risks -->
@@ -492,6 +504,7 @@ function changePeriod(period) {
 function renderDashboard(d) {
   renderHeader(d);
   renderConclusions(d);
+  renderInvestValue(d);
   renderPerf(d);
   renderShortInfo(d);
   // Default to 1M view
@@ -513,6 +526,7 @@ function renderDashboard(d) {
   renderBollinger(d);
   renderVolume(d);
   renderQuarterly(d);
+  renderFinTrends(d);
   renderScenarios(d);
   renderRisks(d);
   renderStrategy(d);
@@ -783,6 +797,150 @@ function renderCharts(d) {
   }, {responsive:true,displayModeBar:false});
 }
 
+// ── Investment Core Value ────────────────────────────────────────────
+function renderInvestValue(d) {
+  const iv = d.investValue;
+  if (!iv) return;
+  const g = iv.grades;
+
+  function gradeHtml(label, val) {
+    const cls = val === 'A+' ? 'ga-plus' : val === 'A' ? 'ga' : val === 'B' ? 'gb' : val === 'C' ? 'gc' : 'gd';
+    return `<div class="iv-grade ${cls}">
+      <span class="iv-grade-val">${val}</span>
+      <span class="iv-grade-lbl">${label}</span>
+    </div>`;
+  }
+
+  const scoreBar = Math.min(iv.score, 100);
+  const barColor = iv.score >= 75 ? 'var(--green)' : iv.score >= 55 ? 'var(--blue)' : iv.score >= 40 ? 'var(--yellow)' : 'var(--red)';
+
+  setHTML('investValuePanel', `
+    <div class="iv-layout">
+      <div class="iv-signal-col">
+        <div class="iv-signal ${iv.signalCls}">
+          <div class="iv-signal-en">${iv.signal}</div>
+          <div class="iv-signal-cn">${iv.signalCn}</div>
+        </div>
+        <div class="iv-score-wrap">
+          <div class="iv-score-label">綜合評分</div>
+          <div class="iv-score-num" style="color:${barColor}">${iv.score}</div>
+          <div class="iv-score-track"><div class="iv-score-fill" style="width:${scoreBar}%;background:${barColor}"></div></div>
+        </div>
+      </div>
+
+      <div class="iv-grades-col">
+        <div class="iv-grades-title">四維評級</div>
+        <div class="iv-grades-row">
+          ${gradeHtml('動能', g.momentum)}
+          ${gradeHtml('估值', g.valuation)}
+          ${gradeHtml('成長', g.growth)}
+          ${gradeHtml('財健', g.health)}
+        </div>
+        <div class="iv-grades-legend">
+          <span>A+ 卓越</span><span>A 優秀</span><span>B 良好</span><span>C 普通</span><span>D 偏弱</span>
+        </div>
+      </div>
+
+      <div class="iv-points-col">
+        ${iv.strengths.length > 0 ? `
+          <div class="iv-section-title green">核心優勢</div>
+          ${iv.strengths.map(s => `<div class="iv-point iv-pos"><span class="iv-dot green-dot"></span>${s}</div>`).join('')}
+        ` : ''}
+        ${iv.weaknesses.length > 0 ? `
+          <div class="iv-section-title red" style="margin-top:10px">主要隱憂</div>
+          ${iv.weaknesses.map(w => `<div class="iv-point iv-neg"><span class="iv-dot red-dot"></span>${w}</div>`).join('')}
+        ` : ''}
+      </div>
+    </div>
+  `);
+}
+
+// ── Financial Trends ─────────────────────────────────────────────────
+function renderFinTrends(d) {
+  const q = d.quarterly || [];
+
+  function trendArrow(v) {
+    if (v === null || v === undefined || v === 0) return '<span style="color:var(--text-dim)">—</span>';
+    return v > 0
+      ? `<span class="trend-up">+${v.toFixed(1)}%</span>`
+      : `<span class="trend-dn">${v.toFixed(1)}%</span>`;
+  }
+
+  // Quarterly revenue mini bars
+  let revenueBar = '<div class="no-data">季度資料暫無</div>';
+  if (q.length >= 2) {
+    const maxRev = Math.max(...q.map(x => x.revenue));
+    revenueBar = `<div class="ft-bar-chart">${
+      [...q].reverse().map(item => {
+        const h = Math.round((item.revenue / maxRev) * 64);
+        return `<div class="ft-bar-col">
+          <div class="ft-bar-inner" style="height:${h}px"></div>
+          <div class="ft-bar-label">${item.period.slice(2)}</div>
+        </div>`;
+      }).join('')
+    }</div>`;
+  }
+
+  // Profitability items
+  const margins = [
+    { label: '毛利率',   value: d.grossMargin,  suffix: '%', color: d.grossMargin > 40 ? 'var(--green)' : d.grossMargin > 20 ? 'var(--yellow)' : 'var(--red)' },
+    { label: '淨利率',   value: d.profitMargin, suffix: '%', color: d.profitMargin > 15 ? 'var(--green)' : d.profitMargin > 5 ? 'var(--yellow)' : 'var(--red)' },
+    { label: '股東權益報酬 ROE', value: d.roe,  suffix: '%', color: d.roe > 15 ? 'var(--green)' : d.roe > 0 ? 'var(--yellow)' : 'var(--red)' },
+    { label: '負債股東權益比',  value: d.debtEquity, suffix: '', color: d.debtEquity > 200 ? 'var(--red)' : d.debtEquity > 80 ? 'var(--yellow)' : 'var(--green)' },
+  ];
+
+  const marginHtml = margins.map(m =>
+    `<div class="ft-metric">
+      <span class="ft-m-label">${m.label}</span>
+      <div class="ft-m-right">
+        <span class="ft-m-val" style="color:${m.color}">${m.value ? m.value + m.suffix : 'N/A'}</span>
+        <div class="ft-m-bar-bg"><div class="ft-m-bar-fill" style="width:${Math.min(Math.abs(m.value||0),100)}%;background:${m.color}"></div></div>
+      </div>
+    </div>`
+  ).join('');
+
+  // Growth metrics
+  const growthItems = [
+    { label: '營收年增率',  value: d.revGrowth,    up: d.revGrowth > 0 },
+    { label: 'EPS 成長率',  value: d.epsGrowth,    up: d.epsGrowth > 0 },
+    { label: '股價 1M 漲幅', value: d.returns['1M'], up: (d.returns['1M']||0) > 0 },
+    { label: '股價 3M 漲幅', value: d.returns['3M'], up: (d.returns['3M']||0) > 0 },
+    { label: '股價 1Y 漲幅', value: d.returns['1Y'], up: (d.returns['1Y']||0) > 0 },
+    { label: 'Beta（波動係數）', value: d.beta, up: null },
+  ];
+
+  const growthHtml = growthItems.map(g =>
+    `<div class="ft-metric">
+      <span class="ft-m-label">${g.label}</span>
+      <span class="ft-m-val" style="color:${g.up===null?'var(--text)':g.up?'var(--green)':'var(--red)'}">
+        ${g.value !== null && g.value !== undefined && g.value !== 0
+          ? (g.up === null ? g.value : (g.up ? '+' : '') + g.value.toFixed(1) + '%')
+          : 'N/A'}
+      </span>
+    </div>`
+  ).join('');
+
+  setHTML('finTrendsPanel', `
+    <div class="ft-layout">
+      <div class="ft-section">
+        <div class="ft-section-title">季度營收趨勢</div>
+        ${revenueBar}
+        <div class="ft-rev-summary">
+          ${q.length >= 2 ? `近4季營收：最高 $${Math.max(...q.map(x=>x.revenue)).toFixed(0)}M，趨勢${q[0].revenue > q[q.length-1].revenue ? '向上' : '持平/下行'}` : ''}
+        </div>
+      </div>
+      <div class="ft-section">
+        <div class="ft-section-title">利潤率分析</div>
+        ${marginHtml}
+      </div>
+      <div class="ft-section">
+        <div class="ft-section-title">成長動能指標</div>
+        ${growthHtml}
+      </div>
+    </div>
+  `);
+}
+
 // ── Catalysts ────────────────────────────────────────────────────────
 function renderCatalysts(d) {
   setHTML('catalysts', d.catalysts.map(c =>
@@ -795,23 +953,54 @@ function renderCatalysts(d) {
 
 // ── Business ──────────────────────────────────────────────────────────
 function renderBiz(d) {
-  const items = [
-    { label: '市值',         value: fmtMktCap(d.marketCap) + ' USD' },
-    { label: '本益比 (TTM)', value: d.pe        ? d.pe.toFixed(2)          : 'N/A' },
-    { label: '預期本益比',   value: d.forwardPe  ? d.forwardPe.toFixed(2)  : 'N/A' },
-    { label: '每股盈餘',     value: d.eps        ? '$' + d.eps.toFixed(2)  : 'N/A' },
-    { label: '52週最高',     value: '$' + d.week52High },
-    { label: '52週最低',     value: '$' + d.week52Low  },
-    { label: '毛利率',       value: d.grossMargin ? d.grossMargin + '%'    : 'N/A' },
-    { label: '淨利率',       value: d.profitMargin ? d.profitMargin + '%'  : 'N/A' },
-    { label: '股東權益報酬', value: d.roe         ? d.roe + '%'            : 'N/A' },
-    { label: '負債比',       value: d.debtEquity  ? d.debtEquity           : 'N/A' },
+  const from52H = d.week52High ? (((d.price / d.week52High) - 1) * 100).toFixed(1) : null;
+  const from52L = d.week52Low  ? (((d.price / d.week52Low)  - 1) * 100).toFixed(1) : null;
+  const sections = [
+    {
+      title: '估值',
+      items: [
+        { label: '市值',           value: fmtMktCap(d.marketCap) + ' USD' },
+        { label: '本益比 (TTM)',   value: d.pe        ? d.pe.toFixed(1) + 'x' : 'N/A' },
+        { label: '預期本益比',     value: d.forwardPe ? d.forwardPe.toFixed(1) + 'x' : 'N/A' },
+        { label: '每股盈餘 EPS',   value: d.eps       ? '$' + d.eps.toFixed(2) : 'N/A' },
+        { label: '預期 EPS',       value: d.fwdEps    ? '$' + d.fwdEps : 'N/A' },
+        { label: '年殖利率',       value: d.divYield  ? d.divYield + '%' : 'N/A' },
+      ]
+    },
+    {
+      title: '獲利能力',
+      items: [
+        { label: '毛利率',         value: d.grossMargin  ? d.grossMargin + '%'  : 'N/A', color: d.grossMargin > 40 ? 'green' : '' },
+        { label: '淨利率',         value: d.profitMargin ? d.profitMargin + '%' : 'N/A', color: d.profitMargin > 15 ? 'green' : '' },
+        { label: 'ROE 股東報酬率', value: d.roe          ? d.roe + '%'          : 'N/A', color: d.roe > 15 ? 'green' : '' },
+        { label: '負債股東權益比', value: d.debtEquity   ? d.debtEquity         : 'N/A', color: d.debtEquity > 200 ? 'red' : '' },
+        { label: '法人持股',       value: d.instPct      ? d.instPct + '%'      : 'N/A' },
+        { label: '空頭比例',       value: d.shortPct     ? d.shortPct + '%'     : 'N/A', color: d.shortPct > 15 ? 'red' : '' },
+      ]
+    },
+    {
+      title: '價格區間',
+      items: [
+        { label: '52週最高', value: '$' + d.week52High, sub: from52H ? `距頂 ${from52H}%` : '' },
+        { label: '52週最低', value: '$' + d.week52Low,  sub: from52L ? `+${from52L}% 底部` : '' },
+        { label: 'Beta 係數', value: d.beta ? d.beta.toFixed(2) : 'N/A',
+          sub: d.beta > 1.5 ? '高波動' : d.beta > 1 ? '略高於大盤' : '低波動' },
+        { label: '流通股數',  value: fmtShares(d.sharesOut) },
+      ]
+    }
   ];
-  setHTML('bizHighlights',
-    `<div class="biz-grid">${
-      items.map(i => `<div class="biz-item"><span class="biz-label">${i.label}</span><span class="biz-value">${i.value}</span></div>`).join('')
-    }</div>`
-  );
+
+  setHTML('bizHighlights', sections.map(sec => `
+    <div class="biz-section">
+      <div class="biz-section-title">${sec.title}</div>
+      <div class="biz-grid">${sec.items.map(i =>
+        `<div class="biz-item">
+          <span class="biz-label">${i.label}</span>
+          <span class="biz-value ${i.color||''}">${i.value}${i.sub ? `<small class="biz-sub">${i.sub}</small>` : ''}</span>
+        </div>`
+      ).join('')}</div>
+    </div>
+  `).join(''));
 }
 
 // ── Tech Stats ────────────────────────────────────────────────────────
@@ -999,7 +1188,10 @@ function renderScenarios(d) {
 function renderRisks(d) {
   setHTML('risks', d.risks.map(r =>
     `<div class="risk-item ${r.level}">
-      <span class="risk-dot"></span>
+      <div class="risk-left">
+        <span class="risk-dot"></span>
+        ${r.category ? `<span class="risk-cat">${r.category}</span>` : ''}
+      </div>
       <span class="risk-text">${r.text}</span>
     </div>`
   ).join(''));

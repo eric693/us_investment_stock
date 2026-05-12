@@ -21,7 +21,7 @@
 
 /* ── Reset ────────────────────────────────────────────────────── */
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-html { font-size: 14px; scroll-behavior: smooth; }
+html { font-size: 15px; scroll-behavior: smooth; }
 body {
   background: var(--bg);
   color: var(--text);
@@ -238,9 +238,9 @@ a:hover { text-decoration: underline; }
   border-radius: 10px; padding: 15px 16px;
 }
 .card-title {
-  font-size: 0.78rem; font-weight: 800; letter-spacing: 0.7px;
-  color: var(--gold); margin-bottom: 12px;
-  border-bottom: 1px solid var(--card-bd); padding-bottom: 8px;
+  font-size: 0.84rem; font-weight: 800; letter-spacing: 0.7px;
+  color: var(--gold); margin-bottom: 14px;
+  border-bottom: 1px solid var(--card-bd); padding-bottom: 9px;
   text-transform: uppercase;
 }
 .two-col   { display: grid; grid-template-columns: 1fr 360px; gap: 12px; align-items: start; }
@@ -302,7 +302,7 @@ a:hover { text-decoration: underline; }
 .con-item.negative .con-dot { background: var(--red); }
 .con-item.warning  .con-dot { background: var(--yellow); }
 .con-item.neutral  .con-dot { background: var(--text-dim); }
-.con-text { font-size: 0.81rem; color: var(--text); line-height: 1.4; }
+.con-text { font-size: 0.88rem; color: var(--text); line-height: 1.4; }
 
 /* ── Performance Returns ─────────────────────────────────────────── */
 .perf-row { display: flex; gap: 10px; flex-wrap: wrap; }
@@ -644,6 +644,108 @@ a:hover { text-decoration: underline; }
 }
 .news-loading { text-align: center; color: var(--text-dim); padding: 20px; font-size: 0.84rem; }
 .news-empty   { text-align: center; color: var(--text-dim); padding: 24px; font-size: 0.8rem; }
+
+/* ── Investment Core Value ────────────────────────────────────────── */
+.iv-layout {
+  display: grid; grid-template-columns: 180px 1fr 1fr; gap: 24px; align-items: start;
+}
+.iv-signal {
+  padding: 16px 14px; border-radius: 10px; text-align: center;
+  border: 2px solid; margin-bottom: 12px;
+}
+.iv-signal-en { font-size: 0.9rem; font-weight: 900; letter-spacing: 1px; opacity: 0.7; }
+.iv-signal-cn { font-size: 1.6rem; font-weight: 900; margin-top: 2px; }
+.sv-strong-buy { border-color: var(--green); background: rgba(0,214,143,0.08); color: var(--green); }
+.sv-buy        { border-color: #50c8ff;      background: rgba(80,200,255,0.08); color: #50c8ff; }
+.sv-hold       { border-color: var(--yellow); background: rgba(240,180,41,0.08); color: var(--yellow); }
+.sv-caution    { border-color: #ff8040;      background: rgba(255,128,64,0.08); color: #ff8040; }
+.sv-avoid      { border-color: var(--red);   background: rgba(232,70,70,0.08);  color: var(--red); }
+
+.iv-score-wrap { text-align: center; }
+.iv-score-label { font-size: 0.7rem; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.5px; }
+.iv-score-num   { font-size: 2rem; font-weight: 900; line-height: 1.2; }
+.iv-score-track { height: 6px; background: var(--card-bd2); border-radius: 3px; overflow: hidden; margin-top: 5px; }
+.iv-score-fill  { height: 100%; border-radius: 3px; transition: width .6s; }
+
+.iv-grades-title { font-size: 0.72rem; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 10px; }
+.iv-grades-row  { display: flex; gap: 8px; margin-bottom: 8px; }
+.iv-grade {
+  flex: 1; display: flex; flex-direction: column; align-items: center;
+  padding: 10px 6px; border-radius: 8px; border: 1px solid;
+}
+.iv-grade-val  { font-size: 1.3rem; font-weight: 900; line-height: 1; }
+.iv-grade-lbl  { font-size: 0.65rem; color: var(--text-dim); margin-top: 4px; }
+.ga-plus { border-color: rgba(0,214,143,0.4); background: rgba(0,214,143,0.08); color: var(--green); }
+.ga      { border-color: rgba(100,200,80,0.4); background: rgba(100,200,80,0.06); color: #78d878; }
+.gb      { border-color: rgba(61,142,248,0.4); background: rgba(61,142,248,0.06); color: var(--blue); }
+.gc      { border-color: rgba(240,180,41,0.4); background: rgba(240,180,41,0.06); color: var(--yellow); }
+.gd      { border-color: rgba(232,70,70,0.4);  background: rgba(232,70,70,0.06);  color: var(--red); }
+.iv-grades-legend {
+  display: flex; gap: 10px; font-size: 0.62rem; color: var(--text-dim); flex-wrap: wrap;
+}
+
+.iv-section-title { font-size: 0.72rem; font-weight: 800; letter-spacing: 0.5px; text-transform: uppercase; margin-bottom: 8px; }
+.iv-point { display: flex; align-items: flex-start; gap: 8px; margin-bottom: 7px; font-size: 0.84rem; color: var(--text); line-height: 1.45; }
+.iv-dot   { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; margin-top: 5px; }
+.green-dot { background: var(--green); }
+.red-dot   { background: var(--red); }
+
+/* ── Business Section ─────────────────────────────────────────────── */
+.biz-section { margin-bottom: 14px; }
+.biz-section:last-child { margin-bottom: 0; }
+.biz-section-title {
+  font-size: 0.7rem; font-weight: 800; color: var(--text-dim);
+  text-transform: uppercase; letter-spacing: 0.5px;
+  margin-bottom: 8px; padding-bottom: 5px;
+  border-bottom: 1px solid var(--card-bd);
+}
+.biz-sub { display: block; font-size: 0.63rem; color: var(--text-dim); margin-top: 2px; font-weight: 400; }
+
+/* ── Financial Trends ─────────────────────────────────────────────── */
+.ft-layout {
+  display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 24px;
+}
+.ft-section-title {
+  font-size: 0.75rem; font-weight: 800; color: var(--text-mid);
+  text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 12px;
+}
+.ft-bar-chart {
+  display: flex; align-items: flex-end; gap: 6px;
+  height: 70px; margin-bottom: 6px;
+}
+.ft-bar-col  { display: flex; flex-direction: column; align-items: center; gap: 3px; flex: 1; }
+.ft-bar-inner {
+  width: 100%; border-radius: 3px 3px 0 0;
+  background: linear-gradient(180deg, #3d8ef8, #1a5ab8);
+  min-height: 4px;
+}
+.ft-bar-label { font-size: 0.6rem; color: var(--text-dim); white-space: nowrap; }
+.ft-rev-summary { font-size: 0.72rem; color: var(--text-dim); margin-top: 4px; }
+
+.ft-metric {
+  display: flex; justify-content: space-between; align-items: center;
+  padding: 7px 0; border-bottom: 1px solid #0c1828;
+}
+.ft-metric:last-child { border-bottom: none; }
+.ft-m-label { font-size: 0.78rem; color: var(--text-dim); }
+.ft-m-right { display: flex; flex-direction: column; align-items: flex-end; gap: 3px; }
+.ft-m-val   { font-size: 0.9rem; font-weight: 800; }
+.ft-m-bar-bg  { width: 80px; height: 3px; background: var(--card-bd2); border-radius: 2px; overflow: hidden; }
+.ft-m-bar-fill { height: 100%; border-radius: 2px; }
+.trend-up { color: var(--green); font-weight: 800; }
+.trend-dn { color: var(--red);   font-weight: 800; }
+
+/* ── Risks Enhanced ───────────────────────────────────────────────── */
+.risk-left { display: flex; flex-direction: column; align-items: center; gap: 4px; flex-shrink: 0; }
+.risk-cat  {
+  font-size: 0.58rem; font-weight: 800; letter-spacing: 0.3px;
+  padding: 2px 5px; border-radius: 3px; white-space: nowrap;
+  text-transform: uppercase;
+}
+.risk-item.high   .risk-cat { background: rgba(232,70,70,0.15);   color: var(--red); }
+.risk-item.medium .risk-cat { background: rgba(240,180,41,0.15);  color: var(--yellow); }
+.risk-item.low    .risk-cat { background: rgba(0,214,143,0.12);   color: var(--green); }
+.risk-text { font-size: 0.85rem; color: var(--text); line-height: 1.5; }
 
 /* ── Footer ───────────────────────────────────────────────────────── */
 .footer-note {

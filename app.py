@@ -130,20 +130,132 @@ def gen_catalysts(price, ma5, ma20, ma60, macd, dea, rsi, vol_ratio, week52h, in
         cats.append({'num': len(cats)+1, **extras[len(cats) % len(extras)]})
     return cats[:4]
 
-def gen_risks(price, ma20, rsi, vol_ratio, week52h):
+def gen_investment_value(price, ma5, ma20, ma60, macd_v, dea_v, rsi_v,
+                         pe, fwd_pe, roe, profit_margin, rev_growth, eps_growth,
+                         beta, debt_equity, vol_ratio):
+    s = {}
+    # Momentum (0-4)
+    if price > ma5 > ma20 > ma60 and macd_v > dea_v and macd_v > 0:
+        s['momentum'] = 4
+    elif price > ma5 > ma20 > ma60:
+        s['momentum'] = 3
+    elif price > ma20 > ma60:
+        s['momentum'] = 2
+    elif price > ma60:
+        s['momentum'] = 1
+    else:
+        s['momentum'] = 0
+
+    # Valuation (0-4)
+    ref_pe = fwd_pe if fwd_pe and fwd_pe > 0 else (pe if pe and pe > 0 else 0)
+    if   ref_pe <= 0:  s['valuation'] = 2
+    elif ref_pe < 15:  s['valuation'] = 4
+    elif ref_pe < 25:  s['valuation'] = 3
+    elif ref_pe < 40:  s['valuation'] = 2
+    elif ref_pe < 60:  s['valuation'] = 1
+    else:              s['valuation'] = 0
+
+    # Growth (0-4)
+    avg_g = (rev_growth + eps_growth) / 2 if eps_growth else rev_growth
+    if   avg_g > 30: s['growth'] = 4
+    elif avg_g > 15: s['growth'] = 3
+    elif avg_g > 5:  s['growth'] = 2
+    elif avg_g > 0:  s['growth'] = 1
+    else:            s['growth'] = 0
+
+    # Financial health (0-4)
+    h = 2
+    if roe > 20:           h += 1
+    elif roe < 0:          h -= 1
+    if profit_margin > 15: h += 1
+    elif profit_margin < 0:h -= 1
+    if debt_equity > 200:  h -= 1
+    elif debt_equity < 50: h += 1
+    s['health'] = max(0, min(4, h))
+
+    def grade(v):
+        return 'A+' if v >= 4 else 'A' if v == 3 else 'B' if v == 2 else 'C' if v == 1 else 'D'
+
+    total = sum(s.values()); pct = total / 16
+    if   pct >= 0.75: sig, sig_cn, sig_cls = 'STRONG BUY', '強烈買入', 'sv-strong-buy'
+    elif pct >= 0.60: sig, sig_cn, sig_cls = 'BUY',        '買入',     'sv-buy'
+    elif pct >= 0.45: sig, sig_cn, sig_cls = 'HOLD',       '持有',     'sv-hold'
+    elif pct >= 0.30: sig, sig_cn, sig_cls = 'CAUTION',    '觀望',     'sv-caution'
+    else:             sig, sig_cn, sig_cls = 'AVOID',      '迴避',     'sv-avoid'
+
+    strengths, weaknesses = [], []
+    if s['momentum'] >= 3:  strengths.append('技術趨勢強勁，均線多頭排列完整')
+    if s['growth']   >= 3:  strengths.append(f'高速成長，營收 +{rev_growth:.0f}% / EPS +{eps_growth:.0f}%')
+    if s['valuation']>= 3:  strengths.append(f'估值合理，預期本益比 {ref_pe:.0f}x 具吸引力')
+    if s['health']   >= 3:  strengths.append(f'財務健康，ROE {roe:.0f}%，淨利率 {profit_margin:.0f}%')
+    if vol_ratio >= 1.5:    strengths.append(f'量能放大（{vol_ratio:.1f}x），機構積極介入')
+    if rsi_v < 40:          strengths.append(f'RSI {rsi_v:.0f} 低檔，技術性反彈空間大')
+
+    if s['valuation'] <= 1 and ref_pe > 0: weaknesses.append(f'估值偏高（本益比 {ref_pe:.0f}x），需業績持續兌現')
+    if rsi_v > 70:          weaknesses.append(f'RSI {rsi_v:.0f} 超買，短線追高風險')
+    if s['growth'] <= 1:    weaknesses.append('成長動能偏弱，需觀察業績轉機')
+    if debt_equity > 150:   weaknesses.append(f'負債比 {debt_equity:.0f}% 偏高，財務槓桿風險')
+    if s['momentum'] <= 1:  weaknesses.append('趨勢偏弱，建議等待均線翻多再布局')
+
+    return {
+        'signal':   sig,
+        'signalCn': sig_cn,
+        'signalCls': sig_cls,
+        'score':    round(pct * 100),
+        'grades': {
+            'momentum':  grade(s['momentum']),
+            'valuation': grade(s['valuation']),
+            'growth':    grade(s['growth']),
+            'health':    grade(s['health']),
+        },
+        'strengths':  strengths[:3],
+        'weaknesses': weaknesses[:2],
+    }
+
+def gen_risks(price, ma20, rsi, vol_ratio, week52h, pe=0, fwd_pe=0, beta=1.0, debt_equity=0):
     risks = []
     from_high = (price - week52h) / week52h * 100 if week52h > 0 else 0
-    if rsi > 70:
-        risks.append({'level': 'high',   'text': f'技術面超買（RSI {rsi:.0f}），短期回調壓力大'})
+    ref_pe = fwd_pe if fwd_pe > 0 else pe
+
+    # Valuation risk
+    if ref_pe > 60:
+        risks.append({'level':'high',   'category':'估值風險', 'text':f'本益比 {ref_pe:.0f}x 極高，一旦業績不如預期將面臨大幅估值修正，建議分批布局'})
+    elif ref_pe > 35:
+        risks.append({'level':'medium', 'category':'估值風險', 'text':f'本益比 {ref_pe:.0f}x 偏高，成長需持續兌現以支撐目前股價'})
+
+    # Technical risk
+    if rsi > 75:
+        risks.append({'level':'high',   'category':'技術風險', 'text':f'RSI {rsi:.0f} 嚴重超買，技術面高度過熱，短線回調風險極高'})
+    elif rsi > 70:
+        risks.append({'level':'medium', 'category':'技術風險', 'text':f'RSI {rsi:.0f} 進入超買區，短線追高需謹慎，建議等待拉回'})
+
     if from_high > -5:
-        risks.append({'level': 'medium', 'text': f'股價近52週高點（距頂 {from_high:.1f}%），壓力較大'})
+        risks.append({'level':'medium', 'category':'技術風險', 'text':f'股價距52週高點僅 {abs(from_high):.1f}%，面臨歷史強壓力區，突破需大量確認'})
+
+    # Trend risk
     if price < ma20:
-        risks.append({'level': 'high',   'text': '股價跌破 MA20 支撐，趨勢可能轉弱'})
-    if vol_ratio > 3:
-        risks.append({'level': 'medium', 'text': '成交量極度放大，可能出現獲利了結賣壓'})
-    risks.append({'level': 'medium', 'text': '宏觀環境變化（利率、地緣政治）影響市場情緒'})
-    risks.append({'level': 'low',    'text': '財報不如預期可能引發短期大幅波動，需控管部位'})
-    return risks[:5]
+        risks.append({'level':'high',   'category':'趨勢風險', 'text':'股價跌破 MA20 均線，中期趨勢可能轉弱，建議降低部位等待均線翻多'})
+
+    # Market risk
+    if beta > 1.5:
+        risks.append({'level':'medium', 'category':'市場風險', 'text':f'Beta {beta:.1f}，波動性高於大盤 {(beta-1)*100:.0f}%，市場修正時跌幅將顯著放大'})
+
+    # Financial risk
+    if debt_equity > 200:
+        risks.append({'level':'high',   'category':'財務風險', 'text':f'負債股東權益比 {debt_equity:.0f}%，財務槓桿偏高，升息或景氣下行壓力大'})
+    elif debt_equity > 100:
+        risks.append({'level':'medium', 'category':'財務風險', 'text':f'負債比 {debt_equity:.0f}%，需關注現金流與利息覆蓋能力'})
+
+    # Chip / volume risk
+    if vol_ratio > 3.5:
+        risks.append({'level':'medium', 'category':'籌碼風險', 'text':f'成交量爆量（{vol_ratio:.1f}x 均量），短期獲利了結賣壓可能增加，注意籌碼鬆動'})
+
+    # Always-present macro & business risks
+    risks.append({'level':'medium', 'category':'總經風險', 'text':'聯準會利率政策與通膨數據仍具不確定性，高估值成長股對利率敏感度高'})
+    risks.append({'level':'low',    'category':'業務風險', 'text':'市場競爭加劇與技術迭代加速，財報不如預期或展望保守將引發短期大幅波動'})
+    risks.append({'level':'low',    'category':'地緣風險', 'text':'中美貿易摩擦、地緣政治緊張局勢可能影響供應鏈與市場情緒'})
+
+    return risks[:6]
 
 def gen_strategy(price, ma5, ma20, ma60, rsi, levels):
     stop = max(levels['support1'] * 0.97, price * 0.90)
@@ -354,16 +466,9 @@ def get_stock(ticker):
         bb_width = round((bb_u - bb_l) / bb_m * 100, 2) if bb_m else 0
         bb_pos   = round((price - bb_l) / (bb_u - bb_l) * 100, 1) if (bb_u - bb_l) else 50
 
-        levels      = get_levels(hist)
-        conclusions = gen_conclusions(price, ma5, ma20, ma60, macd_v, dea_v, rsi_v, vol_ratio)
-        catalysts   = gen_catalysts(price, ma5, ma20, ma60, macd_v, dea_v, rsi_v, vol_ratio, week52h, info)
-        risks       = gen_risks(price, ma20, rsi_v, vol_ratio, week52h)
-        strategy    = gen_strategy(price, ma5, ma20, ma60, rsi_v, levels)
-        returns     = calc_returns(hist)
-
         # ── Quick financials from info (fast) ──
-        short_ratio = round(safe_float(info.get('shortRatio', 0)), 1)
-        short_pct   = round(safe_float(info.get('shortPercentOfFloat', 0)) * 100, 2)
+        short_ratio   = round(safe_float(info.get('shortRatio', 0)), 1)
+        short_pct     = round(safe_float(info.get('shortPercentOfFloat', 0)) * 100, 2)
         profit_margin = round(safe_float(info.get('profitMargins', 0)) * 100, 1)
         roe           = round(safe_float(info.get('returnOnEquity', 0)) * 100, 1)
         gross_margin  = round(safe_float(info.get('grossMargins', 0)) * 100, 1)
@@ -373,6 +478,25 @@ def get_stock(ticker):
         rev_growth    = round(safe_float(info.get('revenueGrowth', 0)) * 100, 1)
         eps_growth    = round(safe_float(info.get('earningsGrowth', 0)) * 100, 1)
         fwd_eps       = round(safe_float(info.get('forwardEps', 0)), 2)
+
+        levels      = get_levels(hist)
+        conclusions = gen_conclusions(price, ma5, ma20, ma60, macd_v, dea_v, rsi_v, vol_ratio)
+        catalysts   = gen_catalysts(price, ma5, ma20, ma60, macd_v, dea_v, rsi_v, vol_ratio, week52h, info)
+        risks       = gen_risks(price, ma20, rsi_v, vol_ratio, week52h,
+                                pe=safe_float(info.get('trailingPE',0)),
+                                fwd_pe=safe_float(info.get('forwardPE',0)),
+                                beta=safe_float(info.get('beta',1)),
+                                debt_equity=safe_float(info.get('debtToEquity',0)))
+        strategy    = gen_strategy(price, ma5, ma20, ma60, rsi_v, levels)
+        returns     = calc_returns(hist)
+        invest_val  = gen_investment_value(
+            price, ma5, ma20, ma60, macd_v, dea_v, rsi_v,
+            pe=safe_float(info.get('trailingPE',0)),
+            fwd_pe=safe_float(info.get('forwardPE',0)),
+            roe=roe, profit_margin=profit_margin,
+            rev_growth=rev_growth, eps_growth=eps_growth,
+            beta=safe_float(info.get('beta',1)),
+            debt_equity=debt_equity, vol_ratio=vol_ratio)
 
         # ── Quarterly revenue ──
         quarterly = []
@@ -462,6 +586,7 @@ def get_stock(ticker):
             'risks':       risks,
             'strategy':    strategy,
             'returns':     returns,
+            'investValue': invest_val,
             'quarterly':   quarterly,
             'dates': dates,
             'ohlcv': {
