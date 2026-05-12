@@ -235,6 +235,7 @@
           <button class="ptab active" data-period="1Y" onclick="changePeriod('1Y')">1Y</button>
         </div>
       </div>
+      <div id="indicatorBar" class="indicator-bar"></div>
       <div id="priceChart"  style="height:320px;"></div>
       <div id="volumeChart" style="height:65px; margin-top:2px;"></div>
       <div class="macd-bar" id="macdBar"></div>
@@ -589,8 +590,83 @@ function renderShortInfo(d) {
   `);
 }
 
+// ── Indicator Explanation Bar ────────────────────────────────────────
+function renderIndicatorBar(d) {
+  const price = d.price;
+
+  // MA trend
+  const ma5=d.ma5, ma20=d.ma20, ma60=d.ma60;
+  let maTrend, maColor, maDesc;
+  if (price > ma5 && ma5 > ma20 && ma20 > ma60) {
+    maTrend='多頭完美排列'; maColor='var(--green)';
+    maDesc=`MA5(${ma5}) > MA20(${ma20}) > MA60(${ma60}) — 短中長期趨勢全面向上`;
+  } else if (price > ma20 && ma20 > ma60) {
+    maTrend='中期多頭'; maColor='var(--green)';
+    maDesc=`股價站穩 MA20(${ma20})，中長期趨勢仍偏多`;
+  } else if (price < ma60) {
+    maTrend='空頭排列'; maColor='var(--red)';
+    maDesc=`跌破 MA60(${ma60})，中長期趨勢轉弱，謹慎操作`;
+  } else {
+    maTrend='盤整'; maColor='var(--yellow)';
+    maDesc=`均線糾結，方向未明，等待突破確認`;
+  }
+
+  // MA individual desc
+  const ma5Cls  = price > ma5  ? 'ib-up' : 'ib-dn';
+  const ma20Cls = price > ma20 ? 'ib-up' : 'ib-dn';
+  const ma60Cls = price > ma60 ? 'ib-up' : 'ib-dn';
+
+  // RSI
+  let rsiLabel, rsiColor, rsiDesc;
+  const rsi = d.rsi;
+  if (rsi >= 80)      { rsiLabel='極度超買'; rsiColor='var(--red)';    rsiDesc='市場過熱，高回調風險，注意減碼'; }
+  else if (rsi >= 70) { rsiLabel='超買';     rsiColor='var(--red)';    rsiDesc='進入超買區，短線謹慎追高'; }
+  else if (rsi >= 50) { rsiLabel='多頭健康'; rsiColor='var(--green)';  rsiDesc='健康多頭動能區間，上漲空間仍在'; }
+  else if (rsi >= 30) { rsiLabel='中性偏弱'; rsiColor='var(--yellow)'; rsiDesc='動能不足，等待企穩再進場'; }
+  else                { rsiLabel='超賣';     rsiColor='var(--green)';  rsiDesc='超賣反彈機會，可留意逢低布局'; }
+
+  // BB
+  const bbU=d.bbUpper, bbL=d.bbLower, bbM=d.bbMid, bbPos=d.bbPos;
+  let bbLabel, bbColor, bbDesc;
+  if (bbPos >= 85)     { bbLabel='接近上軌'; bbColor='var(--red)';    bbDesc=`股價 ${bbPos}% 位置，接近上軌 $${bbU}，短線壓力大`; }
+  else if (bbPos >= 50){ bbLabel='中軌偏上'; bbColor='var(--green)';  bbDesc=`位於 ${bbPos}%，強於中軌 $${bbM}，趨勢偏多`; }
+  else if (bbPos >= 15){ bbLabel='中軌偏下'; bbColor='var(--yellow)'; bbDesc=`位於 ${bbPos}%，弱於中軌 $${bbM}，整理區間`; }
+  else                 { bbLabel='接近下軌'; bbColor='var(--green)';  bbDesc=`股價 ${bbPos}% 位置，接近下軌 $${bbL}，支撐反彈機會`; }
+
+  setHTML('indicatorBar', `
+    <div class="ib-item">
+      <div class="ib-group">
+        <span class="ib-tag" style="color:${maColor};border-color:${maColor}20">${maTrend}</span>
+        <span class="ib-kv ${ma5Cls}">MA5 <strong>$${ma5}</strong></span>
+        <span class="ib-kv ${ma20Cls}">MA20 <strong>$${ma20}</strong></span>
+        <span class="ib-kv ${ma60Cls}">MA60 <strong>$${ma60}</strong></span>
+      </div>
+      <span class="ib-desc">${maDesc}</span>
+    </div>
+    <div class="ib-divider"></div>
+    <div class="ib-item">
+      <div class="ib-group">
+        <span class="ib-tag" style="color:${rsiColor};border-color:${rsiColor}20">RSI ${rsi}</span>
+        <span class="ib-kv" style="color:${rsiColor}">${rsiLabel}</span>
+      </div>
+      <span class="ib-desc">${rsiDesc}</span>
+    </div>
+    <div class="ib-divider"></div>
+    <div class="ib-item">
+      <div class="ib-group">
+        <span class="ib-tag" style="color:${bbColor};border-color:${bbColor}20">BB ${bbPos}%</span>
+        <span class="ib-kv" style="color:var(--red)">上軌 <strong>$${bbU}</strong></span>
+        <span class="ib-kv">中軌 <strong>$${bbM}</strong></span>
+        <span class="ib-kv" style="color:var(--green)">下軌 <strong>$${bbL}</strong></span>
+      </div>
+      <span class="ib-desc">${bbDesc}</span>
+    </div>
+  `);
+}
+
 // ── Charts ──────────────────────────────────────────────────────────
 function renderCharts(d) {
+  renderIndicatorBar(d);
   setHTML('maPills',
     `<span class="pill ma5">MA5: ${d.ma5}</span>` +
     `<span class="pill ma20">MA20: ${d.ma20}</span>` +

@@ -379,6 +379,31 @@ a:hover { text-decoration: underline; }
 }
 .ptab.active, .ptab:hover { background: var(--accent); color: #fff; }
 
+/* ── Indicator Bar ───────────────────────────────────────────────── */
+.indicator-bar {
+  display: flex; align-items: stretch; flex-wrap: wrap;
+  background: #060c18; border: 1px solid var(--card-bd);
+  border-radius: 7px; margin-bottom: 6px;
+  overflow: hidden;
+}
+.ib-item {
+  flex: 1; min-width: 220px;
+  display: flex; flex-direction: column; gap: 4px;
+  padding: 8px 12px;
+}
+.ib-divider { width: 1px; background: var(--card-bd); flex-shrink: 0; margin: 6px 0; }
+.ib-group { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.ib-tag {
+  font-size: 0.68rem; font-weight: 800; letter-spacing: 0.5px;
+  padding: 2px 8px; border-radius: 4px; border: 1px solid;
+  white-space: nowrap;
+}
+.ib-kv { font-size: 0.74rem; color: var(--text-mid); white-space: nowrap; }
+.ib-kv strong { color: var(--text); font-weight: 700; }
+.ib-kv.ib-up strong { color: var(--green); }
+.ib-kv.ib-dn strong { color: var(--red); }
+.ib-desc { font-size: 0.7rem; color: var(--text-dim); line-height: 1.4; }
+
 .macd-bar {
   font-size: 0.74rem; font-weight: 700;
   padding: 4px 10px; margin: 5px 0;
