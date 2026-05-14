@@ -477,6 +477,10 @@ document.addEventListener('DOMContentLoaded', () => {
   if (urlTicker) loadStock(urlTicker.toUpperCase());
 });
 
+window.addEventListener('resize', () => {
+  if (document.getElementById('rsiChart')?.offsetParent) Plotly.Plots.resize('rsiChart');
+});
+
 window.addEventListener('popstate', e => {
   if (e.state && e.state.ticker) loadStock(e.state.ticker);
   else { hide('dashboard'); show('welcome'); document.title = '美股投資分析儀表板'; }
@@ -885,6 +889,9 @@ function renderCharts(d) {
       {type:'line',xref:'paper',x0:0,x1:1,yref:'y',y0:30,y1:30,line:{color:'rgba(0,214,143,0.25)',width:1}},
     ],
   }, {responsive:true,displayModeBar:false});
+
+  // let flex layout settle, then resize RSI to fill remaining card space
+  requestAnimationFrame(() => Plotly.Plots.resize('rsiChart'));
 
   setTimeout(setupCrosshair, 120);
 }
