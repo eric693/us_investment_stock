@@ -669,5 +669,453 @@ def get_news(ticker):
         return jsonify({'ticker': ticker, 'articles': [], 'error': str(e)})
 
 
+# ── Taiwan Helpers ────────────────────────────────────────────────────
+def tw_normalize(raw):
+    raw = raw.strip().upper()
+    if raw.endswith('.TW') or raw.endswith('.TWO'):
+        return raw
+    return raw + '.TW'
+
+def tw_display(ticker):
+    return ticker.replace('.TWO', '').replace('.TW', '')
+
+def gen_tw_risks(price, ma20, rsi, vol_ratio, week52h,
+                 pe=0, fwd_pe=0, beta=1.0, debt_equity=0, is_etf=False):
+    risks = []
+    from_high = (price - week52h) / week52h * 100 if week52h > 0 else 0
+    ref_pe = fwd_pe if fwd_pe > 0 else pe
+
+    if ref_pe > 30:
+        risks.append({'level':'high',   'category':'估值風險', 'text':f'本益比 {ref_pe:.0f}x 高於台股歷史均值（約15-20x），業績須持續超預期才能支撐估值'})
+    elif ref_pe > 20:
+        risks.append({'level':'medium', 'category':'估值風險', 'text':f'本益比 {ref_pe:.0f}x 略高，需關注業績成長是否持續兌現'})
+
+    if rsi > 75:
+        risks.append({'level':'high',   'category':'技術風險', 'text':f'RSI {rsi:.0f} 嚴重超買，技術面過熱，短線回調風險高，建議等待拉回再布局'})
+    elif rsi > 70:
+        risks.append({'level':'medium', 'category':'技術風險', 'text':f'RSI {rsi:.0f} 進入超買區，短線追高需謹慎，可等待拉回均線再進場'})
+
+    if from_high > -5:
+        risks.append({'level':'medium', 'category':'技術風險', 'text':f'接近52週高點（距頂 {abs(from_high):.1f}%），面臨歷史強壓力區，突破需大量配合'})
+
+    if price < ma20:
+        risks.append({'level':'high',   'category':'趨勢風險', 'text':'跌破 MA20 均線，中期趨勢可能轉弱，建議降低部位等待均線翻多'})
+
+    if beta > 1.5:
+        risks.append({'level':'medium', 'category':'市場風險', 'text':f'Beta {beta:.1f}，波動性顯著高於大盤，市場修正時跌幅將放大'})
+
+    if debt_equity > 150:
+        risks.append({'level':'high',   'category':'財務風險', 'text':f'負債股東權益比 {debt_equity:.0f}%，財務槓桿偏高，利率上升或景氣下行壓力大'})
+    elif debt_equity > 80:
+        risks.append({'level':'medium', 'category':'財務風險', 'text':f'負債比 {debt_equity:.0f}%，需關注現金流與利息覆蓋能力'})
+
+    if vol_ratio > 3.5:
+        risks.append({'level':'medium', 'category':'籌碼風險', 'text':f'成交量爆量（{vol_ratio:.1f}x 均量），短期獲利了結賣壓可能增加，注意籌碼鬆動'})
+
+    if is_etf:
+        risks.append({'level':'low', 'category':'追蹤風險', 'text':'ETF 追蹤誤差與折溢價可能影響實際報酬，建議定期確認 NAV 與市價差異'})
+
+    risks.append({'level':'medium', 'category':'地緣風險', 'text':'兩岸關係緊張及地緣政治局勢仍是台股最大不確定因素，可能引發外資快速撤離並衝擊市場'})
+    risks.append({'level':'medium', 'category':'總經風險', 'text':'台灣央行利率政策、新台幣匯率走勢及全球景氣循環均對台股形成壓力，需密切追蹤'})
+    risks.append({'level':'low',    'category':'外資風險', 'text':'外資持股比例高，全球風險趨避情緒升溫時可能引發大量賣超，衝擊市場流動性'})
+    return risks[:6]
+
+def gen_tw_catalysts(price, ma5, ma20, ma60, macd, dea, rsi,
+                     vol_ratio, week52h, info, is_etf=False):
+    cats = []
+    if price >= week52h * 0.97:
+        cats.append({'num': 1, 'text': '突破或接近52週高點，強勢創高訊號',
+                     'sub': '價格創新高，市場認可度提升，突破確認後動能強勁'})
+    if macd > dea and macd > 0:
+        cats.append({'num': len(cats)+1, 'text': 'MACD 金叉且在零軸上方，多頭動能強勁',
+                     'sub': '短中期均偏多，技術面轉強訊號確立'})
+    if vol_ratio >= 1.5:
+        cats.append({'num': len(cats)+1, 'text': f'成交量放大（{vol_ratio:.1f}x 均量），法人積極介入',
+                     'sub': '三大法人買超，籌碼結構改善，主力護盤意願強'})
+    if price > ma5 > ma20 > ma60:
+        cats.append({'num': len(cats)+1, 'text': '均線多頭排列完整，趨勢強勢',
+                     'sub': '短中長期均線支撐，回撐布局機會，趨勢延續性高'})
+
+    if is_etf:
+        extras = [
+            {'text': '長期定期定額最佳工具，分散風險效果佳', 'sub': '追蹤指數，分散個股風險，適合長期穩健投資人'},
+            {'text': '費用率低廉，長期複利效果顯著優越',     'sub': '相較主動基金費用低，長期績效差異大'},
+            {'text': '配息穩定，適合退休規劃與現金流需求',   'sub': '定期配息提供穩定現金流，適合保守型投資人'},
+            {'text': '流動性佳，買賣彈性高於一般基金',       'sub': '交易所掛牌，隨時買賣，不受申購贖回限制'},
+        ]
+    else:
+        extras = [
+            {'text': 'AI 供應鏈受惠，台灣半導體優勢持續',   'sub': '全球 AI 基礎建設需求旺盛，台廠訂單能見度高'},
+            {'text': '三大法人合計買超，籌碼結構穩定',       'sub': '外資＋投信＋自營商共同護盤，主力資金積極介入'},
+            {'text': '配息穩定，殖利率具吸引力',             'sub': '高殖利率在利率環境中具防禦優勢，吸引存股族'},
+            {'text': '技術面關鍵位置蓄積，突破動能累積中',   'sub': '等待成交量配合確認突破，上漲空間可期'},
+        ]
+    while len(cats) < 4:
+        cats.append({'num': len(cats)+1, **extras[len(cats) % len(extras)]})
+    return cats[:4]
+
+
+# ── Taiwan Routes ─────────────────────────────────────────────────────
+@app.route('/tw')
+def tw_index():
+    return render_template('tw_stock.html')
+
+
+@app.route('/api/tw/market')
+def get_tw_market():
+    cached = _cache_get('tw_market')
+    if cached: return jsonify(cached)
+    syms = {
+        'twii':   '^TWII',
+        'twoii':  '^TWOII',
+        'usdtwd': 'USDTWD=X',
+        'gold':   'GC=F',
+        'vix':    '^VIX',
+    }
+    result = {}
+    for key, sym in syms.items():
+        try:
+            h = yf.Ticker(sym).history(period='2d')
+            if len(h) >= 2:
+                cur  = safe_float(h['Close'].iloc[-1])
+                prev = safe_float(h['Close'].iloc[-2])
+                pct  = (cur / prev - 1) * 100 if prev else 0
+                result[key] = {'v': round(cur, 2), 'pct': round(pct, 2)}
+            elif len(h) == 1:
+                result[key] = {'v': round(safe_float(h['Close'].iloc[-1]), 2), 'pct': 0}
+            else:
+                result[key] = None
+        except:
+            result[key] = None
+
+    vix_val = (result.get('vix') or {}).get('v', 20)
+    if   vix_val < 15: label, cls = '極度貪婪', 'greed-hi'
+    elif vix_val < 20: label, cls = '貪婪',     'greed'
+    elif vix_val < 25: label, cls = '中性',     'neutral-m'
+    elif vix_val < 30: label, cls = '恐懼',     'fear'
+    else:              label, cls = '極度恐懼', 'fear-hi'
+    result['vixLabel'] = label
+    result['vixCls']   = cls
+    _cache_set('tw_market', result, ttl=60)
+    return jsonify(result)
+
+
+@app.route('/api/tw/stock/<ticker>')
+def get_tw_stock(ticker):
+    ticker = tw_normalize(ticker)
+    cached = _cache_get(f'tw_stock:{ticker}')
+    if cached: return jsonify(cached)
+    try:
+        stock = yf.Ticker(ticker)
+        info  = stock.info
+        hist  = stock.history(period='1y')
+
+        # Fallback .TWO
+        if hist.empty and ticker.endswith('.TW'):
+            alt   = ticker.replace('.TW', '.TWO')
+            stock = yf.Ticker(alt)
+            info  = stock.info
+            hist  = stock.history(period='1y')
+            if not hist.empty:
+                ticker = alt
+
+        if hist.empty:
+            return jsonify({'error': f'找不到股票 {ticker}，請確認代碼是否正確'}), 404
+
+        is_etf = info.get('quoteType', '').upper() == 'ETF'
+
+        hist['MA5']  = hist['Close'].rolling(5).mean()
+        hist['MA20'] = hist['Close'].rolling(20).mean()
+        hist['MA60'] = hist['Close'].rolling(60).mean()
+        macd_s, sig_s, hist_s = calc_macd(hist['Close'])
+        hist['MACD']     = macd_s
+        hist['Signal']   = sig_s
+        hist['MACDHist'] = hist_s
+        hist['RSI']      = calc_rsi(hist['Close'])
+        bb_u, bb_m, bb_l = calc_bollinger(hist['Close'])
+        hist['BB_upper'] = bb_u
+        hist['BB_mid']   = bb_m
+        hist['BB_lower'] = bb_l
+
+        price = safe_float(hist['Close'].iloc[-1])
+        prev  = safe_float(hist['Close'].iloc[-2])
+        change     = price - prev
+        change_pct = change / prev * 100 if prev else 0
+
+        ma5    = safe_float(hist['MA5'].iloc[-1])
+        ma20   = safe_float(hist['MA20'].iloc[-1])
+        ma60   = safe_float(hist['MA60'].iloc[-1])
+        macd_v = safe_float(hist['MACD'].iloc[-1])
+        dea_v  = safe_float(hist['Signal'].iloc[-1])
+        macd_h = safe_float(hist['MACDHist'].iloc[-1])
+        rsi_v  = safe_float(hist['RSI'].iloc[-1])
+
+        avg_vol  = safe_float(hist['Volume'].rolling(20).mean().iloc[-1])
+        curr_vol = safe_float(hist['Volume'].iloc[-1])
+        vol_ratio = curr_vol / avg_vol if avg_vol > 0 else 1.0
+
+        week52h = safe_float(info.get('fiftyTwoWeekHigh', hist['High'].max()))
+        week52l = safe_float(info.get('fiftyTwoWeekLow',  hist['Low'].min()))
+
+        bbu = safe_float(hist['BB_upper'].iloc[-1])
+        bbm = safe_float(hist['BB_mid'].iloc[-1])
+        bbl = safe_float(hist['BB_lower'].iloc[-1])
+        bb_width = round((bbu - bbl) / bbm * 100, 2) if bbm else 0
+        bb_pos   = round((price - bbl) / (bbu - bbl) * 100, 1) if (bbu - bbl) else 50
+
+        profit_margin = round(safe_float(info.get('profitMargins',     0)) * 100, 1)
+        roe           = round(safe_float(info.get('returnOnEquity',     0)) * 100, 1)
+        gross_margin  = round(safe_float(info.get('grossMargins',       0)) * 100, 1)
+        debt_equity   = round(safe_float(info.get('debtToEquity',       0)), 1)
+        inst_pct      = round(safe_float(info.get('heldPercentInstitutions', 0)) * 100, 1)
+        insider_pct   = round(safe_float(info.get('heldPercentInsiders', 0)) * 100, 1)
+        rev_growth    = round(safe_float(info.get('revenueGrowth',      0)) * 100, 1)
+        eps_growth    = round(safe_float(info.get('earningsGrowth',     0)) * 100, 1)
+        short_ratio   = round(safe_float(info.get('shortRatio',         0)), 1)
+        short_pct     = round(safe_float(info.get('shortPercentOfFloat',0)) * 100, 2)
+        fwd_eps       = round(safe_float(info.get('forwardEps',         0)), 2)
+
+        levels      = get_levels(hist)
+        conclusions = gen_conclusions(price, ma5, ma20, ma60, macd_v, dea_v, rsi_v, vol_ratio)
+        catalysts   = gen_tw_catalysts(price, ma5, ma20, ma60, macd_v, dea_v, rsi_v,
+                                       vol_ratio, week52h, info, is_etf)
+        risks       = gen_tw_risks(price, ma20, rsi_v, vol_ratio, week52h,
+                                   pe=safe_float(info.get('trailingPE', 0)),
+                                   fwd_pe=safe_float(info.get('forwardPE', 0)),
+                                   beta=safe_float(info.get('beta', 1)),
+                                   debt_equity=safe_float(info.get('debtToEquity', 0)),
+                                   is_etf=is_etf)
+        strategy    = gen_strategy(price, ma5, ma20, ma60, rsi_v, levels)
+        returns     = calc_returns(hist)
+        invest_val  = gen_investment_value(
+            price, ma5, ma20, ma60, macd_v, dea_v, rsi_v,
+            pe=safe_float(info.get('trailingPE', 0)),
+            fwd_pe=safe_float(info.get('forwardPE', 0)),
+            roe=roe, profit_margin=profit_margin,
+            rev_growth=rev_growth, eps_growth=eps_growth,
+            beta=safe_float(info.get('beta', 1)),
+            debt_equity=debt_equity, vol_ratio=vol_ratio)
+
+        quarterly = []
+        try:
+            qf = stock.quarterly_financials
+            if not qf.empty:
+                for lbl in ['Total Revenue', 'Revenue']:
+                    if lbl in qf.index:
+                        row = qf.loc[lbl]
+                        for col in row.index[:5]:
+                            v = safe_float(row[col])
+                            if v > 0:
+                                quarterly.append({'period': str(col)[:7], 'revenue': round(v / 1e6, 1)})
+                        break
+        except:
+            pass
+
+        # ETF extra data
+        etf_data = None
+        if is_etf:
+            ta = safe_float(info.get('totalAssets', 0))
+            er = safe_float(info.get('annualReportExpenseRatio', info.get('totalExpenseRatio', 0)))
+            if er > 1: er /= 100
+            etf_data = {
+                'totalAssets':   round(ta / 1e8, 1),
+                'expenseRatio':  round(er * 100, 4) if er > 0 else 0,
+                'threeYrReturn': round(safe_float(info.get('threeYearAverageReturn', 0)) * 100, 2),
+                'fiveYrReturn':  round(safe_float(info.get('fiveYearAverageReturn',  0)) * 100, 2),
+                'ytdReturn':     round(safe_float(info.get('ytdReturn', 0)) * 100, 2),
+                'category':      info.get('category', ''),
+                'fundFamily':    info.get('fundFamily', ''),
+            }
+
+        def clean(lst):
+            res = []
+            for x in lst:
+                try:
+                    f = float(x)
+                    res.append(None if (np.isnan(f) or np.isinf(f)) else round(f, 4))
+                except:
+                    res.append(None)
+            return res
+
+        dates = hist.index.strftime('%Y-%m-%d').tolist()
+        result = {
+            'ticker':        ticker,
+            'displayTicker': tw_display(ticker),
+            'name':          info.get('longName', info.get('shortName', ticker)),
+            'sector':        info.get('sector', ''),
+            'industry':      info.get('industry', ''),
+            'country':       info.get('country', 'Taiwan'),
+            'description':   (info.get('longBusinessSummary', '') or '')[:300],
+            'price':         round(price, 2),
+            'change':        round(change, 2),
+            'changePct':     round(change_pct, 2),
+            'open':          round(safe_float(hist['Open'].iloc[-1]), 2),
+            'high':          round(safe_float(hist['High'].iloc[-1]), 2),
+            'low':           round(safe_float(hist['Low'].iloc[-1]), 2),
+            'prevClose':     round(prev, 2),
+            'volume':        safe_int(curr_vol),
+            'avgVolume':     safe_int(avg_vol),
+            'volRatio':      round(vol_ratio, 2),
+            'marketCap':     safe_float(info.get('marketCap', 0)),
+            'pe':            round(safe_float(info.get('trailingPE',  0)), 2),
+            'forwardPe':     round(safe_float(info.get('forwardPE',   0)), 2),
+            'eps':           round(safe_float(info.get('trailingEps', 0)), 2),
+            'fwdEps':        fwd_eps,
+            'beta':          round(safe_float(info.get('beta',        0)), 2),
+            'divYield':      round(safe_float(info.get('dividendYield', 0)) * 100, 2),
+            'sharesOut':     safe_int(info.get('sharesOutstanding', 0)),
+            'week52High':    round(week52h, 2),
+            'week52Low':     round(week52l, 2),
+            'analystTarget': round(safe_float(info.get('targetMeanPrice', 0)), 2),
+            'analystHigh':   round(safe_float(info.get('targetHighPrice',  0)), 2),
+            'analystLow':    round(safe_float(info.get('targetLowPrice',   0)), 2),
+            'recMean':       round(safe_float(info.get('recommendationMean', 3)), 2),
+            'numAnalysts':   safe_int(info.get('numberOfAnalystOpinions', 0)),
+            'shortRatio':    short_ratio, 'shortPct':    short_pct,
+            'profitMargin':  profit_margin, 'grossMargin': gross_margin,
+            'roe':           roe, 'debtEquity': debt_equity,
+            'instPct':       inst_pct, 'insiderPct': insider_pct,
+            'revGrowth':     rev_growth, 'epsGrowth':  eps_growth,
+            'ma5':     round(ma5, 2),  'ma20': round(ma20, 2), 'ma60': round(ma60, 2),
+            'macdVal': round(macd_v, 2), 'deaVal': round(dea_v, 2), 'macdHist': round(macd_h, 2),
+            'rsi':     round(rsi_v, 2),
+            'bbUpper': round(bbu, 2), 'bbMid': round(bbm, 2), 'bbLower': round(bbl, 2),
+            'bbWidth': bb_width, 'bbPos': bb_pos,
+            'levels': levels, 'conclusions': conclusions, 'catalysts': catalysts,
+            'risks': risks, 'strategy': strategy, 'returns': returns,
+            'investValue': invest_val, 'quarterly': quarterly,
+            'isEtf': is_etf, 'etfData': etf_data,
+            'dates': dates,
+            'ohlcv': {
+                'open':   clean(hist['Open'].tolist()),
+                'high':   clean(hist['High'].tolist()),
+                'low':    clean(hist['Low'].tolist()),
+                'close':  clean(hist['Close'].tolist()),
+                'volume': [safe_int(x) for x in hist['Volume'].tolist()],
+            },
+            'ma':        {'ma5': clean(hist['MA5'].tolist()), 'ma20': clean(hist['MA20'].tolist()), 'ma60': clean(hist['MA60'].tolist())},
+            'macd':      {'dif': clean(hist['MACD'].tolist()), 'dea': clean(hist['Signal'].tolist()), 'hist': clean(hist['MACDHist'].tolist())},
+            'bollinger': {'upper': clean(hist['BB_upper'].tolist()), 'mid': clean(hist['BB_mid'].tolist()), 'lower': clean(hist['BB_lower'].tolist())},
+            'rsiSeries': clean(hist['RSI'].tolist()),
+        }
+        _cache_set(f'tw_stock:{ticker}', result)
+        return jsonify(result)
+    except Exception as e:
+        import traceback; traceback.print_exc()
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/tw/news/<ticker>')
+def get_tw_news(ticker):
+    ticker = tw_normalize(ticker)
+    cached = _cache_get(f'tw_news:{ticker}')
+    if cached: return jsonify(cached)
+    try:
+        stock    = yf.Ticker(ticker)
+        raw_news = stock.news or []
+        articles = []
+        for item in raw_news[:12]:
+            c         = item.get('content', {})
+            title     = c.get('title', '')
+            publisher = (c.get('provider') or {}).get('displayName', '')
+            url       = (c.get('canonicalUrl') or {}).get('url', '')
+            summary   = c.get('summary', '') or ''
+            pub_time  = c.get('pubDate', '')
+            if title:
+                articles.append({'title': title, 'publisher': publisher, 'url': url,
+                                  'summary': summary[:180], 'pubTime': pub_time})
+        result = {'ticker': ticker, 'articles': articles}
+        _cache_set(f'tw_news:{ticker}', result, ttl=180)
+        return jsonify(result)
+    except Exception as e:
+        return jsonify({'ticker': ticker, 'articles': [], 'error': str(e)})
+
+
+@app.route('/api/tw/fundamentals/<ticker>')
+def get_tw_fundamentals(ticker):
+    ticker = tw_normalize(ticker)
+    cached = _cache_get(f'tw_fund:{ticker}')
+    if cached: return jsonify(cached)
+    try:
+        stock = yf.Ticker(ticker)
+        info  = stock.info
+
+        ocf_val = fcf_val = 0
+        try:
+            cf = stock.cashflow
+            if cf is not None and not cf.empty:
+                for lbl in ['Operating Cash Flow', 'Total Cash From Operating Activities']:
+                    if lbl in cf.index:
+                        ocf_val = safe_float(cf.loc[lbl].iloc[0]); break
+                for lbl in ['Free Cash Flow']:
+                    if lbl in cf.index:
+                        fcf_val = safe_float(cf.loc[lbl].iloc[0]); break
+                if fcf_val == 0 and ocf_val != 0:
+                    for lbl in ['Capital Expenditure', 'Capital Expenditures']:
+                        if lbl in cf.index:
+                            fcf_val = ocf_val + safe_float(cf.loc[lbl].iloc[0]); break
+        except:
+            pass
+
+        top_holders = []
+        try:
+            ih = stock.institutional_holders
+            if ih is not None and not ih.empty:
+                cols = [str(c) for c in ih.columns]
+                name_col = next((c for c in cols if 'holder' in c.lower() or 'institution' in c.lower()), None)
+                pct_col  = next((c for c in cols if 'pct' in c.lower() or '%' in c or 'out' in c.lower()), None)
+                val_col  = next((c for c in cols if 'value' in c.lower()), None)
+                if name_col:
+                    for _, row in ih.head(5).iterrows():
+                        holder = str(row[name_col])
+                        if holder and holder != 'nan' and not holder[:4].isdigit():
+                            pct = safe_float(row[pct_col]) if pct_col else 0
+                            val = safe_float(row[val_col]) if val_col else 0
+                            pct_disp = round(pct * 100, 2) if pct < 1 else round(pct, 2)
+                            top_holders.append({'holder': holder[:35], 'pct': pct_disp,
+                                                'value': round(val / 1e9, 2)})
+        except:
+            pass
+
+        earnings_date = None
+        try:
+            cal = stock.calendar
+            if cal is not None and not cal.empty:
+                col = cal.columns[0]
+                earnings_date = str(col.date()) if hasattr(col, 'date') else str(col)[:10]
+        except:
+            pass
+
+        mktcap    = safe_float(info.get('marketCap', 0))
+        fcf_yield = round(fcf_val / mktcap * 100, 2) if mktcap and fcf_val else 0
+        result = {
+            'ticker':       ticker,
+            'ocf':          round(ocf_val / 1e8, 2),
+            'fcf':          round(fcf_val / 1e8, 2),
+            'fcfYield':     fcf_yield,
+            'pfcf':         round(mktcap / fcf_val, 1) if fcf_val and fcf_val > 0 else None,
+            'debtEquity':   round(safe_float(info.get('debtToEquity',       0)), 1),
+            'currentRatio': round(safe_float(info.get('currentRatio',        0)), 2),
+            'roe':          round(safe_float(info.get('returnOnEquity',      0)) * 100, 1),
+            'roa':          round(safe_float(info.get('returnOnAssets',      0)) * 100, 1),
+            'profitMargin': round(safe_float(info.get('profitMargins',       0)) * 100, 1),
+            'grossMargin':  round(safe_float(info.get('grossMargins',        0)) * 100, 1),
+            'instPct':      round(safe_float(info.get('heldPercentInstitutions', 0)) * 100, 1),
+            'insiderPct':   round(safe_float(info.get('heldPercentInsiders', 0)) * 100, 1),
+            'shortRatio':   round(safe_float(info.get('shortRatio',          0)), 1),
+            'shortPct':     round(safe_float(info.get('shortPercentOfFloat', 0)) * 100, 2),
+            'earningsDate': earnings_date,
+            'epsEst':       round(safe_float(info.get('forwardEps',          0)), 2),
+            'revGrowth':    round(safe_float(info.get('revenueGrowth',       0)) * 100, 1),
+            'epsGrowth':    round(safe_float(info.get('earningsGrowth',      0)) * 100, 1),
+            'topHolders':   top_holders,
+        }
+        _cache_set(f'tw_fund:{ticker}', result)
+        return jsonify(result)
+    except Exception as e:
+        import traceback; traceback.print_exc()
+        return jsonify({'error': str(e)}), 500
+
+
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000, debug=False)
