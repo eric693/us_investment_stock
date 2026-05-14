@@ -355,7 +355,7 @@ a:hover { text-decoration: underline; }
 .holder-pct  { color: var(--blue); font-weight: 700; flex-shrink: 0; margin-left: 8px; }
 
 /* ── Chart ──────────────────────────────────────────────────────── */
-.chart-card { min-width: 0; }
+.chart-card { min-width: 0; display: flex; flex-direction: column; }
 .chart-top {
   display: flex; justify-content: space-between;
   align-items: center; margin-bottom: 8px;
