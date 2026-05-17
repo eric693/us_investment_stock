@@ -17,6 +17,54 @@
 /* ── Market Switch ──────────────────────────────────────────────── */
 .market-switch { color:var(--gold); font-size:0.78rem; font-weight:700; text-decoration:none; padding:4px 12px; border:1px solid var(--gold)30; border-radius:6px; white-space:nowrap; transition:all .15s; }
 .market-switch:hover { background:var(--gold)15; }
+/* ── ETF Dashboard ─────────────────────────────────────────────── */
+.etf-dash-grid { display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-bottom:14px; }
+.etf-dash-grid.full { grid-template-columns:1fr; }
+.etf-section { background:#060c18; border:1px solid var(--card-bd); border-radius:9px; padding:14px; }
+.etf-section-title { font-size:0.72rem; color:var(--text-dim); font-weight:700; letter-spacing:.5px; text-transform:uppercase; margin-bottom:10px; }
+.etf-kv-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(130px,1fr)); gap:8px; }
+.etf-kv { display:flex; flex-direction:column; gap:2px; }
+.etf-kv-label { font-size:0.68rem; color:var(--text-dim); }
+.etf-kv-val { font-size:0.9rem; font-weight:700; color:var(--text); }
+.etf-kv-val.green { color:var(--green); }
+.etf-kv-val.red   { color:var(--red); }
+.etf-kv-val.yellow{ color:var(--yellow); }
+.etf-kv-val.blue  { color:var(--blue); }
+.etf-nav-row { display:flex; align-items:baseline; gap:8px; margin-bottom:4px; }
+.etf-nav-val { font-size:1.3rem; font-weight:800; color:var(--text); }
+.etf-prem-badge { font-size:0.72rem; padding:2px 8px; border-radius:12px; font-weight:700; }
+.etf-prem-pos { background:rgba(232,70,70,.15); color:var(--red); border:1px solid rgba(232,70,70,.25); }
+.etf-prem-neg { background:rgba(0,214,143,.15); color:var(--green); border:1px solid rgba(0,214,143,.25); }
+.etf-prem-neu { background:rgba(100,136,160,.12); color:var(--text-mid); border:1px solid var(--border); }
+.etf-method-text { font-size:0.8rem; color:var(--text-mid); line-height:1.6; }
+.etf-div-bars { display:flex; align-items:flex-end; gap:4px; height:80px; margin-top:8px; }
+.etf-div-bar-col { display:flex; flex-direction:column; align-items:center; flex:1; gap:3px; }
+.etf-div-bar-fill { width:100%; background:var(--accent); border-radius:3px 3px 0 0; min-height:4px; }
+.etf-div-bar-amt  { font-size:0.6rem; color:var(--text-dim); white-space:nowrap; }
+.etf-div-bar-date { font-size:0.58rem; color:var(--text-dim); white-space:nowrap; writing-mode:vertical-rl; transform:rotate(180deg); margin-top:2px; }
+.etf-hold-row { display:flex; align-items:center; gap:8px; margin-bottom:6px; }
+.etf-hold-sym  { font-size:0.72rem; font-weight:700; color:var(--accent); min-width:42px; }
+.etf-hold-name { font-size:0.7rem; color:var(--text-mid); flex:1; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.etf-hold-pct  { font-size:0.72rem; font-weight:700; color:var(--text); min-width:38px; text-align:right; }
+.etf-hold-bar  { flex:2; height:5px; background:var(--border); border-radius:3px; overflow:hidden; }
+.etf-hold-bar-fill { height:100%; background:var(--accent); border-radius:3px; }
+.etf-sector-row { display:flex; align-items:center; gap:8px; margin-bottom:6px; }
+.etf-sector-name { font-size:0.7rem; color:var(--text-mid); min-width:70px; }
+.etf-sector-bar  { flex:1; height:5px; background:var(--border); border-radius:3px; overflow:hidden; }
+.etf-sector-fill { height:100%; border-radius:3px; }
+.etf-sector-pct  { font-size:0.7rem; color:var(--text); min-width:36px; text-align:right; }
+.etf-signal-list { display:flex; flex-direction:column; gap:6px; }
+.etf-signal-item { display:flex; align-items:flex-start; gap:8px; }
+.etf-signal-dot  { width:8px; height:8px; border-radius:50%; flex-shrink:0; margin-top:4px; }
+.etf-signal-text { font-size:0.78rem; color:var(--text-mid); }
+.etf-rec-banner  { display:flex; align-items:center; justify-content:space-between; padding:12px 16px; border-radius:8px; margin-bottom:14px; }
+.etf-rec-label   { font-size:0.72rem; color:rgba(255,255,255,.6); }
+.etf-rec-text    { font-size:1.1rem; font-weight:800; }
+.etf-score-pills { display:flex; gap:6px; flex-wrap:wrap; margin-top:10px; }
+.etf-score-pill  { font-size:0.7rem; padding:3px 10px; border-radius:20px; font-weight:600; }
+.etf-sp-buy  { background:rgba(0,214,143,.15); color:var(--green); border:1px solid rgba(0,214,143,.3); }
+.etf-sp-warn { background:rgba(232,70,70,.12); color:var(--red); border:1px solid rgba(232,70,70,.25); }
+.etf-sp-ok   { background:rgba(61,142,248,.12); color:var(--blue); border:1px solid rgba(61,142,248,.2); }
 /* ── TradingView Card ──────────────────────────────────────────── */
 .tv-header-row { display:flex; justify-content:space-between; align-items:center; margin-bottom:6px; }
 .tv-interval-tabs { display:flex; gap:4px; }
@@ -297,8 +345,10 @@
 
   <!-- ETF Panel (只對ETF顯示) -->
   <div class="card hidden" id="etfCard">
-    <div class="card-title">ETF 資訊</div>
-    <div id="etfPanel"></div>
+    <div class="card-title">ETF 完整分析</div>
+    <div id="etfPanel">
+      <div id="etfLoadingMsg" style="color:var(--text-dim);font-size:0.8rem;padding:8px 0">ETF 詳細資料載入中...</div>
+    </div>
   </div>
 
   <!-- 2. Performance Returns -->
@@ -796,6 +846,7 @@ async function loadStock(raw) {
     loadNews(d.ticker);
     loadFundamentals(d.ticker, d);
     initTVWidget(d.ticker);
+    if (d.isEtf) loadETFDetail(d.ticker, d);
   } catch(e) {
     showError('網路錯誤，請稍後再試：' + e.message);
   }
@@ -893,41 +944,183 @@ function renderHeader(d) {
 // ── ETF Panel ────────────────────────────────────────────────────────
 function renderETF(d) {
   const card = $('etfCard');
-  if (!d.isEtf || !d.etfData) { card.classList.add('hidden'); return; }
+  if (!d.isEtf) { card.classList.add('hidden'); return; }
   card.classList.remove('hidden');
-  const e = d.etfData;
-  const retColor = v => v > 0 ? 'green' : v < 0 ? 'red' : '';
+}
+
+async function loadETFDetail(ticker, stockData) {
+  try {
+    const r  = await fetch('/api/tw/etf_detail/' + encodeURIComponent(ticker));
+    const ed = await r.json();
+    if (ed.error) return;
+    renderETFDashboard(stockData, ed);
+  } catch(e) {}
+}
+
+function renderETFDashboard(d, ed) {
+  const e = d.etfData || {};
+  const rc = v => v > 0 ? 'green' : v < 0 ? 'red' : '';
+
+  // ── NAV & premium badge
+  const nav    = ed.nav || e.nav || 0;
+  const prem   = ed.premium ?? e.premium ?? 0;
+  const premCls = prem > 1.5 ? 'etf-prem-pos' : prem < -1.5 ? 'etf-prem-neg' : 'etf-prem-neu';
+  const premTxt = (prem >= 0 ? '+' : '') + prem.toFixed(2) + '%';
+
+  // ── Dividend history bars
+  let divBarsHTML = '<div style="color:var(--text-dim);font-size:0.74rem">暫無配息記錄</div>';
+  if (ed.divHistory && ed.divHistory.length > 0) {
+    const recent = ed.divHistory.slice(-8);
+    const maxAmt = Math.max(...recent.map(x => x.amount));
+    divBarsHTML = `<div class="etf-div-bars">` +
+      recent.map(x => {
+        const h = maxAmt > 0 ? Math.max(8, Math.round(x.amount / maxAmt * 72)) : 8;
+        return `<div class="etf-div-bar-col">
+          <div class="etf-div-bar-amt">${x.amount}</div>
+          <div class="etf-div-bar-fill" style="height:${h}px"></div>
+          <div class="etf-div-bar-date">${x.date.slice(0,7)}</div>
+        </div>`;
+      }).join('') + `</div>`;
+  }
+
+  // ── Holdings
+  let holdHTML = '<div style="color:var(--text-dim);font-size:0.74rem">暫無資料</div>';
+  if (ed.holdings && ed.holdings.length > 0) {
+    const maxP = Math.max(...ed.holdings.map(h => h.pct));
+    holdHTML = ed.holdings.map(h => `
+      <div class="etf-hold-row">
+        <span class="etf-hold-sym">${h.symbol}</span>
+        <span class="etf-hold-name">${h.name}</span>
+        <div class="etf-hold-bar"><div class="etf-hold-bar-fill" style="width:${maxP>0?h.pct/maxP*100:0}%"></div></div>
+        <span class="etf-hold-pct">${h.pct.toFixed(2)}%</span>
+      </div>`).join('');
+    const topPct = ed.holdings.slice(0,3).reduce((s,h) => s+h.pct, 0);
+    holdHTML += `<div style="font-size:0.68rem;color:var(--text-dim);margin-top:6px">前3大合計 <strong style="color:var(--text)">${topPct.toFixed(1)}%</strong></div>`;
+  }
+
+  // ── Sectors
+  const secNameMap = {
+    technology:'科技', financial_services:'金融', healthcare:'醫療',
+    consumer_cyclical:'消費', industrials:'工業', basic_materials:'原物料',
+    communication_services:'通訊', energy:'能源', realestate:'不動產',
+    consumer_defensive:'民生消費', utilities:'公用事業',
+  };
+  const secColors = ['#3d8ef8','#00d68f','#f0b429','#d94fff','#36c6ff','#e84646','#ffa000','#90d45a','#ff6b6b','#9b9bff','#ffb347'];
+  let secHTML = '<div style="color:var(--text-dim);font-size:0.74rem">暫無資料</div>';
+  if (ed.sectors && Object.keys(ed.sectors).length > 0) {
+    const sorted = Object.entries(ed.sectors).sort((a,b) => b[1]-a[1]);
+    secHTML = sorted.map(([k,v],i) => `
+      <div class="etf-sector-row">
+        <span class="etf-sector-name">${secNameMap[k]||k}</span>
+        <div class="etf-sector-bar"><div class="etf-sector-fill" style="width:${v}%;background:${secColors[i%secColors.length]}"></div></div>
+        <span class="etf-sector-pct">${v.toFixed(1)}%</span>
+      </div>`).join('');
+  }
+
+  // ── Entry signal
+  const rsi   = d.rsi || 50;
+  const ma20  = d.ma20 || 0;
+  const ma60  = d.ma60 || 0;
+  const price = d.price || 0;
+  const dy    = ed.divYield || d.divYield || 0;
+  // Compute score
+  let score = 0, signals = [];
+  if (nav > 0) {
+    if      (prem < -2) { score += 2; signals.push(['buy',  `折價 ${Math.abs(prem).toFixed(1)}%，低於淨值具吸引力`]); }
+    else if (prem >  3) { score -= 1; signals.push(['warn', `溢價 ${prem.toFixed(1)}%，高於淨值謹慎追價`]); }
+    else                { score += 1; signals.push(['ok',   `溢/折價 ${prem.toFixed(1)}%，接近淨值合理`]); }
+  }
+  if (price > 0 && ma20 > 0 && ma60 > 0) {
+    if   (price > ma20 && ma20 > ma60) { score += 1; signals.push(['buy',  '站上 MA20/60，中長期趨勢偏多']); }
+    else if (price < ma60)             { score -= 1; signals.push(['warn', '跌破 MA60，中期趨勢偏弱']); }
+  }
+  if      (rsi < 35) { score += 2; signals.push(['buy',  `RSI ${rsi.toFixed(0)} 超賣，逢低布局機會`]); }
+  else if (rsi > 72) { score -= 1; signals.push(['warn', `RSI ${rsi.toFixed(0)} 超買，短線謹慎`]); }
+  else if (rsi >= 45 && rsi <= 65) { score += 1; signals.push(['ok', `RSI ${rsi.toFixed(0)} 健康動能區間`]); }
+  if      (dy > 4) { score += 1; signals.push(['buy',  `殖利率 ${dy.toFixed(1)}%，息收具吸引力`]); }
+  else if (dy > 2) { signals.push(['ok',   `殖利率 ${dy.toFixed(1)}%，一般水準`]); }
+  if (ed.isLeveraged) signals.push(['warn', '槓桿/反向ETF，僅適合短線波段，不宜長期持有']);
+
+  let recText, recColor;
+  if      (score >= 4) { recText='強力建議進場';    recColor='#00d68f'; }
+  else if (score >= 2) { recText='可分批布局';       recColor='#3d8ef8'; }
+  else if (score >= 0) { recText='觀望等待時機';     recColor='#f0b429'; }
+  else                 { recText='暫不建議，等待回調'; recColor='#e84646'; }
+
+  const signalHTML = signals.map(([type, text]) => {
+    const dot = type==='buy'?'#00d68f':type==='warn'?'#e84646':'#3d8ef8';
+    return `<div class="etf-signal-item"><div class="etf-signal-dot" style="background:${dot}"></div><span class="etf-signal-text">${text}</span></div>`;
+  }).join('');
+
   setHTML('etfPanel', `
-    <div style="margin-bottom:10px">
-      <span class="etf-badge etf-type">ETF</span>
-      ${e.fundFamily ? `<span style="font-size:0.78rem;color:var(--text-dim);margin-left:8px">${e.fundFamily}</span>` : ''}
-      ${e.category   ? `<span style="font-size:0.78rem;color:var(--text-mid);margin-left:8px">${e.category}</span>` : ''}
+    <!-- 進場評估 banner -->
+    <div class="etf-rec-banner" style="background:${recColor}18;border:1px solid ${recColor}35;margin-bottom:14px">
+      <div>
+        <div class="etf-rec-label">進場評估建議</div>
+        <div class="etf-rec-text" style="color:${recColor}">${recText}</div>
+      </div>
+      <div style="text-align:right">
+        <div style="font-size:0.7rem;color:rgba(255,255,255,.5)">綜合評分</div>
+        <div style="font-size:1.6rem;font-weight:800;color:${recColor}">${score > 0 ? '+' : ''}${score}</div>
+      </div>
     </div>
-    <div class="etf-grid">
-      <div class="etf-stat">
-        <span class="etf-label">資產規模</span>
-        <span class="etf-value">${e.totalAssets > 0 ? e.totalAssets.toFixed(0) + ' 億元' : 'N/A'}</span>
+
+    <!-- 淨值 & 基本資訊 -->
+    <div class="etf-dash-grid">
+      <div class="etf-section">
+        <div class="etf-section-title">淨值 (NAV)</div>
+        <div class="etf-nav-row">
+          <span class="etf-nav-val">${nav > 0 ? nav.toFixed(2) + ' 元' : 'N/A'}</span>
+          ${nav > 0 ? `<span class="etf-prem-badge ${premCls}">溢/折 ${premTxt}</span>` : ''}
+        </div>
+        <div class="etf-kv-grid">
+          <div class="etf-kv"><span class="etf-kv-label">資產規模 AUM</span><span class="etf-kv-val">${(ed.totalAssets||e.totalAssets||0) > 0 ? (ed.totalAssets||e.totalAssets).toFixed(0)+' 億元' : 'N/A'}</span></div>
+          <div class="etf-kv"><span class="etf-kv-label">費用率</span><span class="etf-kv-val">${(ed.expenseRatio||e.expenseRatio||0) > 0 ? (ed.expenseRatio||e.expenseRatio).toFixed(2)+'%' : 'N/A'}</span></div>
+          <div class="etf-kv"><span class="etf-kv-label">成立日期</span><span class="etf-kv-val">${ed.inceptionDate||'N/A'}</span></div>
+          <div class="etf-kv"><span class="etf-kv-label">發行公司</span><span class="etf-kv-val" style="font-size:0.75rem">${e.fundFamily||'N/A'}</span></div>
+        </div>
       </div>
-      <div class="etf-stat">
-        <span class="etf-label">費用率</span>
-        <span class="etf-value">${e.expenseRatio > 0 ? e.expenseRatio.toFixed(2) + '%' : 'N/A'}</span>
+      <div class="etf-section">
+        <div class="etf-section-title">配息資訊</div>
+        <div class="etf-kv-grid">
+          <div class="etf-kv"><span class="etf-kv-label">殖利率</span><span class="etf-kv-val green">${dy > 0 ? dy.toFixed(2)+'%' : 'N/A'}</span></div>
+          <div class="etf-kv"><span class="etf-kv-label">配息頻率</span><span class="etf-kv-val">${ed.divFreq||'N/A'}</span></div>
+          <div class="etf-kv"><span class="etf-kv-label">下次預估配息</span><span class="etf-kv-val blue">${ed.nextDivEst||'N/A'}</span></div>
+          <div class="etf-kv"><span class="etf-kv-label">今年報酬 YTD</span><span class="etf-kv-val ${rc(e.ytdReturn)}">${e.ytdReturn ? pctStr(e.ytdReturn,1) : 'N/A'}</span></div>
+          <div class="etf-kv"><span class="etf-kv-label">3 年年化</span><span class="etf-kv-val ${rc(e.threeYrReturn)}">${e.threeYrReturn ? pctStr(e.threeYrReturn,1) : 'N/A'}</span></div>
+          <div class="etf-kv"><span class="etf-kv-label">5 年年化</span><span class="etf-kv-val ${rc(e.fiveYrReturn)}">${e.fiveYrReturn ? pctStr(e.fiveYrReturn,1) : 'N/A'}</span></div>
+        </div>
       </div>
-      <div class="etf-stat">
-        <span class="etf-label">殖利率</span>
-        <span class="etf-value green">${d.divYield > 0 ? d.divYield.toFixed(2) + '%' : 'N/A'}</span>
+    </div>
+
+    <!-- 配息歷史 -->
+    <div class="etf-section" style="margin-bottom:12px">
+      <div class="etf-section-title">過去配息記錄（近8次）</div>
+      ${divBarsHTML}
+    </div>
+
+    <!-- 選股邏輯 -->
+    <div class="etf-section" style="margin-bottom:12px">
+      <div class="etf-section-title">選股邏輯 / 追蹤策略</div>
+      <div class="etf-method-text">${ed.methodology || '暫無資料'}</div>
+    </div>
+
+    <!-- 成分股 + 產業分布 -->
+    <div class="etf-dash-grid" style="margin-bottom:12px">
+      <div class="etf-section">
+        <div class="etf-section-title">前10大成分股</div>
+        ${holdHTML}
       </div>
-      <div class="etf-stat">
-        <span class="etf-label">今年報酬 YTD</span>
-        <span class="etf-value ${retColor(e.ytdReturn)}">${e.ytdReturn !== 0 ? pctStr(e.ytdReturn,1) : 'N/A'}</span>
+      <div class="etf-section">
+        <div class="etf-section-title">產業分布</div>
+        ${secHTML}
       </div>
-      <div class="etf-stat">
-        <span class="etf-label">3 年年化報酬</span>
-        <span class="etf-value ${retColor(e.threeYrReturn)}">${e.threeYrReturn !== 0 ? pctStr(e.threeYrReturn,1) : 'N/A'}</span>
-      </div>
-      <div class="etf-stat">
-        <span class="etf-label">5 年年化報酬</span>
-        <span class="etf-value ${retColor(e.fiveYrReturn)}">${e.fiveYrReturn !== 0 ? pctStr(e.fiveYrReturn,1) : 'N/A'}</span>
-      </div>
+    </div>
+
+    <!-- 進場評估細節 -->
+    <div class="etf-section">
+      <div class="etf-section-title">進場訊號明細</div>
+      <div class="etf-signal-list">${signalHTML}</div>
     </div>
   `);
 }

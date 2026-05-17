@@ -917,9 +917,11 @@ def get_tw_stock(ticker):
         # ETF extra data
         etf_data = None
         if is_etf:
-            ta = safe_float(info.get('totalAssets', 0))
-            er = safe_float(info.get('annualReportExpenseRatio', info.get('totalExpenseRatio', 0)))
+            ta  = safe_float(info.get('totalAssets', 0))
+            er  = safe_float(info.get('annualReportExpenseRatio', info.get('totalExpenseRatio', 0)))
             if er > 1: er /= 100
+            nav = safe_float(info.get('navPrice', 0))
+            prem = round((price - nav) / nav * 100, 2) if nav > 0 else 0
             etf_data = {
                 'totalAssets':   round(ta / 1e8, 1),
                 'expenseRatio':  round(er * 100, 4) if er > 0 else 0,
@@ -928,6 +930,8 @@ def get_tw_stock(ticker):
                 'ytdReturn':     round(safe_float(info.get('ytdReturn', 0)) * 100, 2),
                 'category':      info.get('category', ''),
                 'fundFamily':    info.get('fundFamily', ''),
+                'nav':           nav,
+                'premium':       prem,
             }
 
         def clean(lst):
@@ -1030,6 +1034,169 @@ def _fetch_gnews(query, max_results=10):
         return out
     except Exception:
         return []
+
+
+def _infer_etf_methodology(name, sectors, holdings):
+    n = (name or '').lower()
+    if 'top 50' in n or '台灣50' in n:
+        return '追蹤「臺灣50指數」，從上市公司中選出市值最大前50家，採市值加權，為台股藍籌股代表性指標。'
+    if 'mid-cap' in n or 'midcap' in n or '中型' in n:
+        return '追蹤台股中型股指數，補足大型股以外的中市值企業曝險，市值介於大型股與小型股之間。'
+    if 'nasdaq' in n:
+        return '追蹤 NASDAQ-100 指數，涵蓋美國那斯達克交易所市值最大100家非金融企業，科技比重高達50%以上。'
+    if 'sp500' in n or 's&p 500' in n or 'sp 500' in n:
+        return '追蹤 S&P 500 指數，涵蓋美國500大市值企業，分散投資於全市場，為全球最具代表性的股市指標。'
+    if 'semiconductor' in n or '半導體' in n:
+        return '聚焦半導體產業鏈（IC設計、晶圓代工、封測等），隨AI需求與科技週期波動，適合積極型投資人。'
+    if 'high dividend' in n or '高息' in n or '高股息' in n or 'dividend' in n:
+        return '以高殖利率為主要選股邏輯，篩選配息穩定且殖利率高於市場平均個股，重視現金流的收益型投資人首選。'
+    if 'esg' in n:
+        return '依 ESG（環境、社會、公司治理）標準篩選，排除高碳排或治理不佳企業，兼顧長期報酬與永續理念。'
+    if '正2' in n or 'leveraged' in n or '2x' in n:
+        return '正向2倍槓桿ETF，每日追蹤標的指數2倍報酬，適合短線波段，長期持有有複利衰減風險，非長線工具。'
+    if '反1' in n or '空' in n or 'inverse' in n or 'bear' in n:
+        return '反向1倍ETF，追蹤標的指數的負1倍日報酬，可作空頭避險工具，不適合長期持有。'
+    if 'reit' in n or 'real estate' in n:
+        return '投資不動產投資信託（REITs），透過持有商業不動產或抵押貸款提供穩定租金收益，配息頻率通常較高。'
+    if 'bond' in n or 'government' in n or '公債' in n or '債' in n:
+        return '追蹤固定收益（債券）指數，以政府或公司債為主要持倉，低波動、穩定息收，可作投資組合防禦配置。'
+    # Infer from top sector
+    if sectors:
+        top_sec = max(sectors, key=sectors.get)
+        sec_names = {
+            'technology': '科技產業', 'financial_services': '金融業',
+            'healthcare': '醫療保健', 'consumer_cyclical': '消費類',
+            'industrials': '工業', 'basic_materials': '原物料',
+            'communication_services': '通訊服務', 'energy': '能源',
+        }
+        s = sec_names.get(top_sec, top_sec)
+        return f'採指數化被動管理策略，{s}產業權重最高，追蹤特定指數以分散個股集中風險、降低管理費用。'
+    return '採指數化被動管理策略，追蹤特定基準指數，以分散投資降低個股集中風險。'
+
+
+def _gen_etf_entry(price, nav, rsi, ma20, ma60, div_yield, is_lev):
+    score = 0
+    signals = []
+    if nav > 0:
+        prem = round((price - nav) / nav * 100, 2)
+        if prem < -2:   score += 2; signals.append(('buy',  f'折價 {abs(prem):.1f}%，低於淨值具吸引力'))
+        elif prem > 3:  score -= 1; signals.append(('warn', f'溢價 {prem:.1f}%，高於淨值謹慎追價'))
+        else:           score += 1; signals.append(('ok',   f'溢/折價 {prem:.1f}%，接近淨值合理'))
+    if price > ma20 and ma20 > 0 and ma60 > 0 and ma20 > ma60:
+        score += 1; signals.append(('buy',  '站上 MA20/60，中長期趨勢偏多'))
+    elif ma60 > 0 and price < ma60:
+        score -= 1; signals.append(('warn', '跌破 MA60，中期趨勢偏弱'))
+    if rsi > 0:
+        if rsi < 35:    score += 2; signals.append(('buy',  f'RSI {rsi:.0f} 超賣，逢低布局機會'))
+        elif rsi > 72:  score -= 1; signals.append(('warn', f'RSI {rsi:.0f} 超買，短線謹慎'))
+        elif 45 <= rsi <= 65: score += 1; signals.append(('ok', f'RSI {rsi:.0f} 健康動能區間'))
+    if div_yield > 4:   score += 1; signals.append(('buy',  f'殖利率 {div_yield:.1f}%，息收具吸引力'))
+    elif div_yield > 2: signals.append(('ok',   f'殖利率 {div_yield:.1f}%，一般水準'))
+    if is_lev:          signals.append(('warn', '槓桿/反向ETF，僅適合短線波段，不宜長期持有'))
+    if score >= 4:   rec, col = '強力建議進場',    '#00d68f'
+    elif score >= 2: rec, col = '可分批布局',       '#3d8ef8'
+    elif score >= 0: rec, col = '觀望等待時機',     '#f0b429'
+    else:            rec, col = '暫不建議，等待回調', '#e84646'
+    return {'score': score, 'rec': rec, 'color': col, 'signals': signals}
+
+
+@app.route('/api/tw/etf_detail/<ticker>')
+def get_tw_etf_detail(ticker):
+    ticker = tw_normalize(ticker)
+    cached = _cache_get(f'tw_etf_detail:{ticker}')
+    if cached: return jsonify(cached)
+    try:
+        stock = yf.Ticker(ticker)
+        info  = stock.info
+
+        # Dividends
+        div_history = []
+        div_freq_label = 'N/A'
+        next_div_est   = None
+        try:
+            divs = stock.dividends
+            if not divs.empty:
+                divs_sorted = divs.sort_index()
+                div_history = [{'date': d.strftime('%Y-%m-%d'), 'amount': round(float(v), 4)}
+                               for d, v in divs_sorted.items()]
+                if len(div_history) >= 2:
+                    from datetime import datetime as _dt, timedelta as _td
+                    dates = [_dt.strptime(x['date'], '%Y-%m-%d') for x in div_history]
+                    gaps  = [(dates[i+1]-dates[i]).days for i in range(len(dates)-1)]
+                    avg   = sum(gaps[-6:]) / min(6, len(gaps))
+                    if avg <= 105:   div_freq_label = '季配'
+                    elif avg <= 200: div_freq_label = '半年配'
+                    else:            div_freq_label = '年配'
+                    nxt = dates[-1] + _td(days=int(avg))
+                    next_div_est = nxt.strftime('%Y-%m')
+        except Exception:
+            pass
+
+        # Holdings
+        holdings = []
+        sectors  = {}
+        asset_classes = {}
+        try:
+            fd = stock.funds_data
+            if fd is not None:
+                th = fd.top_holdings
+                if th is not None and not th.empty:
+                    for sym, row in th.iterrows():
+                        holdings.append({
+                            'symbol': str(sym).replace('.TW','').replace('.TWO',''),
+                            'name':   str(row.get('Name', sym))[:25],
+                            'pct':    round(float(row.get('Holding Percent', 0)) * 100, 2)
+                        })
+                sw = fd.sector_weightings
+                if sw is not None:
+                    for k, v in (sw.items() if isinstance(sw, dict) else sw.to_dict().items()):
+                        if float(v) > 0.001:
+                            sectors[k] = round(float(v) * 100, 2)
+                ac = fd.asset_classes
+                if ac is not None:
+                    for k, v in (ac.items() if isinstance(ac, dict) else ac.to_dict().items()):
+                        if float(v) > 0.001:
+                            asset_classes[k] = round(float(v) * 100, 2)
+        except Exception:
+            pass
+
+        nav   = safe_float(info.get('navPrice', 0))
+        price = safe_float(info.get('regularMarketPrice', info.get('previousClose', 0)))
+        prem  = round((price - nav) / nav * 100, 2) if nav > 0 else 0
+        er    = safe_float(info.get('annualReportExpenseRatio', info.get('totalExpenseRatio', 0)))
+        if er > 1: er /= 100
+        ta    = safe_float(info.get('totalAssets', 0))
+        dy    = round(safe_float(info.get('dividendYield', 0)) * 100, 2)
+        rsi   = safe_float(info.get('twoHundredDayAverage', 0))  # placeholder; main route has real RSI
+        name  = info.get('longName', info.get('shortName', ticker))
+        is_lev = any(x in (name or '').lower() for x in ['正2','leveraged','2x','inverse','反1','bear'])
+        inception = info.get('fundInceptionDate', 0)
+        from datetime import datetime as _dt
+        inception_str = _dt.utcfromtimestamp(inception).strftime('%Y-%m-%d') if inception else ''
+
+        methodology = _infer_etf_methodology(name, sectors, holdings)
+
+        result = {
+            'ticker': ticker,
+            'nav': nav,
+            'premium': prem,
+            'totalAssets': round(ta / 1e8, 1),
+            'expenseRatio': round(er * 100, 4) if er > 0 else 0,
+            'divYield': dy,
+            'divFreq': div_freq_label,
+            'nextDivEst': next_div_est,
+            'divHistory': div_history[-12:],
+            'holdings': holdings[:10],
+            'sectors': sectors,
+            'assetClasses': asset_classes,
+            'methodology': methodology,
+            'inceptionDate': inception_str,
+            'isLeveraged': is_lev,
+        }
+        _cache_set(f'tw_etf_detail:{ticker}', result, ttl=3600)
+        return jsonify(result)
+    except Exception as e:
+        return jsonify({'error': str(e)})
 
 
 @app.route('/api/tw/news/<ticker>')
