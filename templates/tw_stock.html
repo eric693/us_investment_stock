@@ -1393,7 +1393,10 @@ function renderInvestValue(d) {
       <div class="iv-grades-col">
         <div class="iv-grades-title">四維評級</div>
         <div class="iv-grades-row">
-          ${gradeHtml('動能', g.momentum)}${gradeHtml('估值', g.valuation)}${gradeHtml('成長', g.growth)}${gradeHtml('財健', g.health)}
+          ${d.isEtf
+            ? `${gradeHtml('動能', g.momentum)}${gradeHtml('費用', g.expense)}${gradeHtml('績效', g.perf)}${gradeHtml('規模', g.size)}`
+            : `${gradeHtml('動能', g.momentum)}${gradeHtml('估值', g.valuation)}${gradeHtml('成長', g.growth)}${gradeHtml('財健', g.health)}`
+          }
         </div>
         <div class="iv-grades-legend"><span>A+ 卓越</span><span>A 優秀</span><span>B 良好</span><span>C 普通</span><span>D 偏弱</span></div>
       </div>
