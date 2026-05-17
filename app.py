@@ -1781,5 +1781,122 @@ def get_tw_fundamentals(ticker):
         return jsonify({'error': str(e)}), 500
 
 
+# ── Broker Chips Helpers ───────────────────────────────────────────────
+_BROKER_TAGS = {
+    '美林': '外資', '摩根大通': '外資', '摩根士丹利': '外資',
+    '高盛': '外資', '瑞銀': '外資', '瑞士信貸': '外資', '瑞信': '外資',
+    '德意志': '外資', '花旗': '外資', '匯豐': '外資', '麥格理': '外資',
+    '野村': '外資', '巴克萊': '外資', '法國巴黎': '外資', '里昂': '外資',
+    '元大': '本土大型', '凱基': '本土大型', '富邦': '本土大型',
+    '國泰': '本土大型', '永豐金': '本土大型', '玉山': '本土大型',
+    '群益': '本土大型', '兆豐': '本土大型', '中信': '本土大型',
+}
+
+def _broker_tag(name):
+    for kw, tag in _BROKER_TAGS.items():
+        if kw in name:
+            return tag
+    return ''
+
+def _recent_trading_dates(n=7):
+    from datetime import date, timedelta
+    d = date.today() - timedelta(days=1)
+    out = []
+    while len(out) < n:
+        if d.weekday() < 5:
+            out.append(d.strftime('%Y%m%d'))
+        d -= timedelta(days=1)
+    return out
+
+def _t86_parse_int(v):
+    s = str(v).strip().replace(',', '')
+    return int(s) if s and s.lstrip('-').isdigit() else 0
+
+def _fetch_t86_for_stock(stock_no, date_str, hdrs):
+    """Fetch T86 三大法人 and return one stock's row, or None."""
+    r   = _requests.get('https://www.twse.com.tw/rwd/zh/fund/T86',
+                        params={'date': date_str, 'selectType': 'ALLBUT0999', 'response': 'json'},
+                        headers=hdrs, timeout=8)
+    jd  = r.json()
+    if jd.get('stat') != 'OK':
+        return None
+    for row in (jd.get('data') or []):
+        if str(row[0]).strip() == stock_no:
+            p = _t86_parse_int
+            return {
+                'date':    date_str,
+                'foreign': p(row[4])  + p(row[7]),   # 外陸資超 + 外資自營超
+                'trust':   p(row[10]),                # 投信超
+                'dealer':  p(row[11]),                # 自營商買賣超（合計，index 11）
+                'total':   p(row[18]),                # 三大法人買賣超總計（index 18）
+            }
+    return None
+
+def _fetch_tpex_3insti(stock_no, date_str, hdrs):
+    """Fetch TPEX 三大法人 for an OTC stock, or None."""
+    yr  = int(date_str[:4]) - 1911
+    dp  = f'{yr}/{date_str[4:6]}/{date_str[6:8]}'
+    r   = _requests.get(
+            'https://www.tpex.org.tw/web/stock/3insti/daily_trade/3itrade_hedge.php',
+            params={'d': dp, 'stkno': stock_no, 'o': 'json'},
+            headers=hdrs, timeout=8)
+    jd  = r.json()
+    for row in (jd.get('aaData') or []):
+        if str(row[0]).strip() == stock_no:
+            p = _t86_parse_int
+            return {
+                'date':    date_str,
+                'foreign': p(row[4]),
+                'trust':   p(row[7]),
+                'dealer':  p(row[10]),
+                'total':   p(row[4]) + p(row[7]) + p(row[10]),
+            }
+    return None
+
+
+@app.route('/api/tw/broker_chips/<ticker>')
+def get_tw_broker_chips(ticker):
+    raw      = tw_normalize(ticker)
+    stock_no = raw.split('.')[0]
+    is_otc   = raw.endswith('.TWO')
+
+    cache_key = f'tw_broker:{stock_no}'
+    cached = _cache_get(cache_key)
+    if cached:
+        return jsonify(cached)
+
+    hdrs = {
+        'User-Agent':      'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+        'Accept':          'application/json',
+        'X-Requested-With':'XMLHttpRequest',
+    }
+    dates    = _recent_trading_dates(8)
+    day_data = []
+
+    for date_str in dates:
+        if len(day_data) >= 5:
+            break
+        try:
+            row = (_fetch_tpex_3insti if is_otc else _fetch_t86_for_stock)(stock_no, date_str, hdrs)
+            if row:
+                day_data.append(row)
+        except Exception:
+            pass
+
+    agg_f = sum(d['foreign'] for d in day_data)
+    agg_t = sum(d['trust']   for d in day_data)
+    agg_d = sum(d['dealer']  for d in day_data)
+    agg_total = sum(d['total'] for d in day_data)
+
+    result = {
+        'stockNo':  stock_no,
+        'hasData':  len(day_data) > 0,
+        'days':     day_data,
+        'aggregate': {'foreign': agg_f, 'trust': agg_t, 'dealer': agg_d, 'total': agg_total},
+    }
+    _cache_set(cache_key, result, ttl=3600)
+    return jsonify(result)
+
+
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5999, debug=False)

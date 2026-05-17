@@ -65,6 +65,37 @@
 .etf-sp-buy  { background:rgba(0,214,143,.15); color:var(--green); border:1px solid rgba(0,214,143,.3); }
 .etf-sp-warn { background:rgba(232,70,70,.12); color:var(--red); border:1px solid rgba(232,70,70,.25); }
 .etf-sp-ok   { background:rgba(61,142,248,.12); color:var(--blue); border:1px solid rgba(61,142,248,.2); }
+/* ── Broker Chips ──────────────────────────────────────────────── */
+.bc-header { display:flex; align-items:center; justify-content:space-between; margin-bottom:12px; flex-wrap:wrap; gap:8px; }
+.bc-date-range { font-size:0.72rem; color:var(--text-dim); background:#060c18; border:1px solid var(--border); border-radius:6px; padding:3px 10px; }
+.bc-agg-row { display:flex; flex-wrap:wrap; gap:8px; margin-bottom:14px; }
+.bc-agg-pill { display:flex; flex-direction:column; gap:3px; background:#060c18; border:1px solid var(--border); border-radius:8px; padding:8px 16px; flex:1; min-width:80px; }
+.bc-agg-pill.total { border-color:rgba(61,142,248,.3); }
+.bc-agg-label { font-size:0.68rem; color:var(--text-dim); font-weight:600; letter-spacing:.3px; }
+.bc-agg-val { font-size:0.9rem; font-weight:800; }
+.bc-agg-val.pos { color:var(--green); }
+.bc-agg-val.neg { color:var(--red); }
+.bc-table-wrap { overflow-x:auto; margin-bottom:14px; }
+.bc-table { width:100%; border-collapse:collapse; font-size:0.78rem; }
+.bc-table th { color:var(--text-dim); font-size:0.68rem; font-weight:700; text-align:left; padding:4px 8px; border-bottom:1px solid var(--border); white-space:nowrap; }
+.bc-table td { padding:6px 8px; border-bottom:1px solid #0e1828; vertical-align:middle; }
+.bc-td-date { color:var(--text-dim); white-space:nowrap; font-size:0.75rem; min-width:44px; }
+.bc-bar-wrap { display:flex; align-items:center; gap:6px; }
+.bc-bar { height:5px; border-radius:3px; min-width:2px; flex-shrink:0; }
+.bc-bar.buy  { background:var(--green); }
+.bc-bar.sell { background:var(--red); }
+.bc-vol { font-size:0.72rem; font-weight:700; white-space:nowrap; min-width:54px; }
+.bc-vol.buy  { color:var(--green); }
+.bc-vol.sell { color:var(--red); }
+.bc-total-val { font-size:0.8rem; font-weight:800; white-space:nowrap; }
+.bc-total-val.pos { color:var(--green); }
+.bc-total-val.neg { color:var(--red); }
+.bc-links { display:flex; flex-wrap:wrap; gap:8px; margin-top:14px; padding-top:12px; border-top:1px solid var(--border); }
+.bc-link { font-size:0.72rem; padding:4px 12px; border-radius:6px; text-decoration:none; border:1px solid var(--border); color:var(--text-dim); transition:all .15s; }
+.bc-link:hover { border-color:var(--accent); color:var(--accent); }
+.bc-no-data { font-size:0.82rem; color:var(--text-dim); padding:16px 0; text-align:center; line-height:1.7; }
+.bc-tip { font-size:0.72rem; color:var(--text-dim); margin-top:0; line-height:1.6; background:#060c18; border:1px solid var(--border); border-radius:7px; padding:10px 14px; }
+.bc-tip strong { color:var(--text-mid); }
 /* ── TradingView Card ──────────────────────────────────────────── */
 .tv-header-row { display:flex; justify-content:space-between; align-items:center; margin-bottom:6px; }
 .tv-interval-tabs { display:flex; gap:4px; }
@@ -375,6 +406,15 @@
       <div class="card-title">法人籌碼</div>
       <div id="instPanel"><div class="mini-loading">載入中...</div></div>
     </div>
+  </div>
+
+  <!-- 3b. Broker Chips -->
+  <div class="card" id="brokerChipsCard">
+    <div class="bc-header">
+      <div class="card-title" style="margin:0;border:none;padding:0">券商分點進出</div>
+      <span class="bc-date-range" id="bcDateRange">載入中...</span>
+    </div>
+    <div id="brokerChipsPanel"><div class="mini-loading">載入中...</div></div>
   </div>
 
   <!-- 4. Chart + Right Panel -->
@@ -846,6 +886,7 @@ async function loadStock(raw) {
     updateAlertBadge();
     loadNews(d.ticker);
     loadFundamentals(d.ticker, d);
+    loadBrokerChips(d.ticker);
     initTVWidget(d.ticker);
     if (d.isEtf) loadETFDetail(d.ticker, d);
   } catch(e) {
@@ -2009,6 +2050,124 @@ function renderCompareChart() {
 function clearCompare() {
   compareData=null; setHTML('compareChart',''); setHTML('compareStatus','');
   const inp=$('compareInput'); if(inp) inp.value='';
+}
+
+// ── Broker Chips ──────────────────────────────────────────────────────
+async function loadBrokerChips(ticker) {
+  const stockNo = ticker.replace('.TWO','').replace('.TW','');
+  setHTML('brokerChipsPanel', '<div class="mini-loading">載入中...</div>');
+  $('bcDateRange').textContent = '載入中...';
+  try {
+    const r = await fetch('/api/tw/broker_chips/' + encodeURIComponent(ticker));
+    const d = await r.json();
+    renderBrokerChips(d, stockNo);
+  } catch(e) {
+    renderBrokerChips({hasData: false}, stockNo);
+  }
+}
+
+function fmtInstVol(shares) {
+  // T86 data is in 股; convert to 張 (1 張 = 1,000 股) for display
+  const lots = Math.round(shares / 1000);
+  if (!lots) return '0';
+  const abs = Math.abs(lots);
+  if (abs >= 10000) return (lots > 0 ? '+' : '') + (lots/10000).toFixed(1) + '萬張';
+  return (lots > 0 ? '+' : '') + lots.toLocaleString() + '張';
+}
+
+function renderBrokerChips(d, stockNo) {
+  const days = d.days || [];
+  const dateLabel = days.length > 0
+    ? `近${days.length}日 (${days[days.length-1].date.slice(4,6)}/${days[days.length-1].date.slice(6,8)}～${days[0].date.slice(4,6)}/${days[0].date.slice(6,8)})`
+    : '暫無資料';
+  $('bcDateRange').textContent = dateLabel;
+
+  const extLinks = `
+    <div class="bc-links">
+      <span style="font-size:0.72rem;color:var(--text-dim);align-self:center">分點明細：</span>
+      <a class="bc-link" href="https://goodinfo.tw/tw/StockBrokerTradeDetail.asp?STOCK_ID=${stockNo}" target="_blank" rel="noopener">Goodinfo 分點</a>
+      <a class="bc-link" href="https://www.wantgoo.com/stock/${stockNo}/major-investors" target="_blank" rel="noopener">玩股網 分點</a>
+      <a class="bc-link" href="https://www.cmoney.tw/follow/symbol/tse_${stockNo}.tw" target="_blank" rel="noopener">CMoney 籌碼</a>
+      <a class="bc-link" href="https://tw.stock.yahoo.com/quote/${stockNo}.TW/institutional-trading" target="_blank" rel="noopener">Yahoo!股市 法人</a>
+    </div>`;
+
+  const tip = `<div class="bc-tip">
+    <strong>解讀提示：</strong>外資連續買超且投信同步追進，代表籌碼集中、主力做多信心強；
+    外資賣超但投信買進為拉鋸格局；三大法人同步賣超需提高警覺。
+    如需查看「特定分點」（美林、摩根大通、元大某分行等）的買賣明細，請點選上方連結。
+  </div>`;
+
+  if (!d.hasData || days.length === 0) {
+    setHTML('brokerChipsPanel', `
+      <div class="bc-no-data">
+        暫無近期法人流向資料（可能為假日、休市或上櫃個股）<br>
+        建議至下方連結查詢最新分點明細
+      </div>
+      ${tip}
+      ${extLinks}
+    `);
+    return;
+  }
+
+  const agg = d.aggregate || {};
+  const totColor = agg.total >= 0 ? 'var(--green)' : 'var(--red)';
+
+  // Aggregate summary pills
+  const aggHtml = `
+    <div class="bc-agg-row">
+      <div class="bc-agg-pill">
+        <span class="bc-agg-label">外資</span>
+        <span class="bc-agg-val ${agg.foreign>=0?'pos':'neg'}">${fmtInstVol(agg.foreign)}</span>
+      </div>
+      <div class="bc-agg-pill">
+        <span class="bc-agg-label">投信</span>
+        <span class="bc-agg-val ${agg.trust>=0?'pos':'neg'}">${fmtInstVol(agg.trust)}</span>
+      </div>
+      <div class="bc-agg-pill">
+        <span class="bc-agg-label">自營商</span>
+        <span class="bc-agg-val ${agg.dealer>=0?'pos':'neg'}">${fmtInstVol(agg.dealer)}</span>
+      </div>
+      <div class="bc-agg-pill total">
+        <span class="bc-agg-label">三大合計</span>
+        <span class="bc-agg-val ${agg.total>=0?'pos':'neg'}" style="font-size:1rem">${fmtInstVol(agg.total)}</span>
+      </div>
+    </div>`;
+
+  // Per-day table
+  const maxAbs = Math.max(...days.flatMap(d => [Math.abs(d.foreign), Math.abs(d.trust), Math.abs(d.dealer)]), 1);
+  function barCell(v, maxV) {
+    const w = Math.round(Math.abs(v) / maxV * 60);
+    const cls = v >= 0 ? 'buy' : 'sell';
+    return `<div class="bc-bar-wrap"><div class="bc-bar ${cls}" style="width:${w}px"></div><span class="bc-vol ${cls}">${fmtInstVol(v)}</span></div>`;
+  }
+
+  const tableRows = days.map(day => `
+    <tr>
+      <td class="bc-td-date">${day.date.slice(4,6)}/${day.date.slice(6,8)}</td>
+      <td>${barCell(day.foreign, maxAbs)}</td>
+      <td>${barCell(day.trust,   maxAbs)}</td>
+      <td>${barCell(day.dealer,  maxAbs)}</td>
+      <td><span class="bc-total-val ${day.total>=0?'pos':'neg'}">${fmtInstVol(day.total)}</span></td>
+    </tr>`).join('');
+
+  const tableHtml = `
+    <div class="bc-table-wrap">
+      <table class="bc-table">
+        <thead>
+          <tr>
+            <th>日期</th><th>外資</th><th>投信</th><th>自營商</th><th>合計</th>
+          </tr>
+        </thead>
+        <tbody>${tableRows}</tbody>
+      </table>
+    </div>`;
+
+  setHTML('brokerChipsPanel', `
+    ${aggHtml}
+    ${tableHtml}
+    ${tip}
+    ${extLinks}
+  `);
 }
 
 // ── News ──────────────────────────────────────────────────────────────
