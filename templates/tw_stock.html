@@ -1386,6 +1386,7 @@ function renderInvestValue(d) {
 
 // ── Financial Trends ─────────────────────────────────────────────────
 function renderFinTrends(d) {
+  if (d.isEtf) { renderFinTrendsETF(d); return; }
   const q = d.quarterly || [];
   let revenueBar = '<div class="no-data">季度資料暫無</div>';
   if (q.length >= 2) {
@@ -1441,6 +1442,7 @@ function renderCatalysts(d) {
 
 // ── Business ──────────────────────────────────────────────────────────
 function renderBiz(d) {
+  if (d.isEtf) { renderBizETF(d); return; }
   const from52H = d.week52High ? (((d.price/d.week52High)-1)*100).toFixed(1) : null;
   const from52L = d.week52Low  ? (((d.price/d.week52Low )-1)*100).toFixed(1) : null;
   const na = v => v ? v : '<span class="na-val">—</span>';
@@ -1475,6 +1477,95 @@ function renderBiz(d) {
        <span class="biz-value ${i.color||''}">${i.value}${i.sub?`<small class="biz-sub">${i.sub}</small>`:''}</span></div>`
     ).join('')}</div></div>
   `).join(''));
+}
+
+function renderBizETF(d) {
+  const e = d.etfData || {};
+  const from52H = d.week52High ? (((d.price/d.week52High)-1)*100).toFixed(1) : null;
+  const from52L = d.week52Low  ? (((d.price/d.week52Low )-1)*100).toFixed(1) : null;
+  const nav = e.nav || 0;
+  const prem = e.premium != null ? e.premium : 0;
+  const sections = [
+    { title: 'ETF 基本資訊', items: [
+      { label: '資產規模 AUM',  value: e.totalAssets  ? e.totalAssets.toFixed(0)+' 億元' : '—' },
+      { label: '費用率',        value: e.expenseRatio ? e.expenseRatio.toFixed(2)+'%'     : '—' },
+      { label: '殖利率',        value: d.divYield     ? d.divYield.toFixed(2)+'%'         : '—', color:'green' },
+      { label: 'Beta 係數',     value: d.beta         ? d.beta.toFixed(2)                 : '—' },
+    ]},
+    { title: '淨值與價格', items: [
+      { label: 'NAV 淨值',      value: nav  > 0 ? nav.toFixed(2)+' 元'                   : '—' },
+      { label: '溢/折價',       value: nav  > 0 ? (prem>=0?'+':'')+prem.toFixed(2)+'%'  : '—', color: prem>2?'red':prem<-2?'green':'' },
+      { label: '52週最高',      value: d.week52High+' 元', sub: from52H?`距頂 ${from52H}%`:'' },
+      { label: '52週最低',      value: d.week52Low +' 元', sub: from52L?`+${from52L}% 底部`:'' },
+    ]},
+    { title: '績效報酬', items: [
+      { label: 'YTD 今年',      value: e.ytdReturn    ? (e.ytdReturn>0?'+':'')+e.ytdReturn.toFixed(1)+'%'        : '—', color:e.ytdReturn>0?'green':'red' },
+      { label: '3 年年化',      value: e.threeYrReturn? (e.threeYrReturn>0?'+':'')+e.threeYrReturn.toFixed(1)+'%': '—', color:e.threeYrReturn>0?'green':'red' },
+      { label: '5 年年化',      value: e.fiveYrReturn ? (e.fiveYrReturn>0?'+':'')+e.fiveYrReturn.toFixed(1)+'%'  : '—', color:e.fiveYrReturn>0?'green':'red' },
+      { label: '成交量比',      value: d.volRatio.toFixed(2)+'x 均量' },
+    ]},
+  ];
+  setHTML('bizHighlights', sections.map(sec =>
+    `<div class="biz-section"><div class="biz-section-title">${sec.title}</div>
+    <div class="biz-grid">${sec.items.map(i =>
+      `<div class="biz-item"><span class="biz-label">${i.label}</span>
+       <span class="biz-value ${i.color||''}">${i.value}${i.sub?`<small class="biz-sub">${i.sub}</small>`:''}</span></div>`
+    ).join('')}</div></div>`
+  ).join(''));
+}
+
+function renderFinTrendsETF(d) {
+  const e = d.etfData || {};
+  const r = d.returns || {};
+  const rc = v => v == null || v === 0 ? '' : v > 0 ? 'var(--green)' : 'var(--red)';
+  const pf = v => v == null || v === 0 ? 'N/A' : (v>0?'+':'')+v.toFixed(2)+'%';
+
+  const periodRows = [
+    { label:'1 週',   value: r['1W'] },
+    { label:'1 個月', value: r['1M'] },
+    { label:'3 個月', value: r['3M'] },
+    { label:'6 個月', value: r['6M'] },
+    { label:'1 年',   value: r['1Y'] },
+    { label:'YTD',    value: e.ytdReturn },
+    { label:'3年年化',value: e.threeYrReturn },
+    { label:'5年年化',value: e.fiveYrReturn  },
+  ].filter(x => x.value != null && x.value !== 0);
+
+  const maxAbs = Math.max(...periodRows.map(x => Math.abs(x.value||0)), 1);
+  const barRows = periodRows.map(x => {
+    const w  = Math.round(Math.abs(x.value)/maxAbs*100);
+    const col = rc(x.value);
+    return `<div class="ft-metric">
+      <span class="ft-m-label" style="min-width:62px">${x.label}</span>
+      <div class="ft-m-right" style="flex:1">
+        <span class="ft-m-val" style="color:${col};min-width:70px">${pf(x.value)}</span>
+        <div class="ft-m-bar-bg"><div class="ft-m-bar-fill" style="width:${w}%;background:${col||'var(--border)'}"></div></div>
+      </div></div>`;
+  }).join('');
+
+  const etfMetrics = [
+    { label:'殖利率',     value: d.divYield      ? d.divYield.toFixed(2)+'%'    : 'N/A' },
+    { label:'費用率',     value: e.expenseRatio   ? e.expenseRatio.toFixed(2)+'%': 'N/A' },
+    { label:'資產規模',   value: e.totalAssets    ? e.totalAssets.toFixed(0)+' 億元': 'N/A' },
+    { label:'Beta 係數',  value: d.beta           ? d.beta.toFixed(2)             : 'N/A' },
+    { label:'52週高',     value: d.week52High     ? d.week52High+' 元'            : 'N/A' },
+    { label:'52週低',     value: d.week52Low      ? d.week52Low+' 元'             : 'N/A' },
+  ];
+  const metricsHtml = etfMetrics.map(m =>
+    `<div class="ft-metric"><span class="ft-m-label">${m.label}</span><span class="ft-m-val">${m.value}</span></div>`
+  ).join('');
+
+  setHTML('finTrendsPanel', `
+    <div class="ft-layout">
+      <div class="ft-section">
+        <div class="ft-section-title">各期間報酬率</div>
+        ${barRows || '<div class="no-data">資料暫無</div>'}
+      </div>
+      <div class="ft-section">
+        <div class="ft-section-title">ETF 關鍵指標</div>
+        ${metricsHtml}
+      </div>
+    </div>`);
 }
 
 // ── Tech Stats ────────────────────────────────────────────────────────
@@ -1529,6 +1620,7 @@ function renderKeyLevels(d) {
 
 // ── Analyst ────────────────────────────────────────────────────────────
 function renderAnalyst(d) {
+  if (d.isEtf) { renderAnalystETF(d); return; }
   const rec = recLabel(d.recMean);
   const up  = d.analystTarget && d.price ? ((d.analystTarget/d.price-1)*100).toFixed(1) : null;
   setHTML('analystSection', `<div class="analyst-wrap">
@@ -1541,6 +1633,35 @@ function renderAnalyst(d) {
       ${up ? `<div class="analyst-upside ${parseFloat(up)>=0?'green':'red'}">潛在空間：${parseFloat(up)>=0?'+':''}${up}%</div>` : ''}
     ` : '<div class="no-data">分析師資料暫無</div>'}
   </div>`);
+}
+
+function renderAnalystETF(d) {
+  const e = d.etfData || {};
+  const nav  = e.nav  || 0;
+  const prem = e.premium != null ? e.premium : 0;
+  const from52H = d.week52High ? (((d.price/d.week52High)-1)*100).toFixed(1) : null;
+  const from52L = d.week52Low  ? (((d.price/d.week52Low )-1)*100).toFixed(1) : null;
+  const rsi = d.rsi;
+  let techLabel, techColor;
+  if      (d.price > d.ma5 && d.ma5 > d.ma20 && d.ma20 > d.ma60) { techLabel='多頭完美排列'; techColor='var(--green)'; }
+  else if (d.price > d.ma20 && d.ma20 > d.ma60)                   { techLabel='中長期偏多';   techColor='var(--green)'; }
+  else if (d.price < d.ma60)                                        { techLabel='空頭偏弱';     techColor='var(--red)'; }
+  else                                                               { techLabel='盤整震盪';     techColor='var(--yellow)'; }
+  const rsiLabel = rsi>70?'超買謹慎':rsi<30?'超賣反彈':'動能正常';
+  const rsiColor = rsi>70?'var(--red)':rsi<30?'var(--green)':'var(--text)';
+  const premColor = prem > 2 ?'var(--red)': prem < -2 ?'var(--green)':'var(--text)';
+  const row = (label, val, color='') =>
+    `<div class="analyst-row"><span class="ar-l">${label}</span><span class="ar-v" style="color:${color}">${val}</span></div>`;
+  setHTML('analystSection', `
+    <div class="analyst-wrap">
+      <div class="analyst-rec" style="background:${techColor}22;color:${techColor};border:1px solid ${techColor}33">${techLabel}</div>
+      <div class="analyst-count">ETF 技術面評估</div>
+      ${row('RSI(14)',    `${rsi.toFixed(0)} — ${rsiLabel}`,   rsiColor)}
+      ${nav > 0 ? row('NAV 溢折價', `${prem>=0?'+':''}${prem.toFixed(2)}%`, premColor) : ''}
+      ${from52H != null ? row('距52週高', `${from52H}%`, parseFloat(from52H)<-20?'var(--red)':'var(--text-mid)') : ''}
+      ${from52L != null ? row('距52週低', `+${from52L}%`, 'var(--green)') : ''}
+      ${row('成交量比', `${d.volRatio.toFixed(2)}x 均量`, d.volRatio>=2?'var(--red)':d.volRatio>=1?'var(--green)':'var(--text-dim)')}
+    </div>`);
 }
 
 // ── Bollinger ──────────────────────────────────────────────────────────
@@ -1584,6 +1705,7 @@ function renderVolume(d) {
 // ── Quarterly ──────────────────────────────────────────────────────────
 function renderQuarterly(d) {
   const q = d.quarterly;
+  if (d && d.isEtf) { setHTML('quarterlyPanel','<div class="no-data" style="font-size:0.74rem">ETF 無季度財報，配息歷史請見上方 ETF 完整分析</div>'); return; }
   if (!q || q.length === 0) { setHTML('quarterlyPanel','<div class="no-data">季度財務資料暫無</div>'); return; }
   const rows = q.map((item,i) => {
     const prev = q[i+1];
