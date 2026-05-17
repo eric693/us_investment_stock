@@ -1244,6 +1244,26 @@ function renderIndicatorBar(d) {
   `);
 }
 
+// ── High/Low marker traces ───────────────────────────────────────────
+function hlMarkers(xs, highs, lows) {
+  let hiIdx = 0, loIdx = 0;
+  highs.forEach((v, i) => { if (v != null && v > (highs[hiIdx]||0)) hiIdx = i; });
+  lows.forEach((v, i)  => { if (v != null && (lows[loIdx]==null || v < lows[loIdx])) loIdx = i; });
+  const hiVal = highs[hiIdx], loVal = lows[loIdx];
+  return [
+    { type:'scatter', mode:'markers+text', x:[xs[hiIdx]], y:[hiVal],
+      marker:{symbol:'triangle-down', color:'#ff9900', size:11, line:{color:'#cc7700',width:1}},
+      text:[hiVal!=null ? hiVal.toFixed(2) : ''], textposition:'top center',
+      textfont:{color:'#ff9900', size:10, family:'monospace'},
+      name:'最高', showlegend:false, hoverinfo:'skip' },
+    { type:'scatter', mode:'markers+text', x:[xs[loIdx]], y:[loVal],
+      marker:{symbol:'triangle-up', color:'#00d68f', size:11, line:{color:'#009960',width:1}},
+      text:[loVal!=null ? loVal.toFixed(2) : ''], textposition:'bottom center',
+      textfont:{color:'#00d68f', size:10, family:'monospace'},
+      name:'最低', showlegend:false, hoverinfo:'skip' },
+  ];
+}
+
 // ── Charts ──────────────────────────────────────────────────────────
 function renderCharts(d) {
   renderIndicatorBar(d);
@@ -1282,6 +1302,7 @@ function renderCharts(d) {
     { type:'scatter', mode:'lines', x:dates, y:ma1arr, name:`MA${maSettings.m1}`, line:{color:'#ffa000',width:1.5}, connectgaps:false },
     { type:'scatter', mode:'lines', x:dates, y:ma2arr, name:`MA${maSettings.m2}`, line:{color:'#d94fff',width:1.5}, connectgaps:false },
     { type:'scatter', mode:'lines', x:dates, y:ma3arr, name:`MA${maSettings.m3}`, line:{color:'#36c6ff',width:1.5}, connectgaps:false },
+    ...hlMarkers(dates, d.ohlcv.high, d.ohlcv.low),
   ], {
     paper_bgcolor:BG, plot_bgcolor:BG, font:{color:'#6888a0',size:11},
     showlegend:true,
@@ -2071,6 +2092,7 @@ function renderIntradayCharts(d) {
     { type:'scatter', mode:'lines', x:times, y:ma1, name:`MA${m1}`, line:{color:'#ffa000',width:1.5}, connectgaps:false },
     { type:'scatter', mode:'lines', x:times, y:ma2, name:`MA${m2}`, line:{color:'#d94fff',width:1.5}, connectgaps:false },
     { type:'scatter', mode:'lines', x:times, y:ma3, name:`MA${m3}`, line:{color:'#36c6ff',width:1.5}, connectgaps:false },
+    ...hlMarkers(times, d.ohlcv.high, d.ohlcv.low),
   ], {
     paper_bgcolor:BG, plot_bgcolor:BG, font:{color:'#6888a0',size:11},
     showlegend:true,
