@@ -1036,6 +1036,58 @@ def _fetch_gnews(query, max_results=10):
         return []
 
 
+@app.route('/api/tw/intraday/<ticker>')
+def get_tw_intraday(ticker):
+    ticker = tw_normalize(ticker)
+    cached = _cache_get(f'tw_intra:{ticker}')
+    if cached: return jsonify(cached)
+    try:
+        stock = yf.Ticker(ticker)
+        hist  = stock.history(period='1d', interval='5m')
+
+        # Fallback .TWO
+        if hist.empty and ticker.endswith('.TW'):
+            alt   = ticker.replace('.TW', '.TWO')
+            hist  = yf.Ticker(alt).history(period='1d', interval='5m')
+
+        if hist.empty:
+            return jsonify({'error': '暫無當日分鐘資料'}), 404
+
+        # Keep only the latest trading date
+        last_date = hist.index.date[-1]
+        hist = hist[hist.index.date == last_date]
+
+        # Format times as HH:MM (Asia/Taipei)
+        times  = hist.index.tz_convert('Asia/Taipei').strftime('%H:%M').tolist()
+
+        def clean_list(lst):
+            res = []
+            for x in lst:
+                try:
+                    f = float(x)
+                    res.append(None if (np.isnan(f) or np.isinf(f) or f == 0) else round(f, 4))
+                except:
+                    res.append(None)
+            return res
+
+        closes  = clean_list(hist['Close'].tolist())
+        opens   = clean_list(hist['Open'].tolist())
+        highs   = clean_list(hist['High'].tolist())
+        lows    = clean_list(hist['Low'].tolist())
+        volumes = [safe_int(x) for x in hist['Volume'].tolist()]
+
+        result = {
+            'ticker': ticker,
+            'date':   str(last_date),
+            'times':  times,
+            'ohlcv':  {'open': opens, 'high': highs, 'low': lows, 'close': closes, 'volume': volumes},
+        }
+        _cache_set(f'tw_intra:{ticker}', result, ttl=60)
+        return jsonify(result)
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
 def _infer_etf_methodology(name, sectors, holdings):
     n = (name or '').lower()
     if 'top 50' in n or '台灣50' in n:

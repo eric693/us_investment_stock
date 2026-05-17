@@ -384,6 +384,7 @@
         <div class="ma-pills" id="maPills"></div>
         <div style="display:flex;align-items:center;gap:6px">
           <div class="period-tabs">
+            <button class="ptab" data-period="1D" onclick="changePeriod('1D')">1D</button>
             <button class="ptab" data-period="5D" onclick="changePeriod('5D')">5D</button>
             <button class="ptab" data-period="週" onclick="changePeriod('週')">週</button>
             <button class="ptab active" data-period="1M" onclick="changePeriod('1M')">1M</button>
@@ -863,6 +864,10 @@ function changePeriod(period) {
   if (!currentData) return;
   currentPeriod = period;
   document.querySelectorAll('.ptab').forEach(b => b.classList.toggle('active', b.dataset.period === period));
+  if (period === '1D') {
+    loadIntraday(currentData.ticker);
+    return;
+  }
   if (period === '週') {
     renderCharts(resampleWeekly(currentData));
   } else {
@@ -1887,6 +1892,146 @@ async function loadNews(ticker) {
   }
   clearInterval(_newsTimer);
   _newsTimer = setInterval(() => { if(currentData) loadNews(currentData.ticker); }, 15*60*1000);
+}
+
+// ── Intraday (1D) ────────────────────────────────────────────────────
+async function loadIntraday(ticker) {
+  setHTML('indicatorBar', '<div style="color:var(--text-dim);font-size:0.8rem;padding:6px 0">日內資料載入中...</div>');
+  try {
+    const r = await fetch('/api/tw/intraday/' + encodeURIComponent(ticker));
+    const d = await r.json();
+    if (d.error) {
+      setHTML('indicatorBar', `<div style="color:var(--red);font-size:0.8rem">${d.error}</div>`);
+      return;
+    }
+    renderIntradayCharts(d);
+  } catch(e) {
+    setHTML('indicatorBar', '<div style="color:var(--red);font-size:0.8rem">載入失敗</div>');
+  }
+}
+
+function renderIntradayCharts(d) {
+  const times  = d.times;
+  const closes = d.ohlcv.close;
+  const BG = '#0c1220', GRID = '#121e30';
+
+  // Date label for indicator bar
+  setHTML('indicatorBar',
+    `<div class="ib-item"><div class="ib-group">` +
+    `<span class="ib-tag" style="color:var(--accent)">5分K 日內</span>` +
+    `<span class="ib-kv">${d.date} &nbsp; ${times[0]}–${times[times.length-1]}</span>` +
+    `<span class="ib-kv">${times.length} 根 K 棒</span>` +
+    `</div></div>`
+  );
+
+  // Custom MAs from intraday closes
+  const { m1, m2, m3 } = maSettings;
+  const ma1 = calcMA(closes, m1), ma2 = calcMA(closes, m2), ma3 = calcMA(closes, m3);
+
+  const last = arr => { for(let i=arr.length-1;i>=0;i--) if(arr[i]!=null) return arr[i]; return null; };
+  setHTML('maPills',
+    `<span class="pill ma5">MA${m1}: ${last(ma1)||'--'}</span>` +
+    `<span class="pill ma20">MA${m2}: ${last(ma2)||'--'}</span>` +
+    `<span class="pill ma60">MA${m3}: ${last(ma3)||'--'}</span>` +
+    `<span style="font-size:0.7rem;color:var(--text-dim);padding:2px 6px">5分K線</span>`
+  );
+
+  const volColors = closes.map((c,i) =>
+    i===0 ? 'rgba(100,130,160,0.4)' :
+    c >= closes[i-1] ? 'rgba(232,70,70,0.5)' : 'rgba(0,214,143,0.5)'
+  );
+
+  Plotly.newPlot('priceChart', [
+    { type:'candlestick', name: displayTW(d.ticker),
+      x:times, open:d.ohlcv.open, high:d.ohlcv.high, low:d.ohlcv.low, close:closes,
+      increasing:{line:{color:'#e84646',width:1},fillcolor:'#e84646'},
+      decreasing:{line:{color:'#00d68f',width:1},fillcolor:'#00d68f'}, showlegend:false },
+    { type:'scatter', mode:'lines', x:times, y:ma1, name:`MA${m1}`, line:{color:'#ffa000',width:1.5}, connectgaps:false },
+    { type:'scatter', mode:'lines', x:times, y:ma2, name:`MA${m2}`, line:{color:'#d94fff',width:1.5}, connectgaps:false },
+    { type:'scatter', mode:'lines', x:times, y:ma3, name:`MA${m3}`, line:{color:'#36c6ff',width:1.5}, connectgaps:false },
+  ], {
+    paper_bgcolor:BG, plot_bgcolor:BG, font:{color:'#6888a0',size:11},
+    showlegend:true,
+    legend:{orientation:'h',x:0,y:1.06,bgcolor:'rgba(0,0,0,0)',font:{size:10,color:'#8aaabf'}},
+    margin:{l:60,r:8,t:24,b:4},
+    yaxis:{gridcolor:GRID,zerolinecolor:GRID,tickfont:{color:'#6888a0'},side:'left',autorange:true},
+    xaxis:{rangeslider:{visible:false},gridcolor:GRID,showticklabels:false,type:'category'},
+    hovermode:'x unified',
+  }, {responsive:true,displayModeBar:false});
+
+  Plotly.newPlot('volumeChart', [
+    {type:'bar', x:times, y:d.ohlcv.volume, marker:{color:volColors}, showlegend:false},
+  ], {
+    paper_bgcolor:BG, plot_bgcolor:BG, font:{color:'#6888a0',size:9},
+    margin:{l:60,r:8,t:2,b:22},
+    yaxis:{gridcolor:GRID,tickfont:{color:'#6888a0',size:9},side:'left',tickformat:'.2s'},
+    xaxis:{rangeslider:{visible:false},gridcolor:GRID,tickfont:{color:'#6888a0'},type:'category',
+      tickvals:times.filter((_,i)=>i%6===0), ticktext:times.filter((_,i)=>i%6===0)},
+    hovermode:'x unified',
+  }, {responsive:true,displayModeBar:false});
+
+  // MACD from intraday closes
+  const emaF = calcEMA(closes, 12), emaS = calcEMA(closes, 26);
+  const dif  = closes.map((_,i) => emaF[i]!=null&&emaS[i]!=null ? +(emaF[i]-emaS[i]).toFixed(4) : null);
+  const dea  = calcEMA(dif, 9);
+  const hist_macd = dif.map((v,i) => v!=null&&dea[i]!=null ? +(v-dea[i]).toFixed(4) : null);
+  const hc = hist_macd.map(v => v===null?'#333':(v>=0?'rgba(232,70,70,0.8)':'rgba(0,214,143,0.8)'));
+  const lastDif = last(dif), lastDea = last(dea), lastH = last(hist_macd);
+  const mc = (lastH||0) >= 0 ? '#e84646' : '#00d68f';
+  setHTML('macdBar',
+    `<span style="color:#3d8ef8">DIF: ${lastDif!=null?lastDif.toFixed(2):'--'}</span>` +
+    `<span style="color:#e8a020">DEA: ${lastDea!=null?lastDea.toFixed(2):'--'}</span>` +
+    `<span style="color:${mc}">MACD: ${lastH!=null?lastH.toFixed(2):'--'}</span>`
+  );
+  Plotly.newPlot('macdChart', [
+    {type:'bar',     x:times, y:hist_macd, marker:{color:hc}},
+    {type:'scatter', mode:'lines', x:times, y:dif, name:'DIF', line:{color:'#3d8ef8',width:1.5}, connectgaps:false},
+    {type:'scatter', mode:'lines', x:times, y:dea, name:'DEA', line:{color:'#e8a020',width:1.5}, connectgaps:false},
+  ], {
+    paper_bgcolor:BG, plot_bgcolor:BG, font:{color:'#6888a0',size:10},
+    showlegend:true, legend:{orientation:'h',x:0,y:1.18,bgcolor:'rgba(0,0,0,0)',font:{size:10,color:'#8aaabf'}},
+    margin:{l:60,r:8,t:8,b:22},
+    yaxis:{gridcolor:GRID,zerolinecolor:'#1e3050',tickfont:{color:'#6888a0'},side:'left'},
+    xaxis:{rangeslider:{visible:false},gridcolor:GRID,tickfont:{color:'#6888a0'},type:'category',
+      tickvals:times.filter((_,i)=>i%6===0), ticktext:times.filter((_,i)=>i%6===0)},
+    hovermode:'x unified',
+  }, {responsive:true,displayModeBar:false});
+
+  // RSI from intraday closes
+  const rsiArr = calcRSIArr(closes, 14);
+  Plotly.newPlot('rsiChart', [
+    {type:'scatter', mode:'lines', x:times, y:rsiArr, name:'RSI(14)', line:{color:'#f0b429',width:1.5}, connectgaps:false},
+    {type:'scatter', mode:'lines', x:times, y:Array(times.length).fill(70), line:{color:'rgba(232,70,70,0.5)',width:1,dash:'dash'}, showlegend:false, hoverinfo:'skip'},
+    {type:'scatter', mode:'lines', x:times, y:Array(times.length).fill(30), line:{color:'rgba(0,214,143,0.5)',width:1,dash:'dash'}, showlegend:false, hoverinfo:'skip'},
+  ], {
+    paper_bgcolor:BG, plot_bgcolor:BG, font:{color:'#6888a0',size:10},
+    showlegend:true, legend:{x:0,y:1.18,bgcolor:'rgba(0,0,0,0)',font:{size:10,color:'#8aaabf'}},
+    margin:{l:60,r:8,t:4,b:28},
+    yaxis:{gridcolor:GRID,tickfont:{color:'#6888a0'},range:[0,100],tickvals:[0,30,50,70,100],side:'left'},
+    xaxis:{rangeslider:{visible:false},gridcolor:GRID,tickfont:{color:'#6888a0'},type:'category',
+      tickvals:times.filter((_,i)=>i%6===0), ticktext:times.filter((_,i)=>i%6===0)},
+    hovermode:'x unified',
+    shapes:[
+      {type:'line',xref:'paper',x0:0,x1:1,yref:'y',y0:70,y1:70,line:{color:'rgba(232,70,70,0.25)',width:1}},
+      {type:'line',xref:'paper',x0:0,x1:1,yref:'y',y0:30,y1:30,line:{color:'rgba(0,214,143,0.25)',width:1}},
+    ],
+  }, {responsive:true,displayModeBar:false});
+  requestAnimationFrame(() => Plotly.Plots.resize('rsiChart'));
+}
+
+function calcRSIArr(closes, period=14) {
+  const result = new Array(closes.length).fill(null);
+  for (let i = period; i < closes.length; i++) {
+    let g=0, l=0;
+    for (let j=i-period+1; j<=i; j++) {
+      if (closes[j]==null||closes[j-1]==null) continue;
+      const diff = closes[j]-closes[j-1];
+      if (diff>=0) g+=diff; else l-=diff;
+    }
+    g/=period; l/=period;
+    result[i] = l===0 ? 100 : +(100-100/(1+g/l)).toFixed(2);
+  }
+  return result;
 }
 
 // ── TradingView Widget ────────────────────────────────────────────────
