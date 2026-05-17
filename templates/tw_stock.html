@@ -17,6 +17,13 @@
 /* ── Market Switch ──────────────────────────────────────────────── */
 .market-switch { color:var(--gold); font-size:0.78rem; font-weight:700; text-decoration:none; padding:4px 12px; border:1px solid var(--gold)30; border-radius:6px; white-space:nowrap; transition:all .15s; }
 .market-switch:hover { background:var(--gold)15; }
+/* ── TradingView Card ──────────────────────────────────────────── */
+.tv-header-row { display:flex; justify-content:space-between; align-items:center; margin-bottom:6px; }
+.tv-interval-tabs { display:flex; gap:4px; }
+.tv-itab { padding:3px 10px; border-radius:5px; cursor:pointer; border:none; background:#0e1828; color:var(--text-dim); font-size:0.74rem; font-weight:700; transition:all .15s; }
+.tv-itab.active, .tv-itab:hover { background:var(--accent); color:#fff; }
+.tv-hint { font-size:0.72rem; color:var(--text-dim); margin-bottom:2px; }
+.tv-credit { font-size:0.7rem; color:var(--text-dim); text-align:right; margin-top:6px; }
 /* ── MA Settings Panel ─────────────────────────────────────────── */
 .ma-cfg-btn { background:transparent; border:1px solid var(--border); color:var(--text-dim); padding:2px 7px; border-radius:5px; cursor:pointer; font-size:0.75rem; transition:all .15s; line-height:1.6; }
 .ma-cfg-btn:hover { border-color:var(--accent); color:var(--accent); }
@@ -463,6 +470,23 @@
     <div id="newsContainer"><div class="news-loading">新聞載入中...</div></div>
   </div>
 
+  <!-- 11. TradingView Chart -->
+  <div class="card" id="tvCard">
+    <div class="tv-header-row">
+      <div class="card-title" style="margin:0;border:none;padding:0">TradingView 圖表 &amp; 策略</div>
+      <div class="tv-interval-tabs">
+        <button class="tv-itab active" data-iv="D"  onclick="setTVInterval('D')">日線</button>
+        <button class="tv-itab"        data-iv="W"  onclick="setTVInterval('W')">週線</button>
+        <button class="tv-itab"        data-iv="M"  onclick="setTVInterval('M')">月線</button>
+        <button class="tv-itab"        data-iv="60" onclick="setTVInterval('60')">60分</button>
+        <button class="tv-itab"        data-iv="15" onclick="setTVInterval('15')">15分</button>
+      </div>
+    </div>
+    <div class="tv-hint">點選圖表右上方「指標」可套用內建策略（如 RSI Strategy、Supertrend 等）</div>
+    <div id="tv_chart_container" style="height:560px; margin-top:10px"></div>
+    <div class="tv-credit">Powered by <a href="https://www.tradingview.com" target="_blank" rel="noopener" style="color:var(--accent)">TradingView</a></div>
+  </div>
+
   <div class="footer-note">本分析為技術指標自動化計算，僅供參考，投資有風險，請謹慎評估</div>
 
 </div><!-- /#dashboard -->
@@ -771,6 +795,7 @@ async function loadStock(raw) {
     updateAlertBadge();
     loadNews(d.ticker);
     loadFundamentals(d.ticker, d);
+    initTVWidget(d.ticker);
   } catch(e) {
     showError('網路錯誤，請稍後再試：' + e.message);
   }
@@ -1669,6 +1694,67 @@ async function loadNews(ticker) {
   }
   clearInterval(_newsTimer);
   _newsTimer = setInterval(() => { if(currentData) loadNews(currentData.ticker); }, 15*60*1000);
+}
+
+// ── TradingView Widget ────────────────────────────────────────────────
+let _tvScriptLoaded = false;
+let _tvCurrentInterval = 'D';
+let _tvCurrentSymbol   = '';
+
+function toTVSymbol(ticker) {
+  const code = ticker.replace('.TWO','').replace('.TW','');
+  return ticker.endsWith('.TWO') ? `TPEX:${code}` : `TWSE:${code}`;
+}
+
+function loadTVScript(cb) {
+  if (_tvScriptLoaded) { cb(); return; }
+  if (document.getElementById('tv-script')) {
+    document.getElementById('tv-script').addEventListener('load', () => { _tvScriptLoaded=true; cb(); });
+    return;
+  }
+  const s = document.createElement('script');
+  s.id = 'tv-script';
+  s.src = 'https://s3.tradingview.com/tv.js';
+  s.onload = () => { _tvScriptLoaded = true; cb(); };
+  document.head.appendChild(s);
+}
+
+function createTVWidget(symbol, interval) {
+  const container = $('tv_chart_container');
+  container.innerHTML = '';
+  const innerDiv = document.createElement('div');
+  innerDiv.id = 'tv_inner_' + Date.now();
+  container.appendChild(innerDiv);
+  new TradingView.widget({
+    container_id: innerDiv.id,
+    width: '100%',
+    height: 560,
+    autosize: false,
+    symbol: symbol,
+    interval: interval,
+    timezone: 'Asia/Taipei',
+    theme: 'dark',
+    style: '1',
+    locale: 'zh_TW',
+    toolbar_bg: '#0c1220',
+    enable_publishing: false,
+    allow_symbol_change: true,
+    hide_side_toolbar: false,
+    withdateranges: true,
+    save_image: false,
+    studies: [],
+  });
+}
+
+function initTVWidget(ticker) {
+  _tvCurrentSymbol = toTVSymbol(ticker);
+  loadTVScript(() => createTVWidget(_tvCurrentSymbol, _tvCurrentInterval));
+}
+
+function setTVInterval(iv) {
+  _tvCurrentInterval = iv;
+  document.querySelectorAll('.tv-itab').forEach(b => b.classList.toggle('active', b.dataset.iv === iv));
+  if (_tvCurrentSymbol) createTVWidget(_tvCurrentSymbol, iv);
 }
 </script>
 
