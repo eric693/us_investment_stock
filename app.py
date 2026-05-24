@@ -4,12 +4,22 @@ import pandas as pd
 import numpy as np
 import warnings
 import time
+import logging
+import re
 import requests as _requests
 from xml.etree import ElementTree as ET
 import urllib.parse
 warnings.filterwarnings('ignore')
 
+logging.basicConfig(level=logging.ERROR)
+logger = logging.getLogger(__name__)
+
 app = Flask(__name__)
+
+_TICKER_RE = re.compile(r'^[A-Z0-9\.\-\^]{1,20}$')
+
+def _valid_ticker(t):
+    return bool(_TICKER_RE.match(t))
 
 # ── TTL Cache ─────────────────────────────────────────────────────────
 _CACHE = {}
@@ -586,6 +596,8 @@ def get_market():
 @app.route('/api/fundamentals/<ticker>')
 def get_fundamentals(ticker):
     ticker = ticker.upper().strip()
+    if not _valid_ticker(ticker):
+        return jsonify({'error': '無效的股票代碼格式'}), 400
     cached = _cache_get(f'fund:{ticker}')
     if cached: return jsonify(cached)
     try:
@@ -675,13 +687,15 @@ def get_fundamentals(ticker):
         _cache_set(f'fund:{ticker}', result)
         return jsonify(result)
     except Exception as e:
-        import traceback; traceback.print_exc()
-        return jsonify({'error': str(e)}), 500
+        logger.exception('API error')
+        return jsonify({'error': '資料載入失敗，請稍後再試'}), 500
 
 
 @app.route('/api/stock/<ticker>')
 def get_stock(ticker):
     ticker = ticker.upper().strip()
+    if not _valid_ticker(ticker):
+        return jsonify({'error': '無效的股票代碼格式'}), 400
     cached = _cache_get(f'stock:{ticker}')
     if cached: return jsonify(cached)
     try:
@@ -887,13 +901,15 @@ def get_stock(ticker):
         _cache_set(f'stock:{ticker}', result)
         return jsonify(result)
     except Exception as e:
-        import traceback; traceback.print_exc()
-        return jsonify({'error': str(e)}), 500
+        logger.exception('API error')
+        return jsonify({'error': '資料載入失敗，請稍後再試'}), 500
 
 
 @app.route('/api/news/<ticker>')
 def get_news(ticker):
     ticker = ticker.upper().strip()
+    if not _valid_ticker(ticker):
+        return jsonify({'ticker': ticker, 'articles': []}), 400
     cached = _cache_get(f'news:{ticker}')
     if cached: return jsonify(cached)
     try:
@@ -919,10 +935,16 @@ def get_news(ticker):
         _cache_set(f'news:{ticker}', result, ttl=180)
         return jsonify(result)
     except Exception as e:
-        return jsonify({'ticker': ticker, 'articles': [], 'error': str(e)})
+        logger.exception('news API error')
+        return jsonify({'ticker': ticker, 'articles': []})
 
 
 # ── Taiwan Helpers ────────────────────────────────────────────────────
+_TW_TICKER_RE = re.compile(r'^[0-9A-Z]{1,8}(\.TW|\.TWO)?$')
+
+def _valid_tw_ticker(raw):
+    return bool(_TW_TICKER_RE.match(raw.strip().upper()))
+
 def tw_normalize(raw):
     raw = raw.strip().upper()
     if raw.endswith('.TW') or raw.endswith('.TWO'):
@@ -1201,6 +1223,8 @@ def get_tw_market():
 
 @app.route('/api/tw/stock/<ticker>')
 def get_tw_stock(ticker):
+    if not _valid_tw_ticker(ticker):
+        return jsonify({'error': '無效的股票代碼格式'}), 400
     ticker = tw_normalize(ticker)
     cached = _cache_get(f'tw_stock:{ticker}')
     if cached: return jsonify(cached)
@@ -1410,8 +1434,8 @@ def get_tw_stock(ticker):
         _cache_set(f'tw_stock:{ticker}', result)
         return jsonify(result)
     except Exception as e:
-        import traceback; traceback.print_exc()
-        return jsonify({'error': str(e)}), 500
+        logger.exception('API error')
+        return jsonify({'error': '資料載入失敗，請稍後再試'}), 500
 
 
 def _fetch_gnews(query, max_results=10):
@@ -1440,6 +1464,8 @@ def _fetch_gnews(query, max_results=10):
 
 @app.route('/api/tw/intraday/<ticker>')
 def get_tw_intraday(ticker):
+    if not _valid_tw_ticker(ticker):
+        return jsonify({'error': '無效的股票代碼格式'}), 400
     ticker = tw_normalize(ticker)
     cached = _cache_get(f'tw_intra:{ticker}')
     if cached: return jsonify(cached)
@@ -1556,6 +1582,8 @@ def _gen_etf_entry(price, nav, rsi, ma20, ma60, div_yield, is_lev):
 
 @app.route('/api/tw/etf_detail/<ticker>')
 def get_tw_etf_detail(ticker):
+    if not _valid_tw_ticker(ticker):
+        return jsonify({'error': '無效的股票代碼格式'}), 400
     ticker = tw_normalize(ticker)
     cached = _cache_get(f'tw_etf_detail:{ticker}')
     if cached: return jsonify(cached)
@@ -1655,6 +1683,8 @@ def get_tw_etf_detail(ticker):
 
 @app.route('/api/tw/news/<ticker>')
 def get_tw_news(ticker):
+    if not _valid_tw_ticker(ticker):
+        return jsonify({'ticker': ticker, 'articles': []}), 400
     ticker = tw_normalize(ticker)
     cached = _cache_get(f'tw_news:{ticker}')
     if cached: return jsonify(cached)
@@ -1692,11 +1722,14 @@ def get_tw_news(ticker):
         _cache_set(f'tw_news:{ticker}', result, ttl=180)
         return jsonify(result)
     except Exception as e:
-        return jsonify({'ticker': ticker, 'articles': [], 'error': str(e)})
+        logger.exception('tw news API error')
+        return jsonify({'ticker': ticker, 'articles': []})
 
 
 @app.route('/api/tw/fundamentals/<ticker>')
 def get_tw_fundamentals(ticker):
+    if not _valid_tw_ticker(ticker):
+        return jsonify({'error': '無效的股票代碼格式'}), 400
     ticker = tw_normalize(ticker)
     cached = _cache_get(f'tw_fund:{ticker}')
     if cached: return jsonify(cached)
@@ -1777,8 +1810,8 @@ def get_tw_fundamentals(ticker):
         _cache_set(f'tw_fund:{ticker}', result)
         return jsonify(result)
     except Exception as e:
-        import traceback; traceback.print_exc()
-        return jsonify({'error': str(e)}), 500
+        logger.exception('API error')
+        return jsonify({'error': '資料載入失敗，請稍後再試'}), 500
 
 
 # ── Broker Chips Helpers ───────────────────────────────────────────────
@@ -1856,6 +1889,8 @@ def _fetch_tpex_3insti(stock_no, date_str, hdrs):
 
 @app.route('/api/tw/broker_chips/<ticker>')
 def get_tw_broker_chips(ticker):
+    if not _valid_tw_ticker(ticker):
+        return jsonify({'hasData': False, 'days': [], 'aggregate': {}}), 400
     raw      = tw_normalize(ticker)
     stock_no = raw.split('.')[0]
     is_otc   = raw.endswith('.TWO')
