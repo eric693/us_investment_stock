@@ -2161,5 +2161,185 @@ def get_tw_tick_stats(ticker):
         return jsonify({'error': str(e)}), 500
 
 
+@app.route('/api/tw/screener')
+def get_tw_screener():
+    """智慧選股：掃描熱門台股清單，回傳符合技術面條件的股票"""
+    cache_key = 'tw_screener'
+    cached = _cache_get(cache_key)
+    if cached: return jsonify(cached)
+
+    # Watchlist to scan
+    SCAN_LIST = [
+        '2330.TW','2317.TW','2454.TW','2382.TW','2308.TW','2303.TW',
+        '2881.TW','2882.TW','2891.TW','2892.TW','2884.TW',
+        '2412.TW','4938.TW','2395.TW','3711.TW','6669.TW','2379.TW',
+        '2615.TW','2609.TW','2603.TW','3008.TW','2207.TW','2474.TW',
+    ]
+
+    results = []
+    for ticker in SCAN_LIST:
+        try:
+            stock = yf.Ticker(ticker)
+            hist  = stock.history(period='3mo')
+            if hist is None or len(hist) < 30:
+                continue
+            close  = hist['Close']
+            high   = hist['High']
+            low    = hist['Low']
+            volume = hist['Volume']
+
+            price  = safe_float(close.iloc[-1])
+            prev   = safe_float(close.iloc[-2])
+            chg_pct = round((price - prev) / prev * 100, 2) if prev else 0
+
+            # Indicators
+            ma5  = safe_float(close.rolling(5).mean().iloc[-1])
+            ma20 = safe_float(close.rolling(20).mean().iloc[-1])
+            rsi  = safe_float(calc_rsi(close).iloc[-1])
+            k, d_line = calc_kd(high, low, close)
+            k_val = safe_float(k.iloc[-1])
+            d_val = safe_float(d_line.iloc[-1])
+            avg_vol  = safe_float(volume.rolling(10).mean().iloc[-1])
+            cur_vol  = safe_float(volume.iloc[-1])
+            vol_ratio = round(cur_vol / avg_vol, 1) if avg_vol else 1
+
+            code = ticker.split('.')[0]
+            info = stock.info
+            name = info.get('longName', info.get('shortName', code))[:8]
+
+            # Tag signals
+            signals = []
+            if k_val > d_val and k_val < 80 and rsi < 60:
+                signals.append('KD黃金交叉')
+            if rsi < 30:
+                signals.append('RSI超賣')
+            if price > ma5 > ma20:
+                signals.append('多頭排列')
+            if vol_ratio >= 2.0:
+                signals.append('放量')
+            if chg_pct >= 5:
+                signals.append('強勢漲停')
+
+            results.append({
+                'ticker':   code,
+                'name':     name,
+                'price':    round(price, 2),
+                'chgPct':   chg_pct,
+                'rsi':      round(rsi, 1),
+                'kVal':     round(k_val, 1),
+                'dVal':     round(d_val, 1),
+                'volRatio': vol_ratio,
+                'signals':  signals,
+            })
+        except Exception:
+            continue
+
+    results.sort(key=lambda x: len(x['signals']), reverse=True)
+    result = {'stocks': results, 'scanned': len(SCAN_LIST)}
+    _cache_set(cache_key, result, ttl=600)
+    return jsonify(result)
+
+
+@app.route('/api/tw/sector_heatmap')
+def get_tw_sector_heatmap():
+    """板塊熱力圖：各主要指數今日漲跌"""
+    cache_key = 'tw_sector'
+    cached = _cache_get(cache_key)
+    if cached: return jsonify(cached)
+
+    SECTORS = [
+        {'name':'半導體', 'ticker':'5460.TW'},
+        {'name':'電子', 'ticker':'^TWOII'},
+        {'name':'金融', 'ticker':'0056.TW'},
+        {'name':'台積電', 'ticker':'2330.TW'},
+        {'name':'鴻海', 'ticker':'2317.TW'},
+        {'name':'聯發科', 'ticker':'2454.TW'},
+        {'name':'台達電', 'ticker':'2308.TW'},
+        {'name':'中華電', 'ticker':'2412.TW'},
+        {'name':'國泰金', 'ticker':'2882.TW'},
+        {'name':'富邦金', 'ticker':'2881.TW'},
+        {'name':'廣達', 'ticker':'2382.TW'},
+        {'name':'台塑', 'ticker':'1301.TW'},
+        {'name':'中鋼', 'ticker':'2002.TW'},
+        {'name':'長榮', 'ticker':'2603.TW'},
+    ]
+
+    stocks = []
+    for s in SECTORS:
+        try:
+            info = yf.Ticker(s['ticker']).info
+            price = safe_float(info.get('regularMarketPrice') or info.get('currentPrice', 0))
+            prev  = safe_float(info.get('regularMarketPreviousClose') or info.get('previousClose', price))
+            chg   = round((price - prev) / prev * 100, 2) if prev else 0
+            vol   = safe_int(info.get('regularMarketVolume', 0))
+            stocks.append({'name': s['name'], 'ticker': s['ticker'].replace('.TW',''), 'price': round(price,2), 'chgPct': chg, 'volume': vol})
+        except Exception:
+            continue
+
+    result = {'sectors': stocks}
+    _cache_set(cache_key, result, ttl=120)
+    return jsonify(result)
+
+
+@app.route('/api/tw/peers/<ticker>')
+def get_tw_peers(ticker):
+    """相關個股：同產業近20日報酬對比"""
+    if not _valid_tw_ticker(ticker):
+        return jsonify({'error': '無效代碼'}), 400
+    raw = tw_normalize(ticker)
+    cache_key = f'tw_peers:{raw}'
+    cached = _cache_get(cache_key)
+    if cached: return jsonify(cached)
+
+    PEER_GROUPS = {
+        # 半導體
+        '2330': ['2454','2303','3711','2379','6669','2337'],
+        '2454': ['2330','2303','3711','6669','2337','2379'],
+        '2303': ['2330','2454','3711','2337','2379','6669'],
+        # 電子代工
+        '2317': ['2382','2357','3231','2354','2353'],
+        '2382': ['2317','2357','3231','2354','2353'],
+        # 金融
+        '2881': ['2882','2891','2892','2884','2886'],
+        '2882': ['2881','2891','2892','2884','2886'],
+        # 航運
+        '2603': ['2615','2609','2610','5880'],
+    }
+    stock_no = raw.split('.')[0]
+    peers = PEER_GROUPS.get(stock_no, [])
+    if not peers:
+        # fallback: get sector peers from yfinance
+        try:
+            info = yf.Ticker(raw).info
+            # can't get peers from yfinance easily, return empty
+        except Exception:
+            pass
+        return jsonify({'peers': [], 'self': stock_no})
+
+    all_tickers = [raw] + [f'{p}.TW' for p in peers]
+    results = []
+    for t in all_tickers:
+        try:
+            hist = yf.Ticker(t).history(period='1mo')
+            if hist is None or len(hist) < 5:
+                continue
+            close = hist['Close']
+            base  = safe_float(close.iloc[0])
+            cur   = safe_float(close.iloc[-1])
+            ret20 = round((cur / base - 1) * 100, 2) if base else 0
+            ret1  = round((cur / safe_float(close.iloc[-2]) - 1) * 100, 2) if len(close) > 1 else 0
+            code  = t.split('.')[0]
+            info  = yf.Ticker(t).info
+            name  = info.get('shortName', code)[:8]
+            results.append({'ticker': code, 'name': name, 'price': round(cur,2), 'ret1d': ret1, 'ret20d': ret20, 'isSelf': t == raw})
+        except Exception:
+            continue
+
+    results.sort(key=lambda x: x['ret20d'], reverse=True)
+    result = {'peers': results, 'self': stock_no}
+    _cache_set(cache_key, result, ttl=1800)
+    return jsonify(result)
+
+
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5999, debug=False)

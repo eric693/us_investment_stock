@@ -119,6 +119,31 @@
 .ma-cfg-close { padding:5px 10px; background:transparent; border:1px solid var(--border); border-radius:5px; color:var(--text-dim); font-size:0.75rem; cursor:pointer; }
 .ma-cfg-apply:hover { filter:brightness(1.15); }
 .ma-cfg-close:hover { border-color:var(--text-mid); color:var(--text-mid); }
+/* ── Mobile Bottom Nav ────────────────────────────────────────────── */
+.mobile-nav {
+  display: none;
+  position: fixed;
+  bottom: 0; left: 0; right: 0;
+  height: 58px;
+  background: #0c1220;
+  border-top: 1px solid #1a2a3a;
+  z-index: 1000;
+  justify-content: space-around;
+  align-items: center;
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+.mnav-btn {
+  flex: 1;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  background: none; border: none; color: #4a6070; cursor: pointer;
+  padding: 6px 0; gap: 2px; transition: color 0.2s;
+}
+.mnav-btn.active { color: var(--accent); }
+.mnav-icon { font-size: 0.9rem; font-weight: 700; }
+.mnav-label { font-size: 0.62rem; }
+@media (max-width: 640px) {
+  .mobile-nav { display: flex; }
+}
 </style>
 </head>
 <body>
@@ -298,6 +323,26 @@
         </div>
       </div>
     </div>
+    <!-- 板塊熱力圖 -->
+    <div style="margin-top:24px">
+      <div class="stocks-title" style="display:flex;justify-content:space-between;align-items:center">
+        <span>板塊漲跌</span>
+        <span id="sectorUpdateTime" style="font-size:0.68rem;color:var(--text-dim)"></span>
+      </div>
+      <div id="sectorPanel" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(90px,1fr));gap:6px;margin-top:8px">
+        <div style="color:var(--text-dim);font-size:0.75rem;padding:8px">載入中...</div>
+      </div>
+    </div>
+    <!-- 智慧選股 -->
+    <div style="margin-top:24px">
+      <div class="stocks-title" style="display:flex;justify-content:space-between;align-items:center">
+        <span>智慧選股信號</span>
+        <button onclick="runScreener()" style="background:var(--accent);border:none;color:#fff;padding:4px 12px;border-radius:6px;font-size:0.75rem;cursor:pointer">掃描</button>
+      </div>
+      <div id="screenerPanel" style="margin-top:8px">
+        <div style="color:var(--text-dim);font-size:0.75rem;padding:8px">點「掃描」自動偵測技術訊號</div>
+      </div>
+    </div>
   </div>
 </div>
 
@@ -359,6 +404,18 @@
         <div class="sg-item"><span class="sg-l">市值</span><span class="sg-v"       id="sMktCap"></span></div>
         <div class="sg-item"><span class="sg-l">Beta</span><span class="sg-v"       id="sBeta"></span></div>
         <div class="sg-item"><span class="sg-l">殖利率</span><span class="sg-v"     id="sDiv"></span></div>
+      </div>
+      <!-- 52週位置進度條 -->
+      <div id="week52Bar" style="margin-top:8px;display:none">
+        <div style="display:flex;justify-content:space-between;font-size:0.7rem;color:var(--text-dim);margin-bottom:3px">
+          <span>52W低 <span id="w52Low" style="color:var(--green)"></span></span>
+          <span id="w52Pos" style="color:var(--accent);font-weight:600"></span>
+          <span>52W高 <span id="w52High" style="color:var(--red)"></span></span>
+        </div>
+        <div style="background:#1a2a3a;border-radius:4px;height:8px;position:relative">
+          <div id="w52Fill" style="height:100%;border-radius:4px;background:linear-gradient(to right,#00d68f,#ffa000,#e84646);transition:width 0.4s"></div>
+          <div id="w52Dot"  style="position:absolute;top:-3px;width:14px;height:14px;border-radius:50%;background:#fff;border:2px solid var(--accent);transform:translateX(-50%);transition:left 0.4s"></div>
+        </div>
       </div>
     </div>
   </div>
@@ -573,6 +630,12 @@
     </div>
   </div>
 
+  <!-- 9b. 相關個股比較 -->
+  <div class="card" id="peersCard">
+    <div class="card-title">同產業表現比較（近20日）</div>
+    <div id="peersPanel"><div class="mini-loading">載入中...</div></div>
+  </div>
+
   <!-- 10. News -->
   <div class="card" id="newsCard">
     <div class="news-header">
@@ -604,9 +667,28 @@
     <div class="tv-credit">Powered by <a href="https://www.tradingview.com" target="_blank" rel="noopener" style="color:var(--accent)">TradingView</a></div>
   </div>
 
-  <div class="footer-note">本分析為技術指標自動化計算，僅供參考，投資有風險，請謹慎評估</div>
+  <div class="footer-note" style="padding-bottom:70px">本分析為技術指標自動化計算，僅供參考，投資有風險，請謹慎評估</div>
 
 </div><!-- /#dashboard -->
+
+<!-- 手機版底部 Tab 導覽 -->
+<nav id="mobileNav" class="mobile-nav">
+  <button class="mnav-btn active" onclick="mnavGo('chart')"   data-tab="chart">
+    <span class="mnav-icon">K</span><span class="mnav-label">K線</span>
+  </button>
+  <button class="mnav-btn" onclick="mnavGo('chips')"  data-tab="chips">
+    <span class="mnav-icon">籌</span><span class="mnav-label">籌碼</span>
+  </button>
+  <button class="mnav-btn" onclick="mnavGo('fundament')" data-tab="fundament">
+    <span class="mnav-icon">財</span><span class="mnav-label">基本面</span>
+  </button>
+  <button class="mnav-btn" onclick="mnavGo('tv')"     data-tab="tv">
+    <span class="mnav-icon">TV</span><span class="mnav-label">即時圖</span>
+  </button>
+  <button class="mnav-btn" onclick="mnavGo('news')"   data-tab="news">
+    <span class="mnav-icon">新</span><span class="mnav-label">新聞</span>
+  </button>
+</nav>
 
 <!-- Alert Modal -->
 <div id="alertModal" class="modal-overlay hidden" onclick="closeAlertModal()">
@@ -834,6 +916,7 @@ document.addEventListener('DOMContentLoaded', () => {
   loadMarket();
   renderWatchlist();
   updateAlertBadge();
+  loadSectorHeatmap();
   const urlTicker = new URLSearchParams(location.search).get('ticker');
   if (urlTicker) loadStock(displayTW(urlTicker.toUpperCase()));
 });
@@ -896,6 +979,21 @@ async function loadMarket() {
   setTimeout(loadMarket, 60000);
 }
 
+// ── Mobile Bottom Nav ────────────────────────────────────────────────
+const _mnavTargets = {
+  chart:     () => document.querySelector('.chart-row'),
+  chips:     () => document.getElementById('institutionalCard'),
+  fundament: () => document.getElementById('instCard'),
+  tv:        () => document.getElementById('tvCard'),
+  news:      () => document.getElementById('newsCard'),
+};
+
+function mnavGo(tab) {
+  document.querySelectorAll('.mnav-btn').forEach(b => b.classList.toggle('active', b.dataset.tab === tab));
+  const target = _mnavTargets[tab] && _mnavTargets[tab]();
+  if (target) target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
 // ── Auto price refresh ───────────────────────────────────────────────
 let _priceRefreshTimer = null;
 
@@ -952,6 +1050,7 @@ async function loadStock(raw) {
     loadMargin(d.ticker);
     loadInstitutional(d.ticker);
     loadTickStats(d.ticker);
+    loadPeers(d.ticker);
     initTVWidget(d.ticker);
     startPriceRefresh(d.ticker);
     if (d.isEtf) loadETFDetail(d.ticker, d);
@@ -1097,6 +1196,17 @@ function renderHeader(d) {
   $('sMktCap').textContent = fmtTWMktCap(d.marketCap);
   $('sBeta').textContent   = d.beta ? d.beta.toFixed(2) : 'N/A';
   $('sDiv').textContent    = d.divYield ? d.divYield.toFixed(2) + '%' : 'N/A';
+
+  // 52週高低進度條
+  if (d.week52High && d.week52Low && d.week52High > d.week52Low) {
+    const pct = Math.min(100, Math.max(0, (d.price - d.week52Low) / (d.week52High - d.week52Low) * 100));
+    $('w52Low').textContent  = d.week52Low.toFixed(1);
+    $('w52High').textContent = d.week52High.toFixed(1);
+    $('w52Pos').textContent  = `現價位於年度 ${pct.toFixed(0)}%`;
+    $('w52Fill').style.width = pct + '%';
+    $('w52Dot').style.left   = pct + '%';
+    $('week52Bar').style.display = 'block';
+  }
 }
 
 // ── ETF Panel ────────────────────────────────────────────────────────
@@ -2030,12 +2140,33 @@ function renderFinHealth(d) {
 }
 
 function renderInstitutional(d) {
-  const holders = d.topHolders || [];
+  const holders  = d.topHolders || [];
+  const instPct  = d.instPct    || 0;
+  const insidPct = d.insiderPct || 0;
+  const smartPct = Math.min(100, instPct + insidPct);
+
+  // Chip concentration score (0-100)
+  const score = Math.min(100, Math.round(instPct * 0.6 + insidPct * 0.4));
+  const scoreLabel = score >= 70 ? '高度集中（聰明錢主導）' : score >= 45 ? '中度集中' : '分散（散戶主導）';
+  const scoreCls   = score >= 70 ? '#00d68f' : score >= 45 ? '#ffa000' : '#e84646';
+
   setHTML('instPanel', `
-    <div class="info-metric"><span class="im-label">法人持股比例</span><span class="im-value green">${d.instPct>0?d.instPct+'%':'N/A'}</span></div>
-    <div class="im-bar-wrap"><div class="im-bar-fill" style="width:${Math.min(d.instPct,100)}%;background:var(--blue)"></div></div>
-    <div class="info-metric"><span class="im-label">內部人持股</span><span class="im-value">${d.insiderPct>0?d.insiderPct+'%':'N/A'}</span></div>
-    ${holders.length>0?`<div class="holders-title">主要法人持股</div>${holders.map(h=>`<div class="holder-row"><span class="holder-name">${esc(h.holder)}</span><span class="holder-pct">${h.pct>0?h.pct+'%':''}</span></div>`).join('')}`:''}
+    <div class="info-metric"><span class="im-label">法人持股比例</span><span class="im-value" style="color:var(--blue)">${instPct>0?instPct+'%':'N/A'}</span></div>
+    <div class="im-bar-wrap"><div class="im-bar-fill" style="width:${Math.min(instPct,100)}%;background:var(--blue)"></div></div>
+    <div class="info-metric"><span class="im-label">內部人持股</span><span class="im-value">${insidPct>0?insidPct+'%':'N/A'}</span></div>
+    <div style="margin:8px 0 4px;border-top:1px solid #1a2a3a;padding-top:8px">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
+        <span style="font-size:0.75rem;color:var(--text-dim)">籌碼集中度</span>
+        <span style="font-size:0.78rem;font-weight:600;color:${scoreCls}">${scoreLabel}</span>
+      </div>
+      <div style="background:#1a2a3a;border-radius:4px;height:8px">
+        <div style="width:${score}%;height:100%;border-radius:4px;background:${scoreCls};transition:width 0.4s"></div>
+      </div>
+      <div style="display:flex;justify-content:space-between;font-size:0.68rem;color:var(--text-dim);margin-top:3px">
+        <span>散戶</span><span>聰明錢 ${smartPct.toFixed(1)}%</span><span>集中</span>
+      </div>
+    </div>
+    ${holders.length>0?`<div class="holders-title" style="margin-top:6px">主要法人持股</div>${holders.map(h=>`<div class="holder-row"><span class="holder-name">${esc(h.holder)}</span><span class="holder-pct">${h.pct>0?h.pct+'%':''}</span></div>`).join('')}`:''}
   `);
 }
 
@@ -2418,6 +2549,94 @@ function renderTickStats(d) {
     <span style="color:#36c6ff">■ 小單 ${smallPct}%（${stats.small.count}筆）</span>
   `;
   document.getElementById('tickStatsPanel').appendChild(summary);
+}
+
+// ── Sector Heatmap ────────────────────────────────────────────────────
+async function loadSectorHeatmap() {
+  try {
+    const r = await fetch('/api/tw/sector_heatmap');
+    const d = await r.json();
+    if (!d.sectors || !d.sectors.length) return;
+    $('sectorUpdateTime').textContent = new Date().toLocaleTimeString('zh-TW',{hour:'2-digit',minute:'2-digit'}) + ' 更新';
+    setHTML('sectorPanel', d.sectors.map(s => {
+      const up   = s.chgPct >= 0;
+      const bg   = s.chgPct > 2 ? '#c0392b' : s.chgPct > 0.5 ? '#8b2020' :
+                   s.chgPct < -2 ? '#0d6e4e' : s.chgPct < -0.5 ? '#0a4433' : '#1a2a3a';
+      const sign = up ? '+' : '';
+      return `<div onclick="loadStock('${s.ticker}')" style="background:${bg};border-radius:8px;padding:8px 6px;text-align:center;cursor:pointer;transition:filter 0.2s" onmouseover="this.style.filter='brightness(1.2)'" onmouseout="this.style.filter=''">
+        <div style="font-weight:700;font-size:0.8rem;color:#fff">${s.name}</div>
+        <div style="font-size:0.75rem;color:${up?'#ff8a8a':'#7effd4'};margin-top:2px">${sign}${s.chgPct}%</div>
+        <div style="font-size:0.65rem;color:rgba(255,255,255,0.5)">${s.price}</div>
+      </div>`;
+    }).join(''));
+  } catch(e) {}
+}
+
+// ── Smart Screener ────────────────────────────────────────────────────
+async function runScreener() {
+  setHTML('screenerPanel', '<div style="color:var(--text-dim);font-size:0.75rem;padding:8px">掃描中，約需15秒...</div>');
+  try {
+    const r = await fetch('/api/tw/screener');
+    const d = await r.json();
+    if (!d.stocks || !d.stocks.length) {
+      setHTML('screenerPanel', '<div style="color:var(--text-dim);font-size:0.75rem;padding:8px">暫無符合條件股票</div>');
+      return;
+    }
+    const rows = d.stocks.map(s => {
+      const up = s.chgPct >= 0;
+      const tags = s.signals.map(sig => `<span style="background:rgba(0,184,212,0.15);color:#00b8d4;font-size:0.65rem;padding:2px 5px;border-radius:4px">${sig}</span>`).join(' ');
+      return `<div onclick="loadStock('${s.ticker}')" style="display:flex;align-items:center;gap:8px;padding:7px 6px;border-bottom:1px solid #1a2a3a;cursor:pointer" onmouseover="this.style.background='#141e30'" onmouseout="this.style.background=''">
+        <div style="width:44px;font-weight:700;color:var(--accent)">${s.ticker}</div>
+        <div style="flex:1;min-width:0">
+          <div style="font-size:0.78rem;color:var(--text)">${s.name}</div>
+          <div style="margin-top:2px;display:flex;flex-wrap:wrap;gap:3px">${tags}</div>
+        </div>
+        <div style="text-align:right;min-width:56px">
+          <div style="font-size:0.82rem;font-weight:600">${s.price}</div>
+          <div style="font-size:0.75rem;color:${up?'var(--red)':'var(--green)'}">${up?'+':''}${s.chgPct}%</div>
+        </div>
+        <div style="text-align:right;min-width:48px;font-size:0.72rem;color:var(--text-dim)">
+          <div>RSI ${s.rsi}</div>
+          <div>K ${s.kVal}</div>
+        </div>
+      </div>`;
+    }).join('');
+    setHTML('screenerPanel', `<div style="font-size:0.7rem;color:var(--text-dim);padding:4px 6px;margin-bottom:4px">掃描 ${d.scanned} 支，找到 ${d.stocks.length} 支有信號</div>${rows}`);
+  } catch(e) {
+    setHTML('screenerPanel', '<div style="color:var(--red);font-size:0.75rem;padding:8px">掃描失敗，請稍後再試</div>');
+  }
+}
+
+// ── Peers Comparison ──────────────────────────────────────────────────
+async function loadPeers(ticker) {
+  setHTML('peersPanel', '<div class="mini-loading">載入中...</div>');
+  try {
+    const r = await fetch('/api/tw/peers/' + encodeURIComponent(ticker));
+    const d = await r.json();
+    if (!d.peers || d.peers.length === 0) {
+      setHTML('peersPanel', '<div class="no-data">暫無同產業對比資料</div>');
+      return;
+    }
+    const rows = d.peers.map(p => {
+      const up20 = p.ret20d >= 0, up1 = p.ret1d >= 0;
+      const self = p.isSelf;
+      const click = self ? '' : `onclick="loadStock('${p.ticker}')" style="cursor:pointer" onmouseover="this.style.background='#141e30'" onmouseout="this.style.background=''"`;
+      return `<div ${click} style="display:flex;align-items:center;gap:8px;padding:6px 4px;border-bottom:1px solid #1a2a3a;${self?'background:rgba(51,153,255,0.08);border-radius:6px':''}">
+        <div style="width:40px;font-weight:700;color:${self?'var(--accent)':'var(--text)'}">${p.ticker}</div>
+        <div style="flex:1;font-size:0.76rem;color:${self?'#fff':'var(--text-dim)'}">${p.name}${self?' *':''}</div>
+        <div style="width:52px;text-align:right;font-size:0.76rem;font-weight:600;color:${up1?'var(--red)':'var(--green)'}">${up1?'+':''}${p.ret1d}%</div>
+        <div style="width:60px;text-align:right;font-size:0.76rem;font-weight:600;color:${up20?'var(--red)':'var(--green)'}">${up20?'+':''}${p.ret20d}%</div>
+      </div>`;
+    }).join('');
+    setHTML('peersPanel', `
+      <div style="display:flex;padding:4px 4px 2px;font-size:0.68rem;color:#4a6070;border-bottom:1px solid #1a2a3a">
+        <div style="width:40px"></div><div style="flex:1">名稱</div>
+        <div style="width:52px;text-align:right">今日</div>
+        <div style="width:60px;text-align:right">近20日</div>
+      </div>${rows}`);
+  } catch(e) {
+    setHTML('peersPanel', '<div class="no-data">載入失敗</div>');
+  }
 }
 
 // ── Broker Chips ──────────────────────────────────────────────────────
