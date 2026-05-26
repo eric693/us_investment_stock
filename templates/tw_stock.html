@@ -2140,43 +2140,68 @@ async function loadInstitutional(ticker) {
 
 function renderInstitutionalChart(d) {
   const days = d.days;
-  const dates = days.map(x => x.date);
   const BG = '#0c1220', GRID = '#121e30';
 
-  const fmtK = v => {
-    if (Math.abs(v) >= 1000) return (v/1000).toFixed(0) + 'K';
-    return String(v);
+  const fmtV = v => {
+    const sign = v >= 0 ? '+' : '';
+    if (Math.abs(v) >= 10000) return sign + (v/10000).toFixed(1) + '萬';
+    if (Math.abs(v) >= 1000)  return sign + (v/1000).toFixed(1) + 'K';
+    return sign + v.toLocaleString();
   };
+  const col = v => v > 0 ? '#e84646' : v < 0 ? '#00d68f' : '#6888a0';
 
-  const barColor = arr => arr.map(v => v >= 0 ? '#e84646' : '#00d68f');
+  // Chart - group bar (foreign/trust/dealer per day)
+  const chartDiv = document.createElement('div');
+  chartDiv.id = 'instChart';
+  chartDiv.style.cssText = 'width:100%;height:280px';
+  document.getElementById('institutionalPanel').innerHTML = '';
+  document.getElementById('institutionalPanel').appendChild(chartDiv);
 
-  Plotly.newPlot('institutionalPanel', [
-    { type:'bar', name:'外資', x:dates, y:days.map(x=>x.foreign),
-      marker:{color: barColor(days.map(x=>x.foreign))}, text: days.map(x=>fmtK(x.foreign)), textposition:'outside', textfont:{size:10} },
-    { type:'bar', name:'投信', x:dates, y:days.map(x=>x.trust),
-      marker:{color: barColor(days.map(x=>x.trust))}, text: days.map(x=>fmtK(x.trust)), textposition:'outside', textfont:{size:10} },
-    { type:'bar', name:'自營商', x:dates, y:days.map(x=>x.dealer),
-      marker:{color: barColor(days.map(x=>x.dealer))}, text: days.map(x=>fmtK(x.dealer)), textposition:'outside', textfont:{size:10} },
+  const dates = days.map(x => x.date);
+  Plotly.newPlot('instChart', [
+    { type:'bar', name:'外資', x:dates, y:days.map(x=>x.foreign), marker:{color: days.map(x=>x.foreign>=0?'rgba(232,70,70,0.85)':'rgba(0,214,143,0.85)')} },
+    { type:'bar', name:'投信', x:dates, y:days.map(x=>x.trust),   marker:{color: days.map(x=>x.trust>=0?'rgba(255,160,0,0.85)':'rgba(0,180,200,0.85)')} },
+    { type:'bar', name:'自營商', x:dates, y:days.map(x=>x.dealer),marker:{color: days.map(x=>x.dealer>=0?'rgba(150,100,232,0.85)':'rgba(100,150,232,0.85)')} },
   ], {
     paper_bgcolor:BG, plot_bgcolor:BG,
     font:{color:'#6888a0', size:11},
     barmode: 'group',
-    legend:{orientation:'h', x:0, y:1.12, bgcolor:'rgba(0,0,0,0)', font:{size:11,color:'#8aaabf'}},
-    margin:{t:30, b:40, l:55, r:10},
+    legend:{orientation:'h', x:0, y:1.15, bgcolor:'rgba(0,0,0,0)', font:{size:11,color:'#8aaabf'}},
+    margin:{t:40, b:36, l:65, r:12},
     xaxis:{gridcolor:GRID, tickfont:{color:'#8aaabf'}},
-    yaxis:{gridcolor:GRID, tickfont:{color:'#8aaabf'}, ticksuffix:'股', zeroline:true, zerolinecolor:'#2a3a50'},
-    height: 260,
-    shapes:[{type:'line',x0:0,x1:1,xref:'paper',y0:0,y1:0,line:{color:'#2a3a50',width:1}}],
+    yaxis:{gridcolor:GRID, tickfont:{color:'#8aaabf'}, zeroline:true, zerolinecolor:'#3a4a60', zerolinewidth:1.5},
+    hovermode:'x unified',
   }, {responsive:true, displayModeBar:false});
 
-  // Summary row
-  const total = days.reduce((s,x) => s + x.total, 0);
-  const cls   = total >= 0 ? 'green' : 'red';
-  const sign  = total >= 0 ? '+' : '';
-  const instSummary = document.createElement('div');
-  instSummary.style.cssText = 'text-align:center;padding:6px 0 2px;font-size:0.8rem;color:var(--text-dim)';
-  instSummary.innerHTML = `近5日三大法人合計：<span style="color:var(--${cls});font-weight:600">${sign}${total.toLocaleString()} 股</span>`;
-  document.getElementById('institutionalPanel').appendChild(instSummary);
+  // Detail table below chart
+  const rows = days.map(day => `
+    <tr>
+      <td style="color:#8aaabf">${day.date}</td>
+      <td style="color:${col(day.foreign)};text-align:right">${fmtV(day.foreign)}</td>
+      <td style="color:${col(day.trust)};text-align:right">${fmtV(day.trust)}</td>
+      <td style="color:${col(day.dealer)};text-align:right">${fmtV(day.dealer)}</td>
+      <td style="color:${col(day.total)};text-align:right;font-weight:600">${fmtV(day.total)}</td>
+    </tr>`).join('');
+
+  const total5 = days.reduce((s,x) => s + x.total, 0);
+  const tableDiv = document.createElement('div');
+  tableDiv.innerHTML = `
+    <table style="width:100%;border-collapse:collapse;font-size:0.78rem;margin-top:8px">
+      <thead><tr style="color:#4a6070;border-bottom:1px solid #1a2a3a">
+        <th style="text-align:left;padding:4px 2px">日期</th>
+        <th style="text-align:right;padding:4px 4px">外資</th>
+        <th style="text-align:right;padding:4px 4px">投信</th>
+        <th style="text-align:right;padding:4px 4px">自營商</th>
+        <th style="text-align:right;padding:4px 4px">合計</th>
+      </tr></thead>
+      <tbody>${rows}</tbody>
+      <tfoot><tr style="border-top:1px solid #1a2a3a;color:#6888a0">
+        <td style="padding:4px 2px">5日合計</td>
+        <td colspan="3"></td>
+        <td style="text-align:right;font-weight:700;color:${col(total5)}">${fmtV(total5)}</td>
+      </tr></tfoot>
+    </table>`;
+  document.getElementById('institutionalPanel').appendChild(tableDiv);
 }
 
 // ── Tick Stats (大中小單) ─────────────────────────────────────────────
