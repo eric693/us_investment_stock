@@ -1915,11 +1915,14 @@ async function loadFundamentals(ticker, stockData) {
 function renderEarnings(d) {
   const revGColor = d.revGrowth>0?'var(--green)':d.revGrowth<0?'var(--red)':'var(--text-dim)';
   const epsGColor = d.epsGrowth>0?'var(--green)':d.epsGrowth<0?'var(--red)':'var(--text-dim)';
+  const pmColor   = d.profitMargin>15?'var(--green)':d.profitMargin>5?'var(--yellow)':'var(--red)';
   setHTML('earningsPanel', `
-    ${d.earningsDate?`<div class="earn-date-wrap"><span class="earn-date-label">下次財報</span><span class="earn-date-val">${d.earningsDate}</span></div>`:'<div class="no-data-sm">財報日期暫無</div>'}
+    ${d.earningsDate?`<div class="earn-date-wrap"><span class="earn-date-label">下次財報</span><span class="earn-date-val">${d.earningsDate}</span></div>`:''}
     <div class="info-metric"><span class="im-label">預期 EPS</span><span class="im-value">${d.epsEst?d.epsEst+' 元':'N/A'}</span></div>
     <div class="info-metric"><span class="im-label">營收成長率</span><span class="im-value" style="color:${revGColor}">${d.revGrowth!==0?pctStr(d.revGrowth):'N/A'}</span></div>
     <div class="info-metric"><span class="im-label">EPS 成長率</span><span class="im-value" style="color:${epsGColor}">${d.epsGrowth!==0?pctStr(d.epsGrowth):'N/A'}</span></div>
+    <div class="info-metric"><span class="im-label">淨利率</span><span class="im-value" style="color:${pmColor}">${d.profitMargin!==0?d.profitMargin+'%':'N/A'}</span></div>
+    <div class="info-metric"><span class="im-label">ROA 資產報酬</span><span class="im-value">${d.roa!==0?d.roa+'%':'N/A'}</span></div>
   `);
 }
 
@@ -2128,14 +2131,14 @@ async function loadInstitutional(ticker) {
       setHTML('institutionalPanel', '<div class="no-data">暫無資料（假日或上市未滿5日）</div>');
       return;
     }
-    renderInstitutional(d);
+    renderInstitutionalChart(d);
     $('instUpdateTime').textContent = '資料來源：證交所 T86';
   } catch(e) {
     setHTML('institutionalPanel', '<div class="no-data">載入失敗</div>');
   }
 }
 
-function renderInstitutional(d) {
+function renderInstitutionalChart(d) {
   const days = d.days;
   const dates = days.map(x => x.date);
   const BG = '#0c1220', GRID = '#121e30';
