@@ -437,8 +437,8 @@
         <div class="ma-pills" id="maPills"></div>
         <div style="display:flex;align-items:center;gap:6px">
           <div class="period-tabs">
-            <button class="ptab" data-period="1D" onclick="changePeriod('1D')" title="近30個交易日日K">1D×30</button>
-            <button class="ptab" data-period="5D" onclick="changePeriod('5D')" title="近24週週K">週K×24</button>
+            <button class="ptab" data-period="1D" onclick="changePeriod('1D')" title="近60個交易日日K">日K</button>
+            <button class="ptab" data-period="5D" onclick="changePeriod('5D')" title="近24週週K">週K</button>
             <button class="ptab" data-period="週" onclick="changePeriod('週')">週</button>
             <button class="ptab active" data-period="1M" onclick="changePeriod('1M')">1M</button>
             <button class="ptab" data-period="3M" onclick="changePeriod('3M')">3M</button>
@@ -963,8 +963,8 @@ function changePeriod(period) {
   currentPeriod = period;
   document.querySelectorAll('.ptab').forEach(b => b.classList.toggle('active', b.dataset.period === period));
   if (period === '1D') {
-    // 1D = 30 trading days (~6 weeks) of daily candles
-    const n = 30;
+    // 1D = 60 trading days (~3 months) of daily candles
+    const n = 60;
     const sl = arr => arr ? arr.slice(-n) : [];
     const cma = currentData._customMA;
     const sliced = Object.assign({}, currentData, {
