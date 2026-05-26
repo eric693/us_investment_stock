@@ -769,6 +769,15 @@ def get_stock(ticker):
         hist['BB_mid']   = bb_mid
         hist['BB_lower'] = bb_lower
 
+        kd_k, kd_d = calc_kd(hist['High'], hist['Low'], hist['Close'])
+        hist['KD_K'] = kd_k
+        hist['KD_D'] = kd_d
+        bias5_s, bias20_s, bias60_s = calc_bias(hist['Close'])
+        hist['BIAS5']  = bias5_s
+        hist['BIAS20'] = bias20_s
+        hist['BIAS60'] = bias60_s
+        hist['VWMA20'] = calc_vwma(hist['Close'], hist['Volume'])
+
         # ── Core values ──
         price = safe_float(hist['Close'].iloc[-1])
         prev  = safe_float(hist['Close'].iloc[-2])
@@ -945,6 +954,20 @@ def get_stock(ticker):
                 'lower': clean(hist['BB_lower'].tolist()),
             },
             'rsiSeries': clean(hist['RSI'].tolist()),
+            'kd': {
+                'k': clean(hist['KD_K'].tolist()),
+                'd': clean(hist['KD_D'].tolist()),
+            },
+            'bias': {
+                'bias5':  clean(hist['BIAS5'].tolist()),
+                'bias20': clean(hist['BIAS20'].tolist()),
+            },
+            'vwmaSeries': clean(hist['VWMA20'].tolist()),
+            'kdK':    round(safe_float(hist['KD_K'].iloc[-1]), 2),
+            'kdD':    round(safe_float(hist['KD_D'].iloc[-1]), 2),
+            'bias5':  round(safe_float(hist['BIAS5'].iloc[-1]), 2),
+            'bias20': round(safe_float(hist['BIAS20'].iloc[-1]), 2),
+            'vwma20': round(safe_float(hist['VWMA20'].iloc[-1]), 2),
         }
         _cache_set(f'stock:{ticker}', result)
         return jsonify(result)
@@ -2381,6 +2404,179 @@ def get_tw_peers(ticker):
 
     results.sort(key=lambda x: x['ret20d'], reverse=True)
     result = {'peers': results, 'self': stock_no}
+    _cache_set(cache_key, result, ttl=1800)
+    return jsonify(result)
+
+
+@app.route('/api/sector_heatmap')
+def get_sector_heatmap():
+    cache_key = 'us_sector'
+    cached = _cache_get(cache_key)
+    if cached: return jsonify(cached)
+
+    SECTORS = [
+        {'name': '科技',       'ticker': 'XLK'},
+        {'name': '通訊服務',   'ticker': 'XLC'},
+        {'name': '金融',       'ticker': 'XLF'},
+        {'name': '醫療',       'ticker': 'XLV'},
+        {'name': '工業',       'ticker': 'XLI'},
+        {'name': '非必需消費', 'ticker': 'XLY'},
+        {'name': '必需消費',   'ticker': 'XLP'},
+        {'name': '能源',       'ticker': 'XLE'},
+        {'name': '材料',       'ticker': 'XLB'},
+        {'name': '房地產',     'ticker': 'XLRE'},
+        {'name': '公用事業',   'ticker': 'XLU'},
+        {'name': 'AI 晶片',    'ticker': 'NVDA'},
+        {'name': '電動車',     'ticker': 'TSLA'},
+        {'name': '比特幣',     'ticker': 'MSTR'},
+    ]
+    stocks = []
+    for s in SECTORS:
+        try:
+            info  = yf.Ticker(s['ticker']).info
+            price = safe_float(info.get('regularMarketPrice') or info.get('currentPrice', 0))
+            prev  = safe_float(info.get('regularMarketPreviousClose') or info.get('previousClose', price))
+            chg   = round((price - prev) / prev * 100, 2) if prev else 0
+            mktcap = safe_float(info.get('marketCap', 0))
+            stocks.append({'name': s['name'], 'ticker': s['ticker'], 'price': round(price, 2), 'chgPct': chg, 'marketCap': mktcap})
+        except Exception:
+            continue
+    result = {'sectors': stocks}
+    _cache_set(cache_key, result, ttl=120)
+    return jsonify(result)
+
+
+@app.route('/api/screener')
+def get_screener():
+    cache_key = 'us_screener'
+    cached = _cache_get(cache_key)
+    if cached: return jsonify(cached)
+
+    SCAN_LIST = [
+        'NVDA','AAPL','MSFT','AMZN','META','GOOGL','TSLA','AMD','AVGO','QCOM',
+        'TSM','INTC','ORCL','CRM','SNOW','PLTR','COIN','MSTR','RKLB','CRCL',
+        'JPM','BAC','GS','MS','V','MA','PYPL',
+        'LLY','JNJ','UNH','ABBV','PFE',
+        'NFLX','DIS','SPOT',
+        'XOM','CVX',
+    ]
+    results = []
+    for ticker in SCAN_LIST:
+        try:
+            stock = yf.Ticker(ticker)
+            hist  = stock.history(period='3mo')
+            if hist is None or len(hist) < 20:
+                continue
+            close  = hist['Close']
+            high   = hist['High']
+            low    = hist['Low']
+            volume = hist['Volume']
+            price  = safe_float(close.iloc[-1])
+            prev   = safe_float(close.iloc[-2])
+            chg_pct = round((price - prev) / prev * 100, 2) if prev else 0
+            ma5  = safe_float(close.rolling(5).mean().iloc[-1])
+            ma20 = safe_float(close.rolling(20).mean().iloc[-1])
+            rsi  = safe_float(calc_rsi(close).iloc[-1])
+            k_s, d_s = calc_kd(high, low, close)
+            k_val = safe_float(k_s.iloc[-1])
+            d_val = safe_float(d_s.iloc[-1])
+            avg_vol   = safe_float(volume.rolling(10).mean().iloc[-1])
+            cur_vol   = safe_float(volume.iloc[-1])
+            vol_ratio = round(cur_vol / avg_vol, 1) if avg_vol else 1
+            macd_s, sig_s, _ = calc_macd(close)
+            macd_v = safe_float(macd_s.iloc[-1])
+            dea_v  = safe_float(sig_s.iloc[-1])
+            info = stock.info
+            name = (info.get('shortName') or ticker)[:20]
+            signals = []
+            if k_val > d_val and k_val < 80 and rsi < 65:
+                signals.append('KD黃金交叉')
+            if rsi < 35:
+                signals.append('RSI超賣')
+            if price > ma5 > ma20:
+                signals.append('多頭排列')
+            if vol_ratio >= 2.0:
+                signals.append('放量')
+            if macd_v > dea_v and macd_v > 0:
+                signals.append('MACD強勢')
+            if chg_pct >= 3:
+                signals.append('強勢上漲')
+            results.append({
+                'ticker': ticker, 'name': name,
+                'price': round(price, 2), 'chgPct': chg_pct,
+                'rsi': round(rsi, 1), 'kVal': round(k_val, 1), 'dVal': round(d_val, 1),
+                'volRatio': vol_ratio, 'signals': signals,
+            })
+        except Exception:
+            continue
+    results.sort(key=lambda x: len(x['signals']), reverse=True)
+    result = {'stocks': results, 'scanned': len(SCAN_LIST)}
+    _cache_set(cache_key, result, ttl=600)
+    return jsonify(result)
+
+
+@app.route('/api/peers/<ticker>')
+def get_peers(ticker):
+    ticker = ticker.upper().strip()
+    if not _valid_ticker(ticker):
+        return jsonify({'error': '無效代碼'}), 400
+    cache_key = f'us_peers:{ticker}'
+    cached = _cache_get(cache_key)
+    if cached: return jsonify(cached)
+
+    PEER_GROUPS = {
+        'NVDA': ['AMD','AVGO','QCOM','TSM','INTC'],
+        'AMD':  ['NVDA','INTC','AVGO','QCOM','TSM'],
+        'AAPL': ['MSFT','GOOGL','META','AMZN','SONY'],
+        'MSFT': ['AAPL','GOOGL','AMZN','CRM','ORCL'],
+        'GOOGL':['MSFT','META','AMZN','NFLX','SNAP'],
+        'META': ['GOOGL','SNAP','PINS','NFLX','DIS'],
+        'AMZN': ['MSFT','GOOGL','BABA','WMT','TGT'],
+        'TSLA': ['GM','F','RIVN','NIO','LI'],
+        'COIN': ['MSTR','HOOD','MARA','RIOT','CRCL'],
+        'JPM':  ['BAC','GS','MS','C','WFC'],
+        'BAC':  ['JPM','GS','MS','C','WFC'],
+        'LLY':  ['JNJ','UNH','ABBV','PFE','MRK'],
+        'NFLX': ['DIS','PARA','WBD','SPOT','ROKU'],
+        'AVGO': ['NVDA','AMD','QCOM','TSM','MRVL'],
+        'CRM':  ['MSFT','ORCL','SAP','NOW','SNOW'],
+        'PLTR': ['AI','BBAI','SOUN','SNOW','CRM'],
+        'RKLB': ['SPCE','BA','LMT','RTX','NOC'],
+    }
+
+    peers = PEER_GROUPS.get(ticker, [])
+    if not peers:
+        try:
+            info = yf.Ticker(ticker).info
+            sector = info.get('sector', '')
+            # minimal fallback
+        except Exception:
+            pass
+        if not peers:
+            return jsonify({'peers': [], 'self': ticker})
+
+    all_tickers = [ticker] + peers
+    results = []
+    for t in all_tickers:
+        try:
+            hist = yf.Ticker(t).history(period='1mo')
+            if hist is None or len(hist) < 5:
+                continue
+            close = hist['Close']
+            base  = safe_float(close.iloc[0])
+            cur   = safe_float(close.iloc[-1])
+            ret20 = round((cur / base - 1) * 100, 2) if base else 0
+            ret1  = round((cur / safe_float(close.iloc[-2]) - 1) * 100, 2) if len(close) > 1 else 0
+            info  = yf.Ticker(t).info
+            name  = (info.get('shortName') or t)[:20]
+            mktcap = safe_float(info.get('marketCap', 0))
+            results.append({'ticker': t, 'name': name, 'price': round(cur, 2),
+                            'ret1d': ret1, 'ret20d': ret20,
+                            'marketCap': mktcap, 'isSelf': t == ticker})
+        except Exception:
+            continue
+    results.sort(key=lambda x: x['ret20d'], reverse=True)
+    result = {'peers': results, 'self': ticker}
     _cache_set(cache_key, result, ttl=1800)
     return jsonify(result)
 
