@@ -437,8 +437,8 @@
         <div class="ma-pills" id="maPills"></div>
         <div style="display:flex;align-items:center;gap:6px">
           <div class="period-tabs">
-            <button class="ptab" data-period="1D" onclick="changePeriod('1D')">1D</button>
-            <button class="ptab" data-period="5D" onclick="changePeriod('5D')">5D</button>
+            <button class="ptab" data-period="1D" onclick="changePeriod('1D')" title="近30個交易日日K">1D×30</button>
+            <button class="ptab" data-period="5D" onclick="changePeriod('5D')" title="近24週週K">週K×24</button>
             <button class="ptab" data-period="週" onclick="changePeriod('週')">週</button>
             <button class="ptab active" data-period="1M" onclick="changePeriod('1M')">1M</button>
             <button class="ptab" data-period="3M" onclick="changePeriod('3M')">3M</button>
@@ -963,22 +963,50 @@ function changePeriod(period) {
   currentPeriod = period;
   document.querySelectorAll('.ptab').forEach(b => b.classList.toggle('active', b.dataset.period === period));
   if (period === '1D') {
-    // Use TradingView for real-time intraday instead of delayed yfinance
-    setTVInterval('5');
-    const tvCard = document.getElementById('tvCard');
-    if (tvCard) {
-      tvCard.scrollIntoView({ behavior: 'smooth', block: 'start' });
-      tvCard.style.boxShadow = '0 0 0 2px var(--accent)';
-      setTimeout(() => { tvCard.style.boxShadow = ''; }, 2000);
-    }
-    // Also load plotly intraday for volume/indicator reference below
-    loadIntraday(currentData.ticker);
+    // 1D = 30 trading days (~6 weeks) of daily candles
+    const n = 30;
+    const sl = arr => arr ? arr.slice(-n) : [];
+    const cma = currentData._customMA;
+    const sliced = Object.assign({}, currentData, {
+      dates:     sl(currentData.dates),
+      ohlcv:     { open: sl(currentData.ohlcv.open), high: sl(currentData.ohlcv.high),
+                   low:  sl(currentData.ohlcv.low),  close: sl(currentData.ohlcv.close),
+                   volume: sl(currentData.ohlcv.volume) },
+      ma:        { ma5: sl(currentData.ma.ma5), ma20: sl(currentData.ma.ma20), ma60: sl(currentData.ma.ma60) },
+      macd:      { dif: sl(currentData.macd.dif), dea: sl(currentData.macd.dea), hist: sl(currentData.macd.hist) },
+      bollinger: { upper: sl(currentData.bollinger.upper), mid: sl(currentData.bollinger.mid), lower: sl(currentData.bollinger.lower) },
+      rsiSeries: sl(currentData.rsiSeries),
+      customMA:  { arrays: { m1: sl(cma.arrays.m1), m2: sl(cma.arrays.m2), m3: sl(cma.arrays.m3) }, scalars: cma.scalars },
+    });
+    renderCharts(sliced);
+    if (compareData) renderCompareChart();
+    return;
+  }
+  if (period === '5D') {
+    // 5D = weekly candles for 24 weeks (~6 months)
+    const weekly = resampleWeekly(currentData);
+    const n = 24;
+    const sl = arr => arr ? arr.slice(-n) : [];
+    const cma = weekly._customMA || computeCustomMAs(weekly);
+    const sliced = Object.assign({}, weekly, {
+      dates:     sl(weekly.dates),
+      ohlcv:     { open: sl(weekly.ohlcv.open), high: sl(weekly.ohlcv.high),
+                   low:  sl(weekly.ohlcv.low),  close: sl(weekly.ohlcv.close),
+                   volume: sl(weekly.ohlcv.volume) },
+      ma:        { ma5: sl(weekly.ma.ma5), ma20: sl(weekly.ma.ma20), ma60: sl(weekly.ma.ma60) },
+      macd:      { dif: sl(weekly.macd.dif), dea: sl(weekly.macd.dea), hist: sl(weekly.macd.hist) },
+      bollinger: { upper: sl(weekly.bollinger.upper), mid: sl(weekly.bollinger.mid), lower: sl(weekly.bollinger.lower) },
+      rsiSeries: sl(weekly.rsiSeries),
+      customMA:  { arrays: { m1: sl(cma.arrays.m1), m2: sl(cma.arrays.m2), m3: sl(cma.arrays.m3) }, scalars: cma.scalars },
+    });
+    renderCharts(sliced);
+    if (compareData) renderCompareChart();
     return;
   }
   if (period === '週') {
     renderCharts(resampleWeekly(currentData));
   } else {
-    const n = { '5D': 5, '1M': 21, '3M': 63, '6M': 126, '1Y': 252 }[period] || 252;
+    const n = { '1M': 21, '3M': 63, '6M': 126, '1Y': 252 }[period] || 252;
     const sl = arr => arr ? arr.slice(-n) : [];
     const cma = currentData._customMA;
     const sliced = Object.assign({}, currentData, {
