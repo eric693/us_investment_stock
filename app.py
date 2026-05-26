@@ -2291,6 +2291,19 @@ def get_tw_peers(ticker):
     cached = _cache_get(cache_key)
     if cached: return jsonify(cached)
 
+    TW_CN_NAMES = {
+        '2330':'台積電','2454':'聯發科','2303':'聯電','3711':'日月光投控','2379':'瑞昱',
+        '6669':'緯穎','2337':'旺宏','2317':'鴻海','2382':'廣達','2357':'華碩',
+        '3231':'緯創','2354':'鴻準','2353':'宏碁','2881':'富邦金','2882':'國泰金',
+        '2891':'中信金','2892':'第一金','2884':'玉山金','2886':'兆豐金',
+        '2603':'長榮','2615':'萬海','2609':'陽明','2610':'華航','5880':'合庫金',
+        '2886':'兆豐金','2412':'中華電','2308':'台達電','2301':'光寶科',
+        '2395':'研華','3008':'大立光','2308':'台達電','6415':'矽力-KY',
+        '2345':'智邦','3034':'聯詠','4966':'譜瑞-KY','2347':'聯強',
+        '2352':'佳世達','1301':'台塑','1303':'南亞','1326':'台化',
+        '2002':'中鋼','2912':'統一超','2207':'和泰車','2408':'南亞科',
+    }
+
     PEER_GROUPS = {
         # 半導體
         '2330': ['2454','2303','3711','2379','6669','2337'],
@@ -2329,8 +2342,12 @@ def get_tw_peers(ticker):
             ret20 = round((cur / base - 1) * 100, 2) if base else 0
             ret1  = round((cur / safe_float(close.iloc[-2]) - 1) * 100, 2) if len(close) > 1 else 0
             code  = t.split('.')[0]
-            info  = yf.Ticker(t).info
-            name  = info.get('shortName', code)[:8]
+            cn_name = TW_CN_NAMES.get(code)
+            if cn_name:
+                name = cn_name
+            else:
+                info = yf.Ticker(t).info
+                name = info.get('shortName', code)[:8]
             results.append({'ticker': code, 'name': name, 'price': round(cur,2), 'ret1d': ret1, 'ret20d': ret20, 'isSelf': t == raw})
         except Exception:
             continue

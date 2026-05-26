@@ -2623,7 +2623,7 @@ async function loadPeers(ticker) {
       const click = self ? '' : `onclick="loadStock('${p.ticker}')" style="cursor:pointer" onmouseover="this.style.background='#141e30'" onmouseout="this.style.background=''"`;
       return `<div ${click} style="display:flex;align-items:center;gap:8px;padding:6px 4px;border-bottom:1px solid #1a2a3a;${self?'background:rgba(51,153,255,0.08);border-radius:6px':''}">
         <div style="width:40px;font-weight:700;color:${self?'var(--accent)':'var(--text)'}">${p.ticker}</div>
-        <div style="flex:1;font-size:0.76rem;color:${self?'#fff':'var(--text-dim)'}">${p.name}${self?' *':''}</div>
+        <div style="flex:1;font-size:0.8rem;color:${self?'#fff':'var(--text-dim)'}">${p.name}${self?' *':''}</div>
         <div style="width:52px;text-align:right;font-size:0.76rem;font-weight:600;color:${up1?'var(--red)':'var(--green)'}">${up1?'+':''}${p.ret1d}%</div>
         <div style="width:60px;text-align:right;font-size:0.76rem;font-weight:600;color:${up20?'var(--red)':'var(--green)'}">${up20?'+':''}${p.ret20d}%</div>
       </div>`;
