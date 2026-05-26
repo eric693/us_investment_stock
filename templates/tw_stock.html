@@ -343,7 +343,7 @@
     <div class="header-center">
       <div class="big-price"   id="hPrice"></div>
       <div class="price-delta" id="hDelta"></div>
-      <div style="font-size:0.68rem;color:var(--text-dim);margin-top:2px">⚡ 每30秒自動更新</div>
+      <div style="font-size:0.68rem;color:var(--text-dim);margin-top:2px">每30秒自動更新</div>
       <div class="header-btns">
         <button id="watchBtn" class="watch-btn" onclick="toggleWatch()">+ 自選</button>
         <button id="alertBtn" class="alert-btn" onclick="openAlertModal()">提醒 <span id="alertDot" class="alert-dot hidden"></span></button>
@@ -417,7 +417,7 @@
 
   <!-- 3c. 大中小單統計 -->
   <div class="card" id="tickStatsCard">
-    <div class="card-title">大中小單統計（當日分鐘）<span style="font-size:0.7rem;color:var(--text-dim);margin-left:8px">⚡ 每分鐘更新</span></div>
+    <div class="card-title">大中小單統計（當日分鐘）<span style="font-size:0.7rem;color:var(--text-dim);margin-left:8px">每分鐘更新</span></div>
     <div id="tickStatsPanel"><div class="mini-loading">載入中...</div></div>
   </div>
 
@@ -577,21 +577,21 @@
   <!-- 11. TradingView Chart -->
   <div class="card" id="tvCard">
     <div class="tv-header-row">
-      <div class="card-title" style="margin:0;border:none;padding:0">📊 即時 K 線圖（TradingView）</div>
+      <div class="card-title" style="margin:0;border:none;padding:0">即時 K 線圖（TradingView）</div>
       <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
         <div class="tv-interval-tabs">
           <button class="tv-itab"        data-iv="1"  onclick="setTVInterval('1')">1分</button>
-          <button class="tv-itab"        data-iv="5"  onclick="setTVInterval('5')">5分 ⚡</button>
+          <button class="tv-itab"        data-iv="5"  onclick="setTVInterval('5')">5分</button>
           <button class="tv-itab"        data-iv="15" onclick="setTVInterval('15')">15分</button>
           <button class="tv-itab"        data-iv="60" onclick="setTVInterval('60')">60分</button>
           <button class="tv-itab active" data-iv="D"  onclick="setTVInterval('D')">日線</button>
           <button class="tv-itab"        data-iv="W"  onclick="setTVInterval('W')">週線</button>
           <button class="tv-itab"        data-iv="M"  onclick="setTVInterval('M')">月線</button>
         </div>
-        <button onclick="toggleTVFullscreen()" title="全螢幕" style="background:var(--card2);border:1px solid var(--border);color:var(--text);padding:4px 10px;border-radius:6px;cursor:pointer;font-size:0.8rem">⛶ 全螢幕</button>
+        <button onclick="toggleTVFullscreen()" title="全螢幕" style="background:var(--card2);border:1px solid var(--border);color:var(--text);padding:4px 10px;border-radius:6px;cursor:pointer;font-size:0.8rem">全螢幕</button>
       </div>
     </div>
-    <div class="tv-hint" style="font-size:0.72rem;color:var(--text-dim);margin:4px 0">⚡ 即時資料 · 內建 RSI / MACD / 成交量指標 · 點右上「指標」可新增更多策略</div>
+    <div class="tv-hint" style="font-size:0.72rem;color:var(--text-dim);margin:4px 0">即時資料 · 內建 RSI / MACD / 成交量指標 · 點右上「指標」可新增更多策略</div>
     <div id="tv_chart_container" style="height:580px; margin-top:6px"></div>
     <div class="tv-credit">Powered by <a href="https://www.tradingview.com" target="_blank" rel="noopener" style="color:var(--accent)">TradingView</a></div>
   </div>
