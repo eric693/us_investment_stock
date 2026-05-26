@@ -343,6 +343,7 @@
     <div class="header-center">
       <div class="big-price"   id="hPrice"></div>
       <div class="price-delta" id="hDelta"></div>
+      <div style="font-size:0.68rem;color:var(--text-dim);margin-top:2px">⚡ 每30秒自動更新</div>
       <div class="header-btns">
         <button id="watchBtn" class="watch-btn" onclick="toggleWatch()">+ 自選</button>
         <button id="alertBtn" class="alert-btn" onclick="openAlertModal()">提醒 <span id="alertDot" class="alert-dot hidden"></span></button>
@@ -571,6 +572,7 @@
         <button class="tv-itab"        data-iv="M"  onclick="setTVInterval('M')">月線</button>
         <button class="tv-itab"        data-iv="60" onclick="setTVInterval('60')">60分</button>
         <button class="tv-itab"        data-iv="15" onclick="setTVInterval('15')">15分</button>
+        <button class="tv-itab"        data-iv="5"  onclick="setTVInterval('5')">5分 ⚡即時</button>
       </div>
     </div>
     <div class="tv-hint">點選圖表右上方「指標」可套用內建策略（如 RSI Strategy、Supertrend 等）</div>
@@ -870,6 +872,32 @@ async function loadMarket() {
   setTimeout(loadMarket, 60000);
 }
 
+// ── Auto price refresh ───────────────────────────────────────────────
+let _priceRefreshTimer = null;
+
+async function refreshPrice(ticker) {
+  try {
+    const r = await fetch('/api/tw/quote/' + encodeURIComponent(ticker));
+    const d = await r.json();
+    if (d.error || !d.price) return;
+    $('hPrice').textContent = d.price.toFixed(2) + ' 元';
+    const up = d.change >= 0;
+    $('hDelta').textContent = (up?'+':'') + d.change.toFixed(2) + '  (' + (up?'+':'') + d.changePct.toFixed(2) + '%)';
+    $('hDelta').className   = 'price-delta ' + (up ? 'green' : 'red');
+    if (d.high)   $('sHigh').textContent = d.high.toFixed(2);
+    if (d.low)    $('sLow').textContent  = d.low.toFixed(2);
+    if (d.volume) $('sVol').textContent  = fmtTWVol(d.volume);
+    // If 1D period active, reload intraday too
+    if (currentPeriod === '1D') loadIntraday(ticker);
+  } catch(e) {}
+  _priceRefreshTimer = setTimeout(() => refreshPrice(ticker), 30000);
+}
+
+function startPriceRefresh(ticker) {
+  if (_priceRefreshTimer) clearTimeout(_priceRefreshTimer);
+  _priceRefreshTimer = setTimeout(() => refreshPrice(ticker), 30000);
+}
+
 // ── Load Stock ──────────────────────────────────────────────────────
 async function loadStock(raw) {
   const dispTicker = displayTW(normalizeTW(raw));
@@ -898,6 +926,7 @@ async function loadStock(raw) {
     loadFundamentals(d.ticker, d);
     loadBrokerChips(d.ticker);
     initTVWidget(d.ticker);
+    startPriceRefresh(d.ticker);
     if (d.isEtf) loadETFDetail(d.ticker, d);
   } catch(e) {
     showError('網路錯誤，請稍後再試：' + e.message);
@@ -917,6 +946,10 @@ function changePeriod(period) {
   document.querySelectorAll('.ptab').forEach(b => b.classList.toggle('active', b.dataset.period === period));
   if (period === '1D') {
     loadIntraday(currentData.ticker);
+    // Switch TradingView to 5-min for real-time intraday
+    setTVInterval('5');
+    const tvCard = document.getElementById('tvCard');
+    if (tvCard) tvCard.scrollIntoView({ behavior: 'smooth', block: 'start' });
     return;
   }
   if (period === '週') {
@@ -2392,7 +2425,7 @@ function createTVWidget(symbol, interval) {
     locale: 'zh_TW',
     toolbar_bg: '#0c1220',
     enable_publishing: false,
-    allow_symbol_change: true,
+    allow_symbol_change: false,
     hide_side_toolbar: false,
     withdateranges: true,
     save_image: false,

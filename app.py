@@ -791,7 +791,8 @@ def get_stock(ticker):
                 for label in ['Total Revenue', 'Revenue']:
                     if label in qf.index:
                         row = qf.loc[label]
-                        for col in row.index[:5]:
+                        sorted_cols = sorted(row.index, reverse=True)
+                        for col in sorted_cols[:5]:
                             v = safe_float(row[col])
                             if v > 0:
                                 quarterly.append({'period': str(col)[:7], 'revenue': round(v / 1e6, 1)})
@@ -1332,7 +1333,8 @@ def get_tw_stock(ticker):
                 for lbl in ['Total Revenue', 'Revenue']:
                     if lbl in qf.index:
                         row = qf.loc[lbl]
-                        for col in row.index[:5]:
+                        sorted_cols = sorted(row.index, reverse=True)
+                        for col in sorted_cols[:5]:
                             v = safe_float(row[col])
                             if v > 0:
                                 quarterly.append({'period': str(col)[:7], 'revenue': round(v / 1e6, 1)})
@@ -1511,6 +1513,38 @@ def get_tw_intraday(ticker):
             'ohlcv':  {'open': opens, 'high': highs, 'low': lows, 'close': closes, 'volume': volumes},
         }
         _cache_set(f'tw_intra:{ticker}', result, ttl=60)
+        return jsonify(result)
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/tw/quote/<ticker>')
+def get_tw_quote(ticker):
+    """Lightweight real-time quote for price header refresh."""
+    if not _valid_tw_ticker(ticker):
+        return jsonify({'error': '無效代碼'}), 400
+    ticker = tw_normalize(ticker)
+    cached = _cache_get(f'tw_quote:{ticker}')
+    if cached: return jsonify(cached)
+    try:
+        stock = yf.Ticker(ticker)
+        info  = stock.info
+        if not info.get('regularMarketPrice') and ticker.endswith('.TW'):
+            alt   = ticker.replace('.TW', '.TWO')
+            info  = yf.Ticker(alt).info
+        price      = safe_float(info.get('regularMarketPrice') or info.get('currentPrice') or info.get('previousClose', 0))
+        prev_close = safe_float(info.get('regularMarketPreviousClose') or info.get('previousClose', price))
+        change     = round(price - prev_close, 2)
+        change_pct = round((change / prev_close * 100) if prev_close else 0, 2)
+        result = {
+            'price':     round(price, 2),
+            'change':    change,
+            'changePct': change_pct,
+            'high':      safe_float(info.get('regularMarketDayHigh',  0)),
+            'low':       safe_float(info.get('regularMarketDayLow',   0)),
+            'volume':    safe_int(info.get('regularMarketVolume',     0)),
+        }
+        _cache_set(f'tw_quote:{ticker}', result, ttl=30)
         return jsonify(result)
     except Exception as e:
         return jsonify({'error': str(e)}), 500
