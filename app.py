@@ -1,4 +1,4 @@
-from flask import Flask, render_template, jsonify, request
+from flask import Flask, render_template, jsonify, request, session, redirect, url_for
 import yfinance as yf
 import pandas as pd
 import numpy as np
@@ -15,6 +15,29 @@ logging.basicConfig(level=logging.ERROR)
 logger = logging.getLogger(__name__)
 
 app = Flask(__name__)
+app.secret_key = 'sl_secret_2024_xk9m'
+
+PASSWORD = '123456789'
+
+@app.route('/login', methods=['GET', 'POST'])
+def login():
+    error = None
+    if request.method == 'POST':
+        if request.form.get('password') == PASSWORD:
+            session['auth'] = True
+            return redirect(request.args.get('next') or '/')
+        error = '密碼錯誤，請再試一次'
+    return render_template('login.html', error=error)
+
+@app.route('/logout')
+def logout():
+    session.clear()
+    return redirect('/login')
+
+def require_auth():
+    if not session.get('auth'):
+        return redirect(url_for('login', next=request.path))
+    return None
 
 _TICKER_RE = re.compile(r'^[A-Z0-9\.\-\^]{1,20}$')
 
@@ -572,6 +595,8 @@ def gen_tw_strategy(price, ma5, ma20, ma60, rsi, levels, week52h, week52l, info)
 # ── Routes ────────────────────────────────────────────────────────
 @app.route('/')
 def index():
+    r = require_auth()
+    if r: return r
     return render_template('index.html')
 
 
@@ -1202,6 +1227,8 @@ def gen_tw_catalysts(price, ma5, ma20, ma60, macd, dea, rsi,
 # ── Taiwan Routes ─────────────────────────────────────────────────────
 @app.route('/tw')
 def tw_index():
+    r = require_auth()
+    if r: return r
     return render_template('tw_stock.html')
 
 
