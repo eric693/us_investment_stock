@@ -698,7 +698,12 @@ def get_fundamentals(ticker):
         earnings_date = None
         try:
             cal = stock.calendar
-            if cal is not None and not cal.empty:
+            if isinstance(cal, dict):
+                dates = cal.get('Earnings Date', [])
+                if dates:
+                    d0 = dates[0] if isinstance(dates, list) else dates
+                    earnings_date = str(d0) if hasattr(d0, 'strftime') else str(d0)[:10]
+            elif cal is not None and not getattr(cal, 'empty', True):
                 col = cal.columns[0]
                 earnings_date = str(col.date()) if hasattr(col, 'date') else str(col)[:10]
         except:
@@ -772,10 +777,10 @@ def get_stock(ticker):
         kd_k, kd_d = calc_kd(hist['High'], hist['Low'], hist['Close'])
         hist['KD_K'] = kd_k
         hist['KD_D'] = kd_d
-        bias5_s, bias20_s, bias60_s = calc_bias(hist['Close'])
-        hist['BIAS5']  = bias5_s
-        hist['BIAS20'] = bias20_s
-        hist['BIAS60'] = bias60_s
+        _bias = calc_bias(hist['Close'])
+        hist['BIAS5']  = _bias[5]
+        hist['BIAS20'] = _bias[20]
+        hist['BIAS60'] = _bias[60]
         hist['VWMA20'] = calc_vwma(hist['Close'], hist['Volume'])
 
         # ── Core values ──
@@ -1897,7 +1902,12 @@ def get_tw_fundamentals(ticker):
         earnings_date = None
         try:
             cal = stock.calendar
-            if cal is not None and not cal.empty:
+            if isinstance(cal, dict):
+                dates = cal.get('Earnings Date', [])
+                if dates:
+                    d0 = dates[0] if isinstance(dates, list) else dates
+                    earnings_date = str(d0) if hasattr(d0, 'strftime') else str(d0)[:10]
+            elif cal is not None and not getattr(cal, 'empty', True):
                 col = cal.columns[0]
                 earnings_date = str(col.date()) if hasattr(col, 'date') else str(col)[:10]
         except:
@@ -2542,6 +2552,15 @@ def get_peers(ticker):
         'CRM':  ['MSFT','ORCL','SAP','NOW','SNOW'],
         'PLTR': ['AI','BBAI','SOUN','SNOW','CRM'],
         'RKLB': ['SPCE','BA','LMT','RTX','NOC'],
+        'CRCL': ['COIN','MSTR','MARA','RIOT','HOOD'],
+        'MSTR': ['COIN','CRCL','MARA','RIOT','HOOD'],
+        'SNOW': ['CRM','ORCL','NOW','DDOG','MDB'],
+        'INTC': ['NVDA','AMD','AVGO','QCOM','TSM'],
+        'QCOM': ['NVDA','AMD','AVGO','INTC','TSM'],
+        'V':    ['MA','PYPL','SQ','AXP','FIS'],
+        'MA':   ['V','PYPL','SQ','AXP','FIS'],
+        'NFLX': ['DIS','PARA','WBD','SPOT','ROKU'],
+        'UNH':  ['LLY','JNJ','ABBV','PFE','MRK'],
     }
 
     peers = PEER_GROUPS.get(ticker, [])

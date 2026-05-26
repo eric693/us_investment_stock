@@ -693,6 +693,9 @@ function changePeriod(period) {
     macd:       { dif: sl(currentData.macd.dif), dea: sl(currentData.macd.dea), hist: sl(currentData.macd.hist) },
     bollinger:  { upper: sl(currentData.bollinger.upper), mid: sl(currentData.bollinger.mid), lower: sl(currentData.bollinger.lower) },
     rsiSeries:  sl(currentData.rsiSeries),
+    kd:         { k: sl(currentData.kd.k), d: sl(currentData.kd.d) },
+    bias:       { bias5: sl(currentData.bias.bias5), bias20: sl(currentData.bias.bias20) },
+    vwmaSeries: sl(currentData.vwmaSeries),
   });
   renderCharts(sliced);
   if (compareData) renderCompareChart();
@@ -715,6 +718,9 @@ function renderDashboard(d) {
     macd:      { dif: sl(d.macd.dif), dea: sl(d.macd.dea), hist: sl(d.macd.hist) },
     bollinger: { upper: sl(d.bollinger.upper), mid: sl(d.bollinger.mid), lower: sl(d.bollinger.lower) },
     rsiSeries: sl(d.rsiSeries),
+    kd:        { k: sl(d.kd.k), d: sl(d.kd.d) },
+    bias:      { bias5: sl(d.bias.bias5), bias20: sl(d.bias.bias20) },
+    vwmaSeries: sl(d.vwmaSeries),
   });
   renderCharts(sliced1M);
   renderCatalysts(d);
