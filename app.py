@@ -72,6 +72,28 @@ def calc_bollinger(close, period=20, std_dev=2):
     std = close.rolling(period).std()
     return ma + std_dev * std, ma, ma - std_dev * std
 
+def calc_kd(high, low, close, period=9, k_smooth=3, d_smooth=3):
+    """Stochastic KD indicator."""
+    lowest  = low.rolling(period).min()
+    highest = high.rolling(period).max()
+    rsv = (close - lowest) / (highest - lowest).replace(0, np.nan) * 100
+    k = rsv.ewm(com=k_smooth - 1, adjust=False).mean()
+    d = k.ewm(com=d_smooth - 1, adjust=False).mean()
+    return k, d
+
+def calc_bias(close, periods=(5, 20, 60)):
+    """Deviation rate from MA."""
+    result = {}
+    for p in periods:
+        ma = close.rolling(p).mean()
+        result[p] = ((close - ma) / ma * 100).round(2)
+    return result
+
+def calc_vwma(close, volume, period=20):
+    """Volume-weighted moving average."""
+    pv = close * volume
+    return pv.rolling(period).sum() / volume.rolling(period).sum()
+
 def calc_returns(hist):
     c   = hist['Close']
     cur = safe_float(c.iloc[-1])
@@ -1260,6 +1282,12 @@ def get_tw_stock(ticker):
         hist['BB_upper'] = bb_u
         hist['BB_mid']   = bb_m
         hist['BB_lower'] = bb_l
+        hist['K'], hist['D'] = calc_kd(hist['High'], hist['Low'], hist['Close'])
+        bias = calc_bias(hist['Close'])
+        hist['BIAS5']  = bias[5]
+        hist['BIAS20'] = bias[20]
+        hist['BIAS60'] = bias[60]
+        hist['VWMA20'] = calc_vwma(hist['Close'], hist['Volume'], 20)
 
         price = safe_float(hist['Close'].iloc[-1])
         prev  = safe_float(hist['Close'].iloc[-2])
@@ -1432,6 +1460,14 @@ def get_tw_stock(ticker):
             'macd':      {'dif': clean(hist['MACD'].tolist()), 'dea': clean(hist['Signal'].tolist()), 'hist': clean(hist['MACDHist'].tolist())},
             'bollinger': {'upper': clean(hist['BB_upper'].tolist()), 'mid': clean(hist['BB_mid'].tolist()), 'lower': clean(hist['BB_lower'].tolist())},
             'rsiSeries': clean(hist['RSI'].tolist()),
+            'kdSeries':  {'k': clean(hist['K'].tolist()), 'd': clean(hist['D'].tolist())},
+            'biasSeries':{'b5': clean(hist['BIAS5'].tolist()), 'b20': clean(hist['BIAS20'].tolist()), 'b60': clean(hist['BIAS60'].tolist())},
+            'vwma20':    clean(hist['VWMA20'].tolist()),
+            'kVal':  round(safe_float(hist['K'].iloc[-1]), 2),
+            'dVal':  round(safe_float(hist['D'].iloc[-1]), 2),
+            'bias5': round(safe_float(hist['BIAS5'].iloc[-1]), 2),
+            'bias20':round(safe_float(hist['BIAS20'].iloc[-1]), 2),
+            'bias60':round(safe_float(hist['BIAS60'].iloc[-1]), 2),
         }
         _cache_set(f'tw_stock:{ticker}', result)
         return jsonify(result)
@@ -1964,6 +2000,62 @@ def get_tw_broker_chips(ticker):
         'aggregate': {'foreign': agg_f, 'trust': agg_t, 'dealer': agg_d, 'total': agg_total},
     }
     _cache_set(cache_key, result, ttl=3600)
+    return jsonify(result)
+
+
+@app.route('/api/tw/margin/<ticker>')
+def get_tw_margin(ticker):
+    """融資融券近5個交易日餘額（TWSE MI_MARGN）"""
+    if not _valid_tw_ticker(ticker):
+        return jsonify({'error': '無效代碼'}), 400
+    raw      = tw_normalize(ticker)
+    stock_no = raw.split('.')[0]
+    cache_key = f'tw_margin:{stock_no}'
+    cached = _cache_get(cache_key)
+    if cached: return jsonify(cached)
+
+    import requests as _req
+    from datetime import date, timedelta
+
+    headers = {'User-Agent': 'Mozilla/5.0'}
+    days_collected = []
+    check_date = date.today()
+
+    def parse_num(s):
+        try: return int(str(s).replace(',','').replace(' ',''))
+        except: return 0
+
+    for _ in range(20):
+        if len(days_collected) >= 5:
+            break
+        date_str = check_date.strftime('%Y%m%d')
+        try:
+            url = f'https://www.twse.com.tw/rwd/zh/marginTrading/MI_MARGN?date={date_str}&selectType=ALL&response=json'
+            r = _req.get(url, headers=headers, timeout=8)
+            d = r.json()
+            tables = d.get('tables', [])
+            # table[1] has per-stock data
+            data_table = next((t for t in tables if len(t.get('fields', [])) > 8), None)
+            if data_table:
+                for row in data_table.get('data', []):
+                    if row[0] == stock_no:
+                        days_collected.append({
+                            'date':       check_date.strftime('%m/%d'),
+                            'marginBuy':  parse_num(row[2]),
+                            'marginSell': parse_num(row[3]),
+                            'marginBal':  parse_num(row[6]),
+                            'shortBuy':   parse_num(row[8]),
+                            'shortSell':  parse_num(row[9]),
+                            'shortBal':   parse_num(row[12]),
+                        })
+                        break
+        except Exception:
+            pass
+        check_date -= timedelta(days=1)
+
+    days_collected.reverse()
+    result = {'stockNo': stock_no, 'days': days_collected}
+    _cache_set(cache_key, result, ttl=1800)
     return jsonify(result)
 
 

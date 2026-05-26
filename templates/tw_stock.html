@@ -415,6 +415,12 @@
     <div id="institutionalPanel"><div class="mini-loading">載入中...</div></div>
   </div>
 
+  <!-- 3b-2. 融資融券 -->
+  <div class="card" id="marginCard">
+    <div class="card-title">融資融券餘額（近5日）<span style="font-size:0.7rem;color:var(--text-dim);margin-left:8px">資料來源：證交所</span></div>
+    <div id="marginPanel"><div class="mini-loading">載入中...</div></div>
+  </div>
+
   <!-- 3c. 大中小單統計 -->
   <div class="card" id="tickStatsCard">
     <div class="card-title">大中小單統計（當日分鐘）<span style="font-size:0.7rem;color:var(--text-dim);margin-left:8px">每分鐘更新</span></div>
@@ -477,7 +483,9 @@
       <div id="volumeChart" style="height:65px; margin-top:2px;"></div>
       <div class="macd-bar" id="macdBar"></div>
       <div id="macdChart"   style="height:110px;"></div>
-      <div id="rsiChart"    style="flex:1; min-height:90px; margin-top:6px;"></div>
+      <div id="rsiChart"    style="height:90px; margin-top:6px;"></div>
+      <div id="kdChart"     style="height:90px; margin-top:2px;"></div>
+      <div id="biasChart"   style="height:80px; margin-top:2px;"></div>
     </div>
     <div class="right-col">
       <div class="card">
@@ -941,6 +949,7 @@ async function loadStock(raw) {
     loadNews(d.ticker);
     loadFundamentals(d.ticker, d);
     loadBrokerChips(d.ticker);
+    loadMargin(d.ticker);
     loadInstitutional(d.ticker);
     loadTickStats(d.ticker);
     initTVWidget(d.ticker);
@@ -976,6 +985,9 @@ function changePeriod(period) {
       macd:      { dif: sl(currentData.macd.dif), dea: sl(currentData.macd.dea), hist: sl(currentData.macd.hist) },
       bollinger: { upper: sl(currentData.bollinger.upper), mid: sl(currentData.bollinger.mid), lower: sl(currentData.bollinger.lower) },
       rsiSeries: sl(currentData.rsiSeries),
+      kdSeries:  currentData.kdSeries   ? { k: sl(currentData.kdSeries.k),   d: sl(currentData.kdSeries.d) } : null,
+      biasSeries:currentData.biasSeries ? { b5: sl(currentData.biasSeries.b5), b20: sl(currentData.biasSeries.b20), b60: sl(currentData.biasSeries.b60) } : null,
+      vwma20:    sl(currentData.vwma20),
       customMA:  { arrays: { m1: sl(cma.arrays.m1), m2: sl(cma.arrays.m2), m3: sl(cma.arrays.m3) }, scalars: cma.scalars },
     });
     renderCharts(sliced);
@@ -1017,8 +1029,11 @@ function changePeriod(period) {
       ma:        { ma5: sl(currentData.ma.ma5), ma20: sl(currentData.ma.ma20), ma60: sl(currentData.ma.ma60) },
       macd:      { dif: sl(currentData.macd.dif), dea: sl(currentData.macd.dea), hist: sl(currentData.macd.hist) },
       bollinger: { upper: sl(currentData.bollinger.upper), mid: sl(currentData.bollinger.mid), lower: sl(currentData.bollinger.lower) },
-      rsiSeries: sl(currentData.rsiSeries),
-      customMA:  { arrays: { m1: sl(cma.arrays.m1), m2: sl(cma.arrays.m2), m3: sl(cma.arrays.m3) }, scalars: cma.scalars },
+      rsiSeries:  sl(currentData.rsiSeries),
+      kdSeries:   currentData.kdSeries   ? { k: sl(currentData.kdSeries.k),   d: sl(currentData.kdSeries.d) } : null,
+      biasSeries: currentData.biasSeries ? { b5: sl(currentData.biasSeries.b5), b20: sl(currentData.biasSeries.b20), b60: sl(currentData.biasSeries.b60) } : null,
+      vwma20:     sl(currentData.vwma20),
+      customMA:   { arrays: { m1: sl(cma.arrays.m1), m2: sl(cma.arrays.m2), m3: sl(cma.arrays.m3) }, scalars: cma.scalars },
     });
     renderCharts(sliced);
   }
@@ -1041,7 +1056,10 @@ function renderDashboard(d) {
     ma:        { ma5: sl(d.ma.ma5), ma20: sl(d.ma.ma20), ma60: sl(d.ma.ma60) },
     macd:      { dif: sl(d.macd.dif), dea: sl(d.macd.dea), hist: sl(d.macd.hist) },
     bollinger: { upper: sl(d.bollinger.upper), mid: sl(d.bollinger.mid), lower: sl(d.bollinger.lower) },
-    rsiSeries: sl(d.rsiSeries),
+    rsiSeries:  sl(d.rsiSeries),
+    kdSeries:   d.kdSeries   ? { k: sl(d.kdSeries.k),   d: sl(d.kdSeries.d) } : null,
+    biasSeries: d.biasSeries ? { b5: sl(d.biasSeries.b5), b20: sl(d.biasSeries.b20), b60: sl(d.biasSeries.b60) } : null,
+    vwma20:     sl(d.vwma20),
     customMA:  { arrays: { m1: sl(cma.arrays.m1), m2: sl(cma.arrays.m2), m3: sl(cma.arrays.m3) }, scalars: cma.scalars },
   });
   renderCharts(sliced1M);
@@ -1404,12 +1422,16 @@ function renderCharts(d) {
   renderIndicatorBar(d);
   const cs = d.customMA ? d.customMA.scalars : null;
   const sv1 = cs ? cs.m1 : d.ma5, sv2 = cs ? cs.m2 : d.ma20, sv3 = cs ? cs.m3 : d.ma60;
+  const kdCls  = d.kVal !== undefined ? (d.kVal > 80 ? 'red' : d.kVal < 20 ? 'green' : '') : '';
+  const b5cls  = d.bias5 !== undefined ? (d.bias5 > 5 ? 'red' : d.bias5 < -5 ? 'green' : '') : '';
   setHTML('maPills',
     `<span class="pill ma5">MA${maSettings.m1}: ${sv1||'--'}</span>` +
     `<span class="pill ma20">MA${maSettings.m2}: ${sv2||'--'}</span>` +
     `<span class="pill ma60">MA${maSettings.m3}: ${sv3||'--'}</span>` +
     `<span class="pill rsi">RSI: ${d.rsi}</span>` +
-    `<span class="pill bb">BB: ${d.bbLower}~${d.bbUpper}</span>`
+    `<span class="pill bb">BB: ${d.bbLower}~${d.bbUpper}</span>` +
+    (d.kVal !== undefined ? `<span class="pill rsi" style="${kdCls==='red'?'background:rgba(232,70,70,0.15)':kdCls==='green'?'background:rgba(0,214,143,0.15)':''}">KD: ${d.kVal}/${d.dVal}</span>` : '') +
+    (d.bias5 !== undefined ? `<span class="pill bb" style="${b5cls==='red'?'color:#e84646':b5cls==='green'?'color:#00d68f':''}">BIAS5: ${d.bias5>0?'+':''}${d.bias5}%</span>` : '')
   );
 
   const dates = d.dates;
@@ -1437,6 +1459,7 @@ function renderCharts(d) {
     { type:'scatter', mode:'lines', x:dates, y:ma1arr, name:`MA${maSettings.m1}`, line:{color:'#ffa000',width:1.5}, connectgaps:false },
     { type:'scatter', mode:'lines', x:dates, y:ma2arr, name:`MA${maSettings.m2}`, line:{color:'#d94fff',width:1.5}, connectgaps:false },
     { type:'scatter', mode:'lines', x:dates, y:ma3arr, name:`MA${maSettings.m3}`, line:{color:'#36c6ff',width:1.5}, connectgaps:false },
+    ...(d.vwma20 ? [{ type:'scatter', mode:'lines', x:dates, y:d.vwma20, name:'VWMA20', line:{color:'rgba(255,220,50,0.8)',width:1.2,dash:'dot'}, connectgaps:false }] : []),
     ...hlMarkers(dates, d.ohlcv.high, d.ohlcv.low),
   ], {
     paper_bgcolor:BG, plot_bgcolor:BG, font:{color:'#6888a0',size:11},
@@ -1497,7 +1520,45 @@ function renderCharts(d) {
     ],
   }, {responsive:true,displayModeBar:false});
 
-  requestAnimationFrame(() => Plotly.Plots.resize('rsiChart'));
+  // KD Chart
+  if (d.kdSeries) {
+    Plotly.newPlot('kdChart', [
+      {type:'scatter', mode:'lines', x:dates, y:d.kdSeries.k, name:'K', line:{color:'#e8a020',width:1.5}, connectgaps:false},
+      {type:'scatter', mode:'lines', x:dates, y:d.kdSeries.d, name:'D', line:{color:'#3d8ef8',width:1.5}, connectgaps:false},
+      {type:'scatter', mode:'lines', x:dates, y:Array(dates.length).fill(80), line:{color:'rgba(232,70,70,0.4)',width:1,dash:'dash'}, showlegend:false, hoverinfo:'skip'},
+      {type:'scatter', mode:'lines', x:dates, y:Array(dates.length).fill(20), line:{color:'rgba(0,214,143,0.4)',width:1,dash:'dash'}, showlegend:false, hoverinfo:'skip'},
+    ], {
+      paper_bgcolor:BG, plot_bgcolor:BG, font:{color:'#6888a0',size:10},
+      showlegend:true, legend:{x:0,y:1.25,bgcolor:'rgba(0,0,0,0)',font:{size:10,color:'#8aaabf'},orientation:'h'},
+      margin:{l:60,r:8,t:4,b:22},
+      yaxis:{gridcolor:GRID,tickfont:{color:'#6888a0'},range:[0,100],tickvals:[0,20,50,80,100],side:'left'},
+      xaxis:{rangeslider:{visible:false},gridcolor:GRID,tickfont:{color:'#6888a0'}},
+      hovermode:'x unified',
+      shapes:[
+        {type:'line',xref:'paper',x0:0,x1:1,yref:'y',y0:80,y1:80,line:{color:'rgba(232,70,70,0.2)',width:1}},
+        {type:'line',xref:'paper',x0:0,x1:1,yref:'y',y0:20,y1:20,line:{color:'rgba(0,214,143,0.2)',width:1}},
+      ],
+    }, {responsive:true, displayModeBar:false});
+  }
+
+  // BIAS Chart
+  if (d.biasSeries) {
+    Plotly.newPlot('biasChart', [
+      {type:'scatter', mode:'lines', x:dates, y:d.biasSeries.b5,  name:'BIAS5',  line:{color:'#ffa000',width:1.5}, connectgaps:false},
+      {type:'scatter', mode:'lines', x:dates, y:d.biasSeries.b20, name:'BIAS20', line:{color:'#d94fff',width:1.2}, connectgaps:false},
+      {type:'scatter', mode:'lines', x:dates, y:d.biasSeries.b60, name:'BIAS60', line:{color:'#36c6ff',width:1.2}, connectgaps:false},
+      {type:'scatter', mode:'lines', x:dates, y:Array(dates.length).fill(0), line:{color:'rgba(100,130,160,0.4)',width:1}, showlegend:false, hoverinfo:'skip'},
+    ], {
+      paper_bgcolor:BG, plot_bgcolor:BG, font:{color:'#6888a0',size:10},
+      showlegend:true, legend:{x:0,y:1.3,bgcolor:'rgba(0,0,0,0)',font:{size:10,color:'#8aaabf'},orientation:'h'},
+      margin:{l:60,r:8,t:4,b:28},
+      yaxis:{gridcolor:GRID,tickfont:{color:'#6888a0'},zeroline:true,zerolinecolor:'#2a3a50',ticksuffix:'%',side:'left'},
+      xaxis:{rangeslider:{visible:false},gridcolor:GRID,tickfont:{color:'#6888a0'}},
+      hovermode:'x unified',
+    }, {responsive:true, displayModeBar:false});
+  }
+
+  requestAnimationFrame(() => { Plotly.Plots.resize('rsiChart'); Plotly.Plots.resize('kdChart'); Plotly.Plots.resize('biasChart'); });
   setTimeout(setupCrosshair, 120);
 }
 
@@ -2147,6 +2208,77 @@ function renderCompareChart() {
 function clearCompare() {
   compareData=null; setHTML('compareChart',''); setHTML('compareStatus','');
   const inp=$('compareInput'); if(inp) inp.value='';
+}
+
+// ── Margin Trading (融資融券) ─────────────────────────────────────────
+async function loadMargin(ticker) {
+  setHTML('marginPanel', '<div class="mini-loading">載入中...</div>');
+  try {
+    const r = await fetch('/api/tw/margin/' + encodeURIComponent(ticker));
+    const d = await r.json();
+    if (d.error || !d.days || d.days.length === 0) {
+      setHTML('marginPanel', '<div class="no-data">暫無資料（僅上市股票，ETF/上櫃不適用）</div>');
+      return;
+    }
+    renderMargin(d);
+  } catch(e) {
+    setHTML('marginPanel', '<div class="no-data">載入失敗</div>');
+  }
+}
+
+function renderMargin(d) {
+  const days = d.days;
+  const BG = '#0c1220', GRID = '#121e30';
+  const dates = days.map(x => x.date);
+
+  const chartDiv = document.createElement('div');
+  chartDiv.id = 'marginChart';
+  chartDiv.style.cssText = 'width:100%;height:220px';
+  document.getElementById('marginPanel').innerHTML = '';
+  document.getElementById('marginPanel').appendChild(chartDiv);
+
+  const marginBals = days.map(x => x.marginBal);
+  const shortBals  = days.map(x => x.shortBal);
+
+  Plotly.newPlot('marginChart', [
+    { type:'bar', name:'融資餘額(張)', x:dates, y:marginBals, marker:{color:'rgba(232,70,70,0.75)'}, yaxis:'y' },
+    { type:'bar', name:'融券餘額(張)', x:dates, y:shortBals,  marker:{color:'rgba(0,214,143,0.75)'}, yaxis:'y2' },
+  ], {
+    paper_bgcolor:BG, plot_bgcolor:BG,
+    font:{color:'#6888a0', size:11},
+    barmode: 'overlay',
+    legend:{orientation:'h', x:0, y:1.15, bgcolor:'rgba(0,0,0,0)', font:{size:11,color:'#8aaabf'}},
+    margin:{t:30, b:36, l:60, r:60},
+    xaxis:{gridcolor:GRID, tickfont:{color:'#8aaabf'}},
+    yaxis: {gridcolor:GRID, tickfont:{color:'#e84646',size:10}, side:'left',  title:{text:'融資', font:{color:'#e84646',size:10}}},
+    yaxis2:{gridcolor:'rgba(0,0,0,0)', tickfont:{color:'#00d68f',size:10}, side:'right', overlaying:'y', title:{text:'融券', font:{color:'#00d68f',size:10}}},
+    hovermode:'x unified',
+  }, {responsive:true, displayModeBar:false});
+
+  // Detail table
+  const fmtN = v => v >= 10000 ? (v/10000).toFixed(1)+'萬' : v.toLocaleString();
+  const chg = (arr, i) => i === 0 ? '' : (() => { const d = arr[i]-arr[i-1]; const s = d>=0?'+':''; const c = d>0?'color:#e84646':d<0?'color:#00d68f':''; return `<span style="${c}">${s}${fmtN(d)}</span>`; })();
+
+  const rows = days.map((day, i) => `
+    <tr>
+      <td style="color:#8aaabf">${day.date}</td>
+      <td style="text-align:right">${fmtN(day.marginBal)}</td>
+      <td style="text-align:right;font-size:0.75rem">${chg(marginBals,i)}</td>
+      <td style="text-align:right">${fmtN(day.shortBal)}</td>
+      <td style="text-align:right;font-size:0.75rem">${chg(shortBals,i)}</td>
+    </tr>`).join('');
+
+  const tableDiv = document.createElement('div');
+  tableDiv.innerHTML = `
+    <table style="width:100%;border-collapse:collapse;font-size:0.78rem;margin-top:6px">
+      <thead><tr style="color:#4a6070;border-bottom:1px solid #1a2a3a">
+        <th style="text-align:left;padding:3px 2px">日期</th>
+        <th style="text-align:right;padding:3px 4px" colspan="2">融資餘額(張)</th>
+        <th style="text-align:right;padding:3px 4px" colspan="2">融券餘額(張)</th>
+      </tr></thead>
+      <tbody>${rows}</tbody>
+    </table>`;
+  document.getElementById('marginPanel').appendChild(tableDiv);
 }
 
 // ── Institutional (三大法人) ──────────────────────────────────────────
