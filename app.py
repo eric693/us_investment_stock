@@ -1967,5 +1967,107 @@ def get_tw_broker_chips(ticker):
     return jsonify(result)
 
 
+@app.route('/api/tw/institutional/<ticker>')
+def get_tw_institutional(ticker):
+    """三大法人近5個交易日買賣超（TWSE T86）"""
+    if not _valid_tw_ticker(ticker):
+        return jsonify({'error': '無效代碼'}), 400
+    raw      = tw_normalize(ticker)
+    stock_no = raw.split('.')[0]
+    cache_key = f'tw_inst:{stock_no}'
+    cached = _cache_get(cache_key)
+    if cached: return jsonify(cached)
+
+    import requests as _req
+    from datetime import date, timedelta
+
+    headers = {'User-Agent': 'Mozilla/5.0'}
+    days_collected = []
+    check_date = date.today()
+
+    for _ in range(20):   # scan up to 20 calendar days back to find 5 trading days
+        if len(days_collected) >= 5:
+            break
+        date_str = check_date.strftime('%Y%m%d')
+        try:
+            url = f'https://www.twse.com.tw/rwd/zh/fund/T86?date={date_str}&selectType=ALLBUT0999&response=json'
+            r = _req.get(url, headers=headers, timeout=8)
+            d = r.json()
+            rows = d.get('data', [])
+            for row in rows:
+                if row[0] == stock_no:
+                    def parse_num(s):
+                        try: return int(s.replace(',','').replace(' ',''))
+                        except: return 0
+                    days_collected.append({
+                        'date':    check_date.strftime('%m/%d'),
+                        'foreign': parse_num(row[4]),
+                        'trust':   parse_num(row[10]),
+                        'dealer':  parse_num(row[11]),
+                        'total':   parse_num(row[18]),
+                    })
+                    break
+        except Exception:
+            pass
+        check_date -= timedelta(days=1)
+
+    days_collected.reverse()  # oldest first
+    result = {'stockNo': stock_no, 'days': days_collected}
+    _cache_set(cache_key, result, ttl=1800)
+    return jsonify(result)
+
+
+@app.route('/api/tw/tick_stats/<ticker>')
+def get_tw_tick_stats(ticker):
+    """大中小單統計：用yfinance 1min資料依成交量分類"""
+    if not _valid_tw_ticker(ticker):
+        return jsonify({'error': '無效代碼'}), 400
+    raw = tw_normalize(ticker)
+    cache_key = f'tw_tick:{raw}'
+    cached = _cache_get(cache_key)
+    if cached: return jsonify(cached)
+    try:
+        stock = yf.Ticker(raw)
+        hist  = stock.history(period='1d', interval='1m')
+        if hist.empty and raw.endswith('.TW'):
+            alt  = raw.replace('.TW', '.TWO')
+            hist = yf.Ticker(alt).history(period='1d', interval='1m')
+
+        if hist.empty:
+            return jsonify({'error': '暫無分鐘資料'}), 404
+
+        last_date = hist.index.date[-1]
+        hist = hist[hist.index.date == last_date]
+        times   = hist.index.tz_convert('Asia/Taipei').strftime('%H:%M').tolist()
+        volumes = [safe_int(v) for v in hist['Volume'].tolist()]
+        closes  = [round(float(c), 2) if not np.isnan(float(c)) else None for c in hist['Close'].tolist()]
+
+        # Classify by lot size (1 lot = 1000 shares in TW)
+        big, mid, small = 0, 0, 0
+        big_vol, mid_vol, small_vol = 0, 0, 0
+        bars = []
+        for t, v, c in zip(times, volumes, closes):
+            lots = v // 1000
+            cat = 'big' if lots >= 100 else 'mid' if lots >= 10 else 'small'
+            if cat == 'big':   big += 1;   big_vol   += v
+            elif cat == 'mid': mid += 1;   mid_vol   += v
+            else:              small += 1; small_vol += v
+            bars.append({'time': t, 'volume': v, 'close': c, 'cat': cat})
+
+        result = {
+            'date':  str(last_date),
+            'bars':  bars,
+            'stats': {
+                'big':   {'count': big,   'volume': big_vol},
+                'mid':   {'count': mid,   'volume': mid_vol},
+                'small': {'count': small, 'volume': small_vol},
+            }
+        }
+        _cache_set(cache_key, result, ttl=60)
+        return jsonify(result)
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5999, debug=False)

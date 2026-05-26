@@ -409,7 +409,19 @@
     </div>
   </div>
 
-  <!-- 3b. Broker Chips -->
+  <!-- 3b. 三大法人買賣超 -->
+  <div class="card" id="institutionalCard">
+    <div class="card-title">三大法人買賣超（近5日）<span id="instUpdateTime" style="font-size:0.7rem;color:var(--text-dim);margin-left:8px"></span></div>
+    <div id="institutionalPanel"><div class="mini-loading">載入中...</div></div>
+  </div>
+
+  <!-- 3c. 大中小單統計 -->
+  <div class="card" id="tickStatsCard">
+    <div class="card-title">大中小單統計（當日分鐘）<span style="font-size:0.7rem;color:var(--text-dim);margin-left:8px">⚡ 每分鐘更新</span></div>
+    <div id="tickStatsPanel"><div class="mini-loading">載入中...</div></div>
+  </div>
+
+  <!-- 3d. Broker Chips -->
   <div class="card" id="brokerChipsCard">
     <div class="bc-header">
       <div class="card-title" style="margin:0;border:none;padding:0">券商分點進出</div>
@@ -565,18 +577,22 @@
   <!-- 11. TradingView Chart -->
   <div class="card" id="tvCard">
     <div class="tv-header-row">
-      <div class="card-title" style="margin:0;border:none;padding:0">TradingView 圖表 &amp; 策略</div>
-      <div class="tv-interval-tabs">
-        <button class="tv-itab active" data-iv="D"  onclick="setTVInterval('D')">日線</button>
-        <button class="tv-itab"        data-iv="W"  onclick="setTVInterval('W')">週線</button>
-        <button class="tv-itab"        data-iv="M"  onclick="setTVInterval('M')">月線</button>
-        <button class="tv-itab"        data-iv="60" onclick="setTVInterval('60')">60分</button>
-        <button class="tv-itab"        data-iv="15" onclick="setTVInterval('15')">15分</button>
-        <button class="tv-itab"        data-iv="5"  onclick="setTVInterval('5')">5分 ⚡即時</button>
+      <div class="card-title" style="margin:0;border:none;padding:0">📊 即時 K 線圖（TradingView）</div>
+      <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+        <div class="tv-interval-tabs">
+          <button class="tv-itab"        data-iv="1"  onclick="setTVInterval('1')">1分</button>
+          <button class="tv-itab"        data-iv="5"  onclick="setTVInterval('5')">5分 ⚡</button>
+          <button class="tv-itab"        data-iv="15" onclick="setTVInterval('15')">15分</button>
+          <button class="tv-itab"        data-iv="60" onclick="setTVInterval('60')">60分</button>
+          <button class="tv-itab active" data-iv="D"  onclick="setTVInterval('D')">日線</button>
+          <button class="tv-itab"        data-iv="W"  onclick="setTVInterval('W')">週線</button>
+          <button class="tv-itab"        data-iv="M"  onclick="setTVInterval('M')">月線</button>
+        </div>
+        <button onclick="toggleTVFullscreen()" title="全螢幕" style="background:var(--card2);border:1px solid var(--border);color:var(--text);padding:4px 10px;border-radius:6px;cursor:pointer;font-size:0.8rem">⛶ 全螢幕</button>
       </div>
     </div>
-    <div class="tv-hint">點選圖表右上方「指標」可套用內建策略（如 RSI Strategy、Supertrend 等）</div>
-    <div id="tv_chart_container" style="height:560px; margin-top:10px"></div>
+    <div class="tv-hint" style="font-size:0.72rem;color:var(--text-dim);margin:4px 0">⚡ 即時資料 · 內建 RSI / MACD / 成交量指標 · 點右上「指標」可新增更多策略</div>
+    <div id="tv_chart_container" style="height:580px; margin-top:6px"></div>
     <div class="tv-credit">Powered by <a href="https://www.tradingview.com" target="_blank" rel="noopener" style="color:var(--accent)">TradingView</a></div>
   </div>
 
@@ -925,6 +941,8 @@ async function loadStock(raw) {
     loadNews(d.ticker);
     loadFundamentals(d.ticker, d);
     loadBrokerChips(d.ticker);
+    loadInstitutional(d.ticker);
+    loadTickStats(d.ticker);
     initTVWidget(d.ticker);
     startPriceRefresh(d.ticker);
     if (d.isEtf) loadETFDetail(d.ticker, d);
@@ -945,11 +963,16 @@ function changePeriod(period) {
   currentPeriod = period;
   document.querySelectorAll('.ptab').forEach(b => b.classList.toggle('active', b.dataset.period === period));
   if (period === '1D') {
-    loadIntraday(currentData.ticker);
-    // Switch TradingView to 5-min for real-time intraday
+    // Use TradingView for real-time intraday instead of delayed yfinance
     setTVInterval('5');
     const tvCard = document.getElementById('tvCard');
-    if (tvCard) tvCard.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    if (tvCard) {
+      tvCard.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      tvCard.style.boxShadow = '0 0 0 2px var(--accent)';
+      setTimeout(() => { tvCard.style.boxShadow = ''; }, 2000);
+    }
+    // Also load plotly intraday for volume/indicator reference below
+    loadIntraday(currentData.ticker);
     return;
   }
   if (period === '週') {
@@ -2095,6 +2118,120 @@ function clearCompare() {
   const inp=$('compareInput'); if(inp) inp.value='';
 }
 
+// ── Institutional (三大法人) ──────────────────────────────────────────
+async function loadInstitutional(ticker) {
+  setHTML('institutionalPanel', '<div class="mini-loading">載入中...</div>');
+  try {
+    const r = await fetch('/api/tw/institutional/' + encodeURIComponent(ticker));
+    const d = await r.json();
+    if (d.error || !d.days || d.days.length === 0) {
+      setHTML('institutionalPanel', '<div class="no-data">暫無資料（假日或上市未滿5日）</div>');
+      return;
+    }
+    renderInstitutional(d);
+    $('instUpdateTime').textContent = '資料來源：證交所 T86';
+  } catch(e) {
+    setHTML('institutionalPanel', '<div class="no-data">載入失敗</div>');
+  }
+}
+
+function renderInstitutional(d) {
+  const days = d.days;
+  const dates = days.map(x => x.date);
+  const BG = '#0c1220', GRID = '#121e30';
+
+  const fmtK = v => {
+    if (Math.abs(v) >= 1000) return (v/1000).toFixed(0) + 'K';
+    return String(v);
+  };
+
+  const barColor = arr => arr.map(v => v >= 0 ? '#e84646' : '#00d68f');
+
+  Plotly.newPlot('institutionalPanel', [
+    { type:'bar', name:'外資', x:dates, y:days.map(x=>x.foreign),
+      marker:{color: barColor(days.map(x=>x.foreign))}, text: days.map(x=>fmtK(x.foreign)), textposition:'outside', textfont:{size:10} },
+    { type:'bar', name:'投信', x:dates, y:days.map(x=>x.trust),
+      marker:{color: barColor(days.map(x=>x.trust))}, text: days.map(x=>fmtK(x.trust)), textposition:'outside', textfont:{size:10} },
+    { type:'bar', name:'自營商', x:dates, y:days.map(x=>x.dealer),
+      marker:{color: barColor(days.map(x=>x.dealer))}, text: days.map(x=>fmtK(x.dealer)), textposition:'outside', textfont:{size:10} },
+  ], {
+    paper_bgcolor:BG, plot_bgcolor:BG,
+    font:{color:'#6888a0', size:11},
+    barmode: 'group',
+    legend:{orientation:'h', x:0, y:1.12, bgcolor:'rgba(0,0,0,0)', font:{size:11,color:'#8aaabf'}},
+    margin:{t:30, b:40, l:55, r:10},
+    xaxis:{gridcolor:GRID, tickfont:{color:'#8aaabf'}},
+    yaxis:{gridcolor:GRID, tickfont:{color:'#8aaabf'}, ticksuffix:'股', zeroline:true, zerolinecolor:'#2a3a50'},
+    height: 260,
+    shapes:[{type:'line',x0:0,x1:1,xref:'paper',y0:0,y1:0,line:{color:'#2a3a50',width:1}}],
+  }, {responsive:true, displayModeBar:false});
+
+  // Summary row
+  const total = days.reduce((s,x) => s + x.total, 0);
+  const cls   = total >= 0 ? 'green' : 'red';
+  const sign  = total >= 0 ? '+' : '';
+  const instSummary = document.createElement('div');
+  instSummary.style.cssText = 'text-align:center;padding:6px 0 2px;font-size:0.8rem;color:var(--text-dim)';
+  instSummary.innerHTML = `近5日三大法人合計：<span style="color:var(--${cls});font-weight:600">${sign}${total.toLocaleString()} 股</span>`;
+  document.getElementById('institutionalPanel').appendChild(instSummary);
+}
+
+// ── Tick Stats (大中小單) ─────────────────────────────────────────────
+async function loadTickStats(ticker) {
+  setHTML('tickStatsPanel', '<div class="mini-loading">載入中...</div>');
+  try {
+    const r = await fetch('/api/tw/tick_stats/' + encodeURIComponent(ticker));
+    const d = await r.json();
+    if (d.error) {
+      setHTML('tickStatsPanel', `<div class="no-data">${d.error}</div>`);
+      return;
+    }
+    renderTickStats(d);
+  } catch(e) {
+    setHTML('tickStatsPanel', '<div class="no-data">載入失敗</div>');
+  }
+}
+
+function renderTickStats(d) {
+  const bars  = d.bars;
+  const stats = d.stats;
+  const BG = '#0c1220', GRID = '#121e30';
+
+  const times  = bars.map(b => b.time);
+  const vBig   = bars.map(b => b.cat==='big'   ? b.volume : 0);
+  const vMid   = bars.map(b => b.cat==='mid'   ? b.volume : 0);
+  const vSmall = bars.map(b => b.cat==='small' ? b.volume : 0);
+
+  Plotly.newPlot('tickStatsPanel', [
+    { type:'bar', name:'大單(≥100張)', x:times, y:vBig,   marker:{color:'#e84646'} },
+    { type:'bar', name:'中單(10~99張)', x:times, y:vMid,  marker:{color:'#ffa000'} },
+    { type:'bar', name:'小單(<10張)',  x:times, y:vSmall, marker:{color:'#36c6ff'} },
+  ], {
+    paper_bgcolor:BG, plot_bgcolor:BG,
+    font:{color:'#6888a0', size:11},
+    barmode:'stack',
+    legend:{orientation:'h', x:0, y:1.12, bgcolor:'rgba(0,0,0,0)', font:{size:11,color:'#8aaabf'}},
+    margin:{t:30, b:40, l:55, r:10},
+    xaxis:{gridcolor:GRID, tickfont:{color:'#8aaabf'}, nticks:12},
+    yaxis:{gridcolor:GRID, tickfont:{color:'#8aaabf'}},
+    height: 230,
+  }, {responsive:true, displayModeBar:false});
+
+  // Stats summary
+  const total_vol = stats.big.volume + stats.mid.volume + stats.small.volume || 1;
+  const bigPct   = (stats.big.volume   / total_vol * 100).toFixed(1);
+  const midPct   = (stats.mid.volume   / total_vol * 100).toFixed(1);
+  const smallPct = (stats.small.volume / total_vol * 100).toFixed(1);
+  const summary = document.createElement('div');
+  summary.style.cssText = 'display:flex;gap:12px;justify-content:center;padding:6px 0 2px;font-size:0.78rem;flex-wrap:wrap';
+  summary.innerHTML = `
+    <span style="color:#e84646">■ 大單 ${bigPct}%（${stats.big.count}筆）</span>
+    <span style="color:#ffa000">■ 中單 ${midPct}%（${stats.mid.count}筆）</span>
+    <span style="color:#36c6ff">■ 小單 ${smallPct}%（${stats.small.count}筆）</span>
+  `;
+  document.getElementById('tickStatsPanel').appendChild(summary);
+}
+
 // ── Broker Chips ──────────────────────────────────────────────────────
 async function loadBrokerChips(ticker) {
   const stockNo = ticker.replace('.TWO','').replace('.TW','');
@@ -2415,7 +2552,7 @@ function createTVWidget(symbol, interval) {
   new TradingView.widget({
     container_id: innerDiv.id,
     width: '100%',
-    height: 560,
+    height: 580,
     autosize: false,
     symbol: symbol,
     interval: interval,
@@ -2428,14 +2565,39 @@ function createTVWidget(symbol, interval) {
     allow_symbol_change: false,
     hide_side_toolbar: false,
     withdateranges: true,
-    save_image: false,
-    studies: [],
+    save_image: true,
+    studies: [
+      'RSI@tv-basicstudies',
+      'MACD@tv-basicstudies',
+      'Volume@tv-basicstudies',
+    ],
+    studies_overrides: {
+      'volume.volume.color.0': '#00d68f',
+      'volume.volume.color.1': '#e84646',
+    },
+    overrides: {
+      'mainSeriesProperties.candleStyle.upColor':   '#e84646',
+      'mainSeriesProperties.candleStyle.downColor': '#00d68f',
+      'mainSeriesProperties.candleStyle.borderUpColor':   '#e84646',
+      'mainSeriesProperties.candleStyle.borderDownColor': '#00d68f',
+      'mainSeriesProperties.candleStyle.wickUpColor':   '#e84646',
+      'mainSeriesProperties.candleStyle.wickDownColor': '#00d68f',
+    },
   });
 }
 
 function initTVWidget(ticker) {
   _tvCurrentSymbol = toTVSymbol(ticker);
   loadTVScript(() => createTVWidget(_tvCurrentSymbol, _tvCurrentInterval));
+}
+
+function toggleTVFullscreen() {
+  const el = document.getElementById('tv_chart_container');
+  if (!document.fullscreenElement) {
+    el.requestFullscreen && el.requestFullscreen();
+  } else {
+    document.exitFullscreen && document.exitFullscreen();
+  }
 }
 
 function setTVInterval(iv) {
