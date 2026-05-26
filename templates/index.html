@@ -65,6 +65,40 @@
   .mnav { display:flex; }
   body { padding-bottom:60px; }
 }
+/* ── TradingView ── */
+.tv-header-row { display:flex; justify-content:space-between; align-items:center; margin-bottom:6px; flex-wrap:wrap; gap:8px; }
+.tv-interval-tabs { display:flex; gap:4px; flex-wrap:wrap; }
+.tv-itab { padding:3px 10px; border-radius:5px; cursor:pointer; border:none; background:#0e1828; color:var(--text-dim); font-size:0.74rem; font-weight:700; transition:all .15s; }
+.tv-itab.active, .tv-itab:hover { background:var(--accent); color:#fff; }
+.tv-hint { font-size:0.72rem; color:var(--text-dim); margin-bottom:2px; }
+.tv-credit { font-size:0.7rem; color:var(--text-dim); text-align:right; margin-top:6px; }
+/* ── ETF Panel ── */
+.etf-dash-grid { display:grid; grid-template-columns:1fr 1fr; gap:16px; margin-bottom:16px; }
+.etf-section { margin-bottom:8px; }
+.etf-section-title { font-size:0.8rem; font-weight:700; color:var(--text-dim); margin-bottom:8px; text-transform:uppercase; letter-spacing:.05em; }
+.etf-kv-grid { display:grid; grid-template-columns:1fr 1fr; gap:6px; }
+.etf-kv { display:flex; flex-direction:column; background:#0d1e30; border-radius:7px; padding:7px 10px; }
+.etf-kv-label { font-size:0.68rem; color:var(--text-dim); margin-bottom:2px; }
+.etf-kv-val { font-size:0.88rem; font-weight:700; color:#e8f4ff; }
+.etf-kv-val.blue { color:var(--blue); }
+.etf-kv-val.yellow { color:var(--yellow); }
+.etf-kv-val.green { color:var(--green); }
+.etf-kv-val.red { color:var(--red); }
+.etf-hold-row { display:grid; grid-template-columns:60px 1fr 120px 55px; align-items:center; gap:8px; padding:4px 0; border-bottom:1px solid #1a2e44; }
+.etf-hold-sym { font-size:0.78rem; font-weight:700; color:#e8f4ff; }
+.etf-hold-name { font-size:0.7rem; color:var(--text-dim); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.etf-hold-bar { height:6px; background:#1a2e44; border-radius:3px; }
+.etf-hold-bar-fill { height:100%; background:var(--accent); border-radius:3px; }
+.etf-hold-pct { font-size:0.75rem; font-weight:700; color:var(--blue); text-align:right; }
+.etf-div-bars { display:flex; align-items:flex-end; gap:8px; height:90px; padding-top:8px; }
+.etf-div-bar-col { display:flex; flex-direction:column; align-items:center; gap:2px; }
+.etf-div-bar-fill { background:var(--accent); border-radius:2px 2px 0 0; width:28px; min-height:4px; }
+.etf-div-bar-amt { font-size:0.62rem; color:#e8f4ff; }
+.etf-div-bar-date { font-size:0.6rem; color:var(--text-dim); }
+@media(max-width:600px){
+  .etf-dash-grid { grid-template-columns:1fr; }
+  .etf-hold-row { grid-template-columns:50px 1fr 80px 45px; }
+}
 </style>
 </head>
 <body>
@@ -350,6 +384,7 @@
       <div id="macdChart"   style="height:110px;"></div>
       <div id="rsiChart"    style="height:90px; margin-top:6px;"></div>
       <div id="kdChart"     style="height:90px; margin-top:2px;"></div>
+      <div id="biasChart"   style="height:80px; margin-top:2px;"></div>
     </div>
 
     <!-- Right: Catalysts + Business -->
@@ -455,6 +490,32 @@
     <div id="newsContainer"><div class="news-loading">新聞載入中...</div></div>
   </div>
 
+  <!-- TradingView Real-time Chart -->
+  <div class="card" id="tvCard">
+    <div class="tv-header-row">
+      <span class="card-title" style="margin:0;border:none;padding:0">即時 K 線圖（TradingView）</span>
+      <div class="tv-interval-tabs">
+        <button class="tv-itab" data-iv="1"  onclick="setTVInterval('1')">1分</button>
+        <button class="tv-itab" data-iv="5"  onclick="setTVInterval('5')">5分</button>
+        <button class="tv-itab" data-iv="15" onclick="setTVInterval('15')">15分</button>
+        <button class="tv-itab" data-iv="60" onclick="setTVInterval('60')">60分</button>
+        <button class="tv-itab active" data-iv="D" onclick="setTVInterval('D')">日線</button>
+        <button class="tv-itab" data-iv="W"  onclick="setTVInterval('W')">週線</button>
+        <button class="tv-itab" data-iv="M"  onclick="setTVInterval('M')">月線</button>
+        <button class="tv-itab" onclick="toggleTVFullscreen()">全螢幕</button>
+      </div>
+    </div>
+    <div class="tv-hint">即時報價、分鐘K線，完整技術指標</div>
+    <div id="tv_chart_container" style="height:580px; margin-top:6px"></div>
+    <div class="tv-credit">Powered by <a href="https://www.tradingview.com" target="_blank" rel="noopener" style="color:var(--accent)">TradingView</a></div>
+  </div>
+
+  <!-- US ETF Analysis -->
+  <div class="card hidden" id="etfCard">
+    <div class="card-title">ETF 完整分析</div>
+    <div id="etfPanel"></div>
+  </div>
+
   <div class="footer-note">本分析為技術指標自動化計算，僅供參考，投資有風險，請謹慎評估</div>
 
 </div><!-- /#dashboard -->
@@ -488,6 +549,7 @@
   <button class="mnav-btn" data-tab="chart" onclick="mnavGo('chart')">圖表</button>
   <button class="mnav-btn" data-tab="fund" onclick="mnavGo('fund')">財務</button>
   <button class="mnav-btn" data-tab="strategy" onclick="mnavGo('strategy')">策略</button>
+  <button class="mnav-btn" data-tab="tv" onclick="mnavGo('tv')">即時圖</button>
   <button class="mnav-btn" data-tab="news" onclick="mnavGo('news')">新聞</button>
 </nav>
 
@@ -665,6 +727,8 @@ async function loadStock(ticker) {
     loadNews(ticker);
     loadFundamentals(ticker, d);
     loadPeers(ticker);
+    loadETF(ticker);
+    initTVWidget(ticker);
   } catch(e) {
     showError('網路錯誤，請稍後再試：' + e.message);
   }
@@ -694,7 +758,7 @@ function changePeriod(period) {
     bollinger:  { upper: sl(currentData.bollinger.upper), mid: sl(currentData.bollinger.mid), lower: sl(currentData.bollinger.lower) },
     rsiSeries:  sl(currentData.rsiSeries),
     kd:         { k: sl(currentData.kd.k), d: sl(currentData.kd.d) },
-    bias:       { bias5: sl(currentData.bias.bias5), bias20: sl(currentData.bias.bias20) },
+    bias:       { bias5: sl(currentData.bias.bias5), bias20: sl(currentData.bias.bias20), bias60: sl(currentData.bias.bias60) },
     vwmaSeries: sl(currentData.vwmaSeries),
   });
   renderCharts(sliced);
@@ -719,7 +783,7 @@ function renderDashboard(d) {
     bollinger: { upper: sl(d.bollinger.upper), mid: sl(d.bollinger.mid), lower: sl(d.bollinger.lower) },
     rsiSeries: sl(d.rsiSeries),
     kd:        { k: sl(d.kd.k), d: sl(d.kd.d) },
-    bias:      { bias5: sl(d.bias.bias5), bias20: sl(d.bias.bias20) },
+    bias:      { bias5: sl(d.bias.bias5), bias20: sl(d.bias.bias20), bias60: sl(d.bias.bias60) },
     vwmaSeries: sl(d.vwmaSeries),
   });
   renderCharts(sliced1M);
@@ -930,6 +994,7 @@ function renderCharts(d) {
     { type:'scatter', mode:'lines', x:dates, y:d.ma.ma5,  name:'MA5',  line:{color:'#ffa000',width:1.5}, connectgaps:false },
     { type:'scatter', mode:'lines', x:dates, y:d.ma.ma20, name:'MA20', line:{color:'#d94fff',width:1.5}, connectgaps:false },
     { type:'scatter', mode:'lines', x:dates, y:d.ma.ma60, name:'MA60', line:{color:'#36c6ff',width:1.5}, connectgaps:false },
+    { type:'scatter', mode:'lines', x:dates, y:d.vwmaSeries, name:'VWMA20', line:{color:'#ff6b6b',width:1.2,dash:'dot'}, connectgaps:false },
   ], {
     paper_bgcolor:BG, plot_bgcolor:BG,
     font:{color:'#6888a0',size:11},
@@ -1002,8 +1067,6 @@ function renderCharts(d) {
     ],
   }, {responsive:true,displayModeBar:false});
 
-  requestAnimationFrame(() => Plotly.Plots.resize('rsiChart'));
-
   // ── KD Chart ──
   if (d.kd && d.kd.k) {
     Plotly.newPlot('kdChart', [
@@ -1026,6 +1089,30 @@ function renderCharts(d) {
       hovermode:'x unified',
     }, {responsive:true,displayModeBar:false});
   }
+
+  // ── BIAS Chart ──
+  if (d.bias && d.bias.bias5) {
+    Plotly.newPlot('biasChart', [
+      {type:'scatter', mode:'lines', x:dates, y:d.bias.bias5,  name:'BIAS5',  line:{color:'#ffa000',width:1.5}, connectgaps:false},
+      {type:'scatter', mode:'lines', x:dates, y:d.bias.bias20, name:'BIAS20', line:{color:'#d94fff',width:1.2}, connectgaps:false},
+      {type:'scatter', mode:'lines', x:dates, y:d.bias.bias60, name:'BIAS60', line:{color:'#36c6ff',width:1.2}, connectgaps:false},
+      {type:'scatter', mode:'lines', x:dates, y:Array(dates.length).fill(0),
+       line:{color:'rgba(100,130,160,0.4)',width:1}, showlegend:false, hoverinfo:'skip'},
+    ], {
+      paper_bgcolor:BG, plot_bgcolor:BG, font:{color:'#6888a0',size:10},
+      showlegend:true, legend:{x:0,y:1.3,bgcolor:'rgba(0,0,0,0)',font:{size:10,color:'#8aaabf'},orientation:'h'},
+      margin:{l:60,r:8,t:4,b:28},
+      yaxis:{gridcolor:GRID,tickfont:{color:'#6888a0'},zeroline:true,zerolinecolor:'#2a3a50',ticksuffix:'%',side:'left'},
+      xaxis:{rangeslider:{visible:false},gridcolor:GRID,tickfont:{color:'#6888a0'}},
+      hovermode:'x unified',
+    }, {responsive:true,displayModeBar:false});
+  }
+
+  requestAnimationFrame(() => {
+    Plotly.Plots.resize('rsiChart');
+    Plotly.Plots.resize('kdChart');
+    Plotly.Plots.resize('biasChart');
+  });
 
   setTimeout(setupCrosshair, 120);
 }
@@ -1623,6 +1710,161 @@ async function loadPeers(ticker) {
   }
 }
 
+// ── US ETF Analysis ───────────────────────────────────────────────────
+async function loadETF(ticker) {
+  try {
+    const r = await fetch('/api/etf/' + ticker);
+    const d = await r.json();
+    if (!d.isETF) { hide('etfCard'); return; }
+    show('etfCard');
+    const prem = d.nav && d.price ? ((d.price / d.nav - 1) * 100).toFixed(2) : null;
+    const premCls = prem === null ? 'etf-prem-neu' : parseFloat(prem) > 0 ? 'etf-prem-pos' : 'etf-prem-neg';
+    const fmtAUM = v => v >= 100 ? `$${v.toFixed(0)}B` : v >= 1 ? `$${v.toFixed(1)}B` : `$${(v*1000).toFixed(0)}M`;
+    const retColor = v => v > 0 ? 'var(--green)' : v < 0 ? 'var(--red)' : 'var(--text-dim)';
+
+    // Top holdings bars
+    const maxPct = d.holdings.length ? Math.max(...d.holdings.map(h => h.pct)) : 1;
+    const holdHtml = d.holdings.length ? d.holdings.map(h => `
+      <div class="etf-hold-row">
+        <span class="etf-hold-sym">${esc(h.symbol)}</span>
+        <span class="etf-hold-name">${esc(h.name)}</span>
+        <div class="etf-hold-bar"><div class="etf-hold-bar-fill" style="width:${(h.pct/maxPct*100).toFixed(0)}%"></div></div>
+        <span class="etf-hold-pct">${h.pct.toFixed(2)}%</span>
+      </div>`).join('') : '<div class="no-data">持股資料暫無</div>';
+
+    // Dividend bars
+    const divHtml = d.dividends.length ? (() => {
+      const maxAmt = Math.max(...d.dividends.map(x => x.amount));
+      return `<div class="etf-div-bars">${d.dividends.map(dv => {
+        const h = Math.round((dv.amount / maxAmt) * 70);
+        return `<div class="etf-div-bar-col">
+          <div class="etf-div-bar-fill" style="height:${h}px"></div>
+          <div class="etf-div-bar-amt">$${dv.amount}</div>
+          <div class="etf-div-bar-date">${dv.date.slice(5)}</div>
+        </div>`;
+      }).join('')}</div>`;
+    })() : '<div class="no-data">配息記錄暫無</div>';
+
+    setHTML('etfPanel', `
+      <div class="etf-dash-grid">
+        <div class="etf-section">
+          <div class="etf-section-title">基本資訊</div>
+          <div class="etf-kv-grid">
+            <div class="etf-kv"><span class="etf-kv-label">發行商</span><span class="etf-kv-val">${esc(d.provider)}</span></div>
+            <div class="etf-kv"><span class="etf-kv-label">追蹤指數</span><span class="etf-kv-val">${esc(d.index)}</span></div>
+            <div class="etf-kv"><span class="etf-kv-label">類型</span><span class="etf-kv-val">${esc(d.category)}</span></div>
+            <div class="etf-kv"><span class="etf-kv-label">AUM 規模</span><span class="etf-kv-val blue">${d.aum ? fmtAUM(d.aum) : 'N/A'}</span></div>
+            <div class="etf-kv"><span class="etf-kv-label">費用率</span><span class="etf-kv-val yellow">${d.expenseRatio ? d.expenseRatio + '%' : 'N/A'}</span></div>
+            <div class="etf-kv"><span class="etf-kv-label">殖利率</span><span class="etf-kv-val green">${d.divYield ? d.divYield + '%' : 'N/A'}</span></div>
+            <div class="etf-kv"><span class="etf-kv-label">NAV 淨值</span><span class="etf-kv-val">$${d.nav || 'N/A'}</span></div>
+            <div class="etf-kv"><span class="etf-kv-label">Beta</span><span class="etf-kv-val">${d.beta || 'N/A'}</span></div>
+          </div>
+        </div>
+        <div class="etf-section">
+          <div class="etf-section-title">各期間報酬率</div>
+          <div class="etf-kv-grid">
+            <div class="etf-kv"><span class="etf-kv-label">今年以來</span><span class="etf-kv-val" style="color:${retColor(d.ytdReturn)}">${d.ytdReturn ? (d.ytdReturn>0?'+':'')+d.ytdReturn+'%' : 'N/A'}</span></div>
+            <div class="etf-kv"><span class="etf-kv-label">3年平均</span><span class="etf-kv-val" style="color:${retColor(d.threeYrReturn)}">${d.threeYrReturn ? (d.threeYrReturn>0?'+':'')+d.threeYrReturn+'%' : 'N/A'}</span></div>
+            <div class="etf-kv"><span class="etf-kv-label">5年平均</span><span class="etf-kv-val" style="color:${retColor(d.fiveYrReturn)}">${d.fiveYrReturn ? (d.fiveYrReturn>0?'+':'')+d.fiveYrReturn+'%' : 'N/A'}</span></div>
+            <div class="etf-kv"><span class="etf-kv-label">52週高</span><span class="etf-kv-val red">$${d.week52High}</span></div>
+            <div class="etf-kv"><span class="etf-kv-label">52週低</span><span class="etf-kv-val green">$${d.week52Low}</span></div>
+          </div>
+        </div>
+      </div>
+      <div class="etf-section" style="margin-bottom:12px">
+        <div class="etf-section-title">前10大成分股</div>
+        ${holdHtml}
+      </div>
+      <div class="etf-section">
+        <div class="etf-section-title">近期配息記錄</div>
+        ${divHtml}
+      </div>
+    `);
+  } catch(e) {
+    hide('etfCard');
+  }
+}
+
+// ── TradingView Widget ────────────────────────────────────────────────
+let _tvScriptLoaded = false;
+let _tvCurrentInterval = 'D';
+let _tvCurrentSymbol = '';
+
+function toTVSymbol(ticker) {
+  // US stocks use NASDAQ or NYSE prefix; TradingView auto-resolves bare tickers
+  return ticker;
+}
+
+function loadTVScript(cb) {
+  if (_tvScriptLoaded) { cb(); return; }
+  if (document.getElementById('tv-script')) {
+    document.getElementById('tv-script').addEventListener('load', () => { _tvScriptLoaded = true; cb(); });
+    return;
+  }
+  const s = document.createElement('script');
+  s.id = 'tv-script';
+  s.src = 'https://s3.tradingview.com/tv.js';
+  s.onload = () => { _tvScriptLoaded = true; cb(); };
+  document.head.appendChild(s);
+}
+
+function createTVWidget(symbol, interval) {
+  const container = $('tv_chart_container');
+  if (!container) return;
+  container.innerHTML = '';
+  const innerDiv = document.createElement('div');
+  innerDiv.id = 'tv_inner_' + Date.now();
+  container.appendChild(innerDiv);
+  new TradingView.widget({
+    container_id: innerDiv.id,
+    width: '100%',
+    height: 580,
+    autosize: false,
+    symbol: symbol,
+    interval: interval,
+    timezone: 'America/New_York',
+    theme: 'dark',
+    style: '1',
+    locale: 'zh_TW',
+    toolbar_bg: '#0c1220',
+    enable_publishing: false,
+    allow_symbol_change: false,
+    hide_side_toolbar: false,
+    withdateranges: true,
+    save_image: true,
+    studies: ['RSI@tv-basicstudies','MACD@tv-basicstudies','Volume@tv-basicstudies'],
+    studies_overrides: {
+      'volume.volume.color.0': '#00d68f',
+      'volume.volume.color.1': '#e84646',
+    },
+    overrides: {
+      'mainSeriesProperties.candleStyle.upColor':          '#e84646',
+      'mainSeriesProperties.candleStyle.downColor':        '#00d68f',
+      'mainSeriesProperties.candleStyle.borderUpColor':    '#e84646',
+      'mainSeriesProperties.candleStyle.borderDownColor':  '#00d68f',
+      'mainSeriesProperties.candleStyle.wickUpColor':      '#e84646',
+      'mainSeriesProperties.candleStyle.wickDownColor':    '#00d68f',
+    },
+  });
+}
+
+function initTVWidget(ticker) {
+  _tvCurrentSymbol = toTVSymbol(ticker);
+  loadTVScript(() => createTVWidget(_tvCurrentSymbol, _tvCurrentInterval));
+}
+
+function toggleTVFullscreen() {
+  const el = $('tv_chart_container');
+  if (!document.fullscreenElement) el.requestFullscreen && el.requestFullscreen();
+  else document.exitFullscreen && document.exitFullscreen();
+}
+
+function setTVInterval(iv) {
+  _tvCurrentInterval = iv;
+  document.querySelectorAll('.tv-itab').forEach(b => b.classList.toggle('active', b.dataset.iv === iv));
+  if (_tvCurrentSymbol) createTVWidget(_tvCurrentSymbol, iv);
+}
+
 // ── Heatmap ────────────────────────────────────────────────────────────
 async function loadHeatmap() {
   try {
@@ -1673,6 +1915,7 @@ const MNAV_TARGETS = {
   chart:    'priceChart',
   fund:     'finTrendsPanel',
   strategy: 'strategy',
+  tv:       'tvCard',
   news:     'newsCard',
 };
 function mnavGo(tab) {
@@ -1684,7 +1927,7 @@ function showMobileNav() { $('mobileNav').classList.remove('hidden'); }
 
 // ── Crosshair Sync ────────────────────────────────────────────────────
 function setupCrosshair() {
-  const ids = ['priceChart', 'volumeChart', 'macdChart', 'rsiChart', 'kdChart'];
+  const ids = ['priceChart', 'volumeChart', 'macdChart', 'rsiChart', 'kdChart', 'biasChart'];
   const rsiStatic = [
     {type:'line',xref:'paper',x0:0,x1:1,yref:'y',y0:70,y1:70,line:{color:'rgba(232,70,70,0.25)',width:1}},
     {type:'line',xref:'paper',x0:0,x1:1,yref:'y',y0:30,y1:30,line:{color:'rgba(0,214,143,0.25)',width:1}},

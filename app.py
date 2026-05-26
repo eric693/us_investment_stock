@@ -966,7 +966,9 @@ def get_stock(ticker):
             'bias': {
                 'bias5':  clean(hist['BIAS5'].tolist()),
                 'bias20': clean(hist['BIAS20'].tolist()),
+                'bias60': clean(hist['BIAS60'].tolist()),
             },
+            'bias60': round(safe_float(hist['BIAS60'].iloc[-1]), 2),
             'vwmaSeries': clean(hist['VWMA20'].tolist()),
             'kdK':    round(safe_float(hist['KD_K'].iloc[-1]), 2),
             'kdD':    round(safe_float(hist['KD_D'].iloc[-1]), 2),
@@ -2598,6 +2600,105 @@ def get_peers(ticker):
     result = {'peers': results, 'self': ticker}
     _cache_set(cache_key, result, ttl=1800)
     return jsonify(result)
+
+
+US_ETF_INFO = {
+    'SPY':   {'name':'S&P 500 ETF','index':'S&P 500','provider':'State Street','category':'大型股指數'},
+    'QQQ':   {'name':'納斯達克100 ETF','index':'Nasdaq-100','provider':'Invesco','category':'科技/成長'},
+    'IWM':   {'name':'羅素2000 ETF','index':'Russell 2000','provider':'iShares','category':'小型股'},
+    'GLD':   {'name':'黃金ETF','index':'Gold Spot','provider':'SPDR','category':'大宗商品'},
+    'TLT':   {'name':'20年期美債ETF','index':'ICE 20+Y US Treasury','provider':'iShares','category':'長期國債'},
+    'XLK':   {'name':'科技類股ETF','index':'Technology Select Sector','provider':'SPDR','category':'科技'},
+    'XLF':   {'name':'金融類股ETF','index':'Financial Select Sector','provider':'SPDR','category':'金融'},
+    'ARKK':  {'name':'ARK創新ETF','index':'ARK Innovation','provider':'ARK Invest','category':'主動型/科技'},
+    'VTI':   {'name':'全美股市ETF','index':'CRSP US Total Market','provider':'Vanguard','category':'全市場'},
+    'IEMG':  {'name':'新興市場ETF','index':'MSCI Emerging Markets','provider':'iShares','category':'新興市場'},
+    'SOXS':  {'name':'半導體3倍反向ETF','index':'PHLX Semiconductor','provider':'Direxion','category':'槓桿反向'},
+    'SOXL':  {'name':'半導體3倍做多ETF','index':'PHLX Semiconductor','provider':'Direxion','category':'槓桿做多'},
+    'TQQQ':  {'name':'納斯達克3倍做多ETF','index':'Nasdaq-100','provider':'ProShares','category':'槓桿做多'},
+    'NVDL':  {'name':'NVDA 2倍做多ETF','index':'NVDA x2','provider':'GraniteShares','category':'槓桿做多'},
+}
+
+@app.route('/api/etf/<ticker>')
+def get_us_etf(ticker):
+    ticker = ticker.upper().strip()
+    if not _valid_ticker(ticker):
+        return jsonify({'error': '無效代碼'}), 400
+    cache_key = f'us_etf:{ticker}'
+    cached = _cache_get(cache_key)
+    if cached: return jsonify(cached)
+    try:
+        stock = yf.Ticker(ticker)
+        info  = stock.info
+        quoteType = (info.get('quoteType') or '').upper()
+        if quoteType not in ('ETF', 'MUTUALFUND') and ticker not in US_ETF_INFO:
+            return jsonify({'isETF': False})
+
+        hist = stock.history(period='1y')
+        price = safe_float(info.get('regularMarketPrice') or info.get('navPrice') or info.get('currentPrice', 0))
+        prev  = safe_float(info.get('regularMarketPreviousClose') or info.get('previousClose', price))
+        aum   = safe_float(info.get('totalAssets', 0))
+        nav   = safe_float(info.get('navPrice', price))
+        expense_ratio = round(safe_float(info.get('annualReportExpenseRatio') or info.get('totalExpenseRatio', 0)) * 100, 3)
+        div_yield = round(safe_div_yield_pct(info), 2)
+        week52h = safe_float(info.get('fiftyTwoWeekHigh', 0))
+        week52l = safe_float(info.get('fiftyTwoWeekLow', 0))
+        ytd_return = round(safe_float(info.get('ytdReturn', 0)) * 100, 2)
+        three_yr   = round(safe_float(info.get('threeYearAverageReturn', 0)) * 100, 2)
+        five_yr    = round(safe_float(info.get('fiveYearAverageReturn', 0)) * 100, 2)
+        beta       = round(safe_float(info.get('beta3Year', info.get('beta', 0))), 2)
+
+        # Top holdings
+        holdings = []
+        try:
+            fh = stock.funds_data
+            if fh and hasattr(fh, 'top_holdings') and fh.top_holdings is not None:
+                for i, (sym, row) in enumerate(fh.top_holdings.iterrows()):
+                    if i >= 10: break
+                    pct = safe_float(row.get('Holding Percent', 0)) * 100
+                    holdings.append({'symbol': str(sym), 'name': str(row.get('Description', sym))[:30], 'pct': round(pct, 2)})
+        except:
+            pass
+
+        # Dividend history
+        divs = []
+        try:
+            div_hist = stock.dividends
+            if div_hist is not None and not div_hist.empty:
+                recent = div_hist.iloc[-8:]
+                for dt, amt in recent.items():
+                    divs.append({'date': str(dt)[:10], 'amount': round(float(amt), 4)})
+                divs = list(reversed(divs))
+        except:
+            pass
+
+        static = US_ETF_INFO.get(ticker, {})
+        result = {
+            'isETF': True,
+            'ticker': ticker,
+            'name': static.get('name') or info.get('longName', ticker),
+            'index': static.get('index', info.get('category', '')),
+            'provider': static.get('provider', info.get('fundFamily', '')),
+            'category': static.get('category', ''),
+            'price': round(price, 2),
+            'nav': round(nav, 2),
+            'aum': round(aum / 1e9, 2),
+            'expenseRatio': expense_ratio,
+            'divYield': div_yield,
+            'week52High': round(week52h, 2),
+            'week52Low':  round(week52l, 2),
+            'ytdReturn': ytd_return,
+            'threeYrReturn': three_yr,
+            'fiveYrReturn': five_yr,
+            'beta': beta,
+            'holdings': holdings,
+            'dividends': divs,
+        }
+        _cache_set(cache_key, result, ttl=3600)
+        return jsonify(result)
+    except Exception as e:
+        logger.exception('ETF API error')
+        return jsonify({'error': '資料載入失敗'}), 500
 
 
 if __name__ == '__main__':
