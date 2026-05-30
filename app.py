@@ -1185,6 +1185,52 @@ import re as _re
 _TICKER_RE = _re.compile(r'^[A-Z0-9\.\-\^]{1,20}$')
 _TW_TICKER_RE = _re.compile(r'^[0-9]{4,6}([A-Z]{0,2})?(\.(TW|TWO))?$', _re.IGNORECASE)
 
+# ── Taiwan Chinese Name Cache ─────────────────────────────────────────
+_TW_NAME_CACHE: dict = {}
+_TW_NAME_LOADED = False
+_TW_NAME_LOCK   = threading.Lock()
+
+def _load_tw_names():
+    global _TW_NAME_CACHE, _TW_NAME_LOADED
+    if _TW_NAME_LOADED:
+        return
+    with _TW_NAME_LOCK:
+        if _TW_NAME_LOADED:
+            return
+        try:
+            r = _requests.get(
+                'https://openapi.twse.com.tw/v1/exchangeReport/STOCK_DAY_ALL',
+                timeout=8, headers={'User-Agent': 'Mozilla/5.0'}
+            )
+            for item in r.json():
+                code = item.get('Code', '')
+                name = item.get('Name', '')
+                if code and name:
+                    _TW_NAME_CACHE[code] = name
+        except:
+            pass
+        try:
+            r = _requests.get(
+                'https://www.tpex.org.tw/openapi/v1/tpex_mainboard_quotes',
+                timeout=8, headers={'User-Agent': 'Mozilla/5.0'}
+            )
+            for item in r.json():
+                code = item.get('SecuritiesCompanyCode', '')
+                name = item.get('CompanyAbbreviation', '')
+                if code and name:
+                    _TW_NAME_CACHE[code] = name
+        except:
+            pass
+        _TW_NAME_LOADED = True
+
+def get_tw_cn_name(ticker, fallback=''):
+    _load_tw_names()
+    code = ticker.replace('.TW','').replace('.TWO','')
+    return _TW_NAME_CACHE.get(code, fallback)
+
+# 在背景預先載入
+threading.Thread(target=_load_tw_names, daemon=True).start()
+
 def _valid_ticker(t):
     return bool(_TICKER_RE.match(t))
 
@@ -1775,7 +1821,7 @@ def get_tw_stock(ticker):
         result = {
             'ticker':        ticker,
             'displayTicker': tw_display(ticker),
-            'name':          info.get('longName', info.get('shortName', ticker)),
+            'name':          get_tw_cn_name(ticker) or info.get('shortName', info.get('longName', ticker)),
             'sector':        info.get('sector', ''),
             'industry':      info.get('industry', ''),
             'country':       info.get('country', 'Taiwan'),
@@ -2025,19 +2071,17 @@ def get_tw_etf(ticker):
         # ── Top holdings ──
         holdings = []
         try:
-            th = stock.funds_top_holdings
-            if th is not None and not th.empty:
-                cols = [str(c) for c in th.columns]
-                sym_col  = next((c for c in cols if 'symbol' in c.lower() or 'ticker' in c.lower()), None)
-                name_col = next((c for c in cols if 'name'   in c.lower() or 'holding' in c.lower()), cols[0] if cols else None)
-                pct_col  = next((c for c in cols if 'pct'    in c.lower() or 'percent' in c.lower() or 'weight' in c.lower() or 'asset' in c.lower()), None)
-                for _, row in th.head(10).iterrows():
-                    sym  = str(row[sym_col])  if sym_col  else ''
-                    name = str(row[name_col]) if name_col else ''
-                    pct  = safe_float(row[pct_col]) if pct_col else 0
-                    if pct > 1: pct /= 100
-                    if name and name != 'nan':
-                        holdings.append({'symbol': sym[:10], 'name': name[:30], 'pct': round(pct * 100, 2)})
+            fd = stock.funds_data
+            if fd is not None:
+                th = fd.top_holdings
+                if th is not None and not th.empty:
+                    for sym, row in th.iterrows():
+                        name = str(row.get('Name', sym))
+                        pct  = safe_float(row.get('Holding Percent', 0))
+                        if pct > 1: pct /= 100
+                        if name and name != 'nan':
+                            holdings.append({'symbol': str(sym).replace('.TW','').replace('.TWO','')[:10],
+                                             'name': name[:30], 'pct': round(pct * 100, 2)})
         except:
             pass
 
@@ -2728,7 +2772,7 @@ def get_tw_screener():
             vol_ratio = round(cur_vol / avg_vol, 1) if avg_vol else 1
             code = ticker.split('.')[0]
             info = stock.info
-            name = info.get('longName', info.get('shortName', code))[:8]
+            name = (get_tw_cn_name(ticker) or info.get('shortName', code))[:8]
             signals = []
             if k_val > d_val and k_val < 80 and rsi < 60:
                 signals.append('KD黃金交叉')
@@ -2841,9 +2885,9 @@ def get_tw_peers(ticker):
             ret20 = round((cur / base - 1) * 100, 2) if base else 0
             ret1  = round((cur / safe_float(close.iloc[-2]) - 1) * 100, 2) if len(close) > 1 else 0
             code  = t.split('.')[0]
-            cn_name = TW_CN_NAMES.get(code)
+            cn_name = get_tw_cn_name(t) or TW_CN_NAMES.get(code)
             if cn_name:
-                name = cn_name
+                name = cn_name[:8]
             else:
                 info = yf.Ticker(t).info
                 name = info.get('shortName', code)[:8]
@@ -3786,4 +3830,4 @@ sys.modules[__name__].__dict__['_run_server_scan'] = _run_server_scan_with_exit
 
 
 if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=6001, debug=False)
+    app.run(host='0.0.0.0', port=5999, debug=False)
