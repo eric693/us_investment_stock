@@ -1,4 +1,4 @@
-from flask import Flask, render_template, jsonify, request
+from flask import Flask, render_template, jsonify, request, session, redirect, url_for
 import yfinance as yf
 import pandas as pd
 import numpy as np
@@ -14,6 +14,33 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 warnings.filterwarnings('ignore')
 
 app = Flask(__name__)
+app.secret_key = 'stocklens-secret-2024'
+
+PASSWORD = '123456789'
+
+def login_required(f):
+    from functools import wraps
+    @wraps(f)
+    def decorated(*args, **kwargs):
+        if not session.get('authenticated'):
+            return redirect(url_for('login'))
+        return f(*args, **kwargs)
+    return decorated
+
+@app.route('/login', methods=['GET', 'POST'])
+def login():
+    error = None
+    if request.method == 'POST':
+        if request.form.get('password') == PASSWORD:
+            session['authenticated'] = True
+            return redirect(url_for('index'))
+        error = '密碼錯誤，請再試一次'
+    return render_template('login.html', error=error)
+
+@app.route('/logout')
+def logout():
+    session.clear()
+    return redirect(url_for('login'))
 
 # ── Server-side Monitor ────────────────────────────────────────────────
 MONITOR_FILE = os.path.join(os.path.dirname(__file__), 'monitor_config.json')
@@ -770,6 +797,7 @@ def gen_strategy(price, ma5, ma20, ma60, rsi, levels, info=None):
 
 # ── Routes ────────────────────────────────────────────────────────
 @app.route('/')
+@login_required
 def index():
     return render_template('index.html')
 
@@ -1153,6 +1181,31 @@ def get_news(ticker):
         return jsonify({'ticker': ticker, 'articles': [], 'error': str(e)})
 
 
+import re as _re
+_TICKER_RE = _re.compile(r'^[A-Z0-9\.\-\^]{1,20}$')
+_TW_TICKER_RE = _re.compile(r'^[0-9]{4,6}([A-Z]{0,2})?(\.(TW|TWO))?$', _re.IGNORECASE)
+
+def _valid_ticker(t):
+    return bool(_TICKER_RE.match(t))
+
+def _valid_tw_ticker(raw):
+    return bool(_TW_TICKER_RE.match(raw.strip().upper()))
+
+def safe_div_yield_pct(info):
+    raw = safe_float(info.get('dividendYield', 0))
+    return raw if raw > 1 else raw * 100
+
+def calc_bias(close, periods=(5, 20, 60)):
+    result = {}
+    for p in periods:
+        ma = close.rolling(p).mean()
+        result[p] = ((close - ma) / ma * 100).round(2)
+    return result
+
+def calc_vwma(close, volume, period=20):
+    pv = close * volume
+    return pv.rolling(period).sum() / volume.rolling(period).sum()
+
 # ── Taiwan Helpers ────────────────────────────────────────────────────
 def tw_normalize(raw):
     raw = raw.strip().upper()
@@ -1162,6 +1215,51 @@ def tw_normalize(raw):
 
 def tw_display(ticker):
     return ticker.replace('.TWO', '').replace('.TW', '')
+
+def gen_tw_strategy(price, ma5, ma20, ma60, rsi, levels, week52h, week52l, info):
+    pe           = safe_float(info.get('trailingPE', 0))
+    fwd_eps      = safe_float(info.get('forwardEps', 0))
+    trailing_eps = safe_float(info.get('trailingEps', 0))
+    div_rate     = safe_float(info.get('dividendRate', 0))
+    analyst_t    = safe_float(info.get('targetMeanPrice', 0))
+    r1           = levels['resistance1']
+    s1           = levels['support1']
+    bull_candidates = []
+    if analyst_t > price * 1.02:
+        bull_candidates.append(analyst_t)
+    if week52h > price * 1.01:
+        bull_candidates.append(week52h * 1.03)
+    eps = fwd_eps if fwd_eps > 0 else trailing_eps
+    if eps > 0 and pe > 0:
+        bull_candidates.append(eps * min(pe * 1.1, 30))
+    bull_candidates.append(r1 * 1.05)
+    bull_t = round(max(c for c in bull_candidates if c > price * 1.01), 1) \
+             if any(c > price * 1.01 for c in bull_candidates) \
+             else round(r1 * 1.05, 1)
+    if eps > 0 and pe > 0:
+        neutral_t = round(eps * pe, 1)
+    else:
+        neutral_t = round(r1, 1)
+    bear_t = round(s1 * 0.97, 1)
+    if div_rate > 0:
+        yield_floor = round(div_rate / 0.07, 1)
+        bear_t = max(bear_t, yield_floor)
+    stop = max(s1 * 0.97, price * 0.90)
+    if price > ma20 and rsi < 70:
+        long_t  = f'逢回布局，回測 MA20（{ma20:.2f}）附近加倉，止損設 MA60（{ma60:.2f}）下方 3%'
+        swing_t = f'波段操作：突破近期高點 {r1:.2f} 後加碼，回踩 MA20 止損'
+        short_t = f'短線留意支撐位 {s1:.2f} 附近反彈機會，嚴格設止損'
+    else:
+        long_t  = f'等待股價站穩 MA60（{ma60:.2f}）後再布局，降低進場風險'
+        swing_t = f'等待回測 MA20（{ma20:.2f}）確認支撐後入場，止損設前低'
+        short_t = f'技術面偏弱，觀望為主，等待均線金叉信號再行動'
+    return {
+        'long': long_t, 'swing': swing_t, 'short': short_t,
+        'stopLoss':      round(stop, 2),
+        'bullTarget':    bull_t,
+        'neutralTarget': neutral_t,
+        'bearTarget':    bear_t,
+    }
 
 def gen_tw_risks(price, ma20, rsi, vol_ratio, week52h,
                  pe=0, fwd_pe=0, beta=1.0, debt_equity=0,
@@ -1373,6 +1471,7 @@ def gen_tw_catalysts(price, ma5, ma20, ma60, macd, dea, rsi,
 
 # ── Taiwan Routes ─────────────────────────────────────────────────────
 @app.route('/portfolio')
+@login_required
 def portfolio():
     return render_template('portfolio.html')
 
@@ -1475,6 +1574,7 @@ def compare_stocks():
 
 
 @app.route('/tw')
+@login_required
 def tw_index():
     return render_template('tw_stock.html')
 
@@ -2144,6 +2244,878 @@ def monitor_scan_now():
     return jsonify({'ok': True})
 
 
+# ── Restored Taiwan API endpoints ─────────────────────────────────────
+
+@app.route('/api/tw/quote/<ticker>')
+def get_tw_quote(ticker):
+    if not _valid_tw_ticker(ticker):
+        return jsonify({'error': '無效代碼'}), 400
+    ticker = tw_normalize(ticker)
+    cached = _cache_get(f'tw_quote:{ticker}')
+    if cached: return jsonify(cached)
+    try:
+        stock = yf.Ticker(ticker)
+        info  = stock.info
+        if not info.get('regularMarketPrice') and ticker.endswith('.TW'):
+            alt   = ticker.replace('.TW', '.TWO')
+            info  = yf.Ticker(alt).info
+        price      = safe_float(info.get('regularMarketPrice') or info.get('currentPrice') or info.get('previousClose', 0))
+        prev_close = safe_float(info.get('regularMarketPreviousClose') or info.get('previousClose', price))
+        change     = round(price - prev_close, 2)
+        change_pct = round((change / prev_close * 100) if prev_close else 0, 2)
+        result = {
+            'price':     round(price, 2),
+            'change':    change,
+            'changePct': change_pct,
+            'high':      safe_float(info.get('regularMarketDayHigh',  0)),
+            'low':       safe_float(info.get('regularMarketDayLow',   0)),
+            'volume':    safe_int(info.get('regularMarketVolume',     0)),
+        }
+        _cache_set(f'tw_quote:{ticker}', result, ttl=30)
+        return jsonify(result)
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+def _infer_etf_methodology(name, sectors, holdings):
+    n = (name or '').lower()
+    if 'top 50' in n or '台灣50' in n:
+        return '追蹤「臺灣50指數」，從上市公司中選出市值最大前50家，採市值加權，為台股藍籌股代表性指標。'
+    if 'mid-cap' in n or 'midcap' in n or '中型' in n:
+        return '追蹤台股中型股指數，補足大型股以外的中市值企業曝險，市值介於大型股與小型股之間。'
+    if 'nasdaq' in n:
+        return '追蹤 NASDAQ-100 指數，涵蓋美國那斯達克交易所市值最大100家非金融企業，科技比重高達50%以上。'
+    if 'sp500' in n or 's&p 500' in n or 'sp 500' in n:
+        return '追蹤 S&P 500 指數，涵蓋美國500大市值企業，分散投資於全市場，為全球最具代表性的股市指標。'
+    if 'semiconductor' in n or '半導體' in n:
+        return '聚焦半導體產業鏈（IC設計、晶圓代工、封測等），隨AI需求與科技週期波動，適合積極型投資人。'
+    if 'high dividend' in n or '高息' in n or '高股息' in n or 'dividend' in n:
+        return '以高殖利率為主要選股邏輯，篩選配息穩定且殖利率高於市場平均個股，重視現金流的收益型投資人首選。'
+    if 'esg' in n:
+        return '依 ESG（環境、社會、公司治理）標準篩選，排除高碳排或治理不佳企業，兼顧長期報酬與永續理念。'
+    if '正2' in n or 'leveraged' in n or '2x' in n:
+        return '正向2倍槓桿ETF，每日追蹤標的指數2倍報酬，適合短線波段，長期持有有複利衰減風險，非長線工具。'
+    if '反1' in n or '空' in n or 'inverse' in n or 'bear' in n:
+        return '反向1倍ETF，追蹤標的指數的負1倍日報酬，可作空頭避險工具，不適合長期持有。'
+    if 'reit' in n or 'real estate' in n:
+        return '投資不動產投資信託（REITs），透過持有商業不動產或抵押貸款提供穩定租金收益，配息頻率通常較高。'
+    if 'bond' in n or 'government' in n or '公債' in n or '債' in n:
+        return '追蹤固定收益（債券）指數，以政府或公司債為主要持倉，低波動、穩定息收，可作投資組合防禦配置。'
+    if sectors:
+        top_sec = max(sectors, key=sectors.get)
+        sec_names = {
+            'technology': '科技產業', 'financial_services': '金融業',
+            'healthcare': '醫療保健', 'consumer_cyclical': '消費類',
+            'industrials': '工業', 'basic_materials': '原物料',
+            'communication_services': '通訊服務', 'energy': '能源',
+        }
+        s = sec_names.get(top_sec, top_sec)
+        return f'採指數化被動管理策略，{s}產業權重最高，追蹤特定指數以分散個股集中風險、降低管理費用。'
+    return '採指數化被動管理策略，追蹤特定基準指數，以分散投資降低個股集中風險。'
+
+
+def _gen_etf_entry(price, nav, rsi, ma20, ma60, div_yield, is_lev):
+    score = 0
+    signals = []
+    if nav > 0:
+        prem = round((price - nav) / nav * 100, 2)
+        if prem < -2:   score += 2; signals.append(('buy',  f'折價 {abs(prem):.1f}%，低於淨值具吸引力'))
+        elif prem > 3:  score -= 1; signals.append(('warn', f'溢價 {prem:.1f}%，高於淨值謹慎追價'))
+        else:           score += 1; signals.append(('ok',   f'溢/折價 {prem:.1f}%，接近淨值合理'))
+    if price > ma20 and ma20 > 0 and ma60 > 0 and ma20 > ma60:
+        score += 1; signals.append(('buy',  '站上 MA20/60，中長期趨勢偏多'))
+    elif ma60 > 0 and price < ma60:
+        score -= 1; signals.append(('warn', '跌破 MA60，中期趨勢偏弱'))
+    if rsi > 0:
+        if rsi < 35:    score += 2; signals.append(('buy',  f'RSI {rsi:.0f} 超賣，逢低布局機會'))
+        elif rsi > 72:  score -= 1; signals.append(('warn', f'RSI {rsi:.0f} 超買，短線謹慎'))
+        elif 45 <= rsi <= 65: score += 1; signals.append(('ok', f'RSI {rsi:.0f} 健康動能區間'))
+    if div_yield > 4:   score += 1; signals.append(('buy',  f'殖利率 {div_yield:.1f}%，息收具吸引力'))
+    elif div_yield > 2: signals.append(('ok',   f'殖利率 {div_yield:.1f}%，一般水準'))
+    if is_lev:          signals.append(('warn', '槓桿/反向ETF，僅適合短線波段，不宜長期持有'))
+    if score >= 4:   rec, col = '強力建議進場',    '#00d68f'
+    elif score >= 2: rec, col = '可分批布局',       '#3d8ef8'
+    elif score >= 0: rec, col = '觀望等待時機',     '#f0b429'
+    else:            rec, col = '暫不建議，等待回調', '#e84646'
+    return {'score': score, 'rec': rec, 'color': col, 'signals': signals}
+
+
+@app.route('/api/tw/etf_detail/<ticker>')
+def get_tw_etf_detail(ticker):
+    if not _valid_tw_ticker(ticker):
+        return jsonify({'error': '無效的股票代碼格式'}), 400
+    ticker = tw_normalize(ticker)
+    cached = _cache_get(f'tw_etf_detail:{ticker}')
+    if cached: return jsonify(cached)
+    try:
+        stock = yf.Ticker(ticker)
+        info  = stock.info
+        div_history = []
+        div_freq_label = 'N/A'
+        next_div_est   = None
+        try:
+            divs = stock.dividends
+            if not divs.empty:
+                divs_sorted = divs.sort_index()
+                div_history = [{'date': d.strftime('%Y-%m-%d'), 'amount': round(float(v), 4)}
+                               for d, v in divs_sorted.items()]
+                if len(div_history) >= 2:
+                    from datetime import datetime as _dt, timedelta as _td
+                    dates = [_dt.strptime(x['date'], '%Y-%m-%d') for x in div_history]
+                    gaps  = [(dates[i+1]-dates[i]).days for i in range(len(dates)-1)]
+                    avg   = sum(gaps[-6:]) / min(6, len(gaps))
+                    if avg <= 105:   div_freq_label = '季配'
+                    elif avg <= 200: div_freq_label = '半年配'
+                    else:            div_freq_label = '年配'
+                    from datetime import timedelta as _td2
+                    nxt = dates[-1] + _td(days=int(avg))
+                    next_div_est = nxt.strftime('%Y-%m')
+        except Exception:
+            pass
+        holdings = []
+        sectors  = {}
+        asset_classes = {}
+        try:
+            fd = stock.funds_data
+            if fd is not None:
+                th = fd.top_holdings
+                if th is not None and not th.empty:
+                    for sym, row in th.iterrows():
+                        holdings.append({
+                            'symbol': str(sym).replace('.TW','').replace('.TWO',''),
+                            'name':   str(row.get('Name', sym))[:25],
+                            'pct':    round(float(row.get('Holding Percent', 0)) * 100, 2)
+                        })
+                sw = fd.sector_weightings
+                if sw is not None:
+                    for k, v in (sw.items() if isinstance(sw, dict) else sw.to_dict().items()):
+                        if float(v) > 0.001:
+                            sectors[k] = round(float(v) * 100, 2)
+                ac = fd.asset_classes
+                if ac is not None:
+                    for k, v in (ac.items() if isinstance(ac, dict) else ac.to_dict().items()):
+                        if float(v) > 0.001:
+                            asset_classes[k] = round(float(v) * 100, 2)
+        except Exception:
+            pass
+        nav   = safe_float(info.get('navPrice', 0))
+        price = safe_float(info.get('regularMarketPrice', info.get('previousClose', 0)))
+        prem  = round((price - nav) / nav * 100, 2) if nav > 0 else 0
+        er    = safe_float(info.get('annualReportExpenseRatio', info.get('totalExpenseRatio', 0)))
+        if er > 1: er /= 100
+        ta    = safe_float(info.get('totalAssets', 0))
+        dy    = round(safe_div_yield_pct(info), 2)
+        name  = info.get('longName', info.get('shortName', ticker))
+        is_lev = any(x in (name or '').lower() for x in ['正2','leveraged','2x','inverse','反1','bear'])
+        inception = info.get('fundInceptionDate', 0)
+        from datetime import datetime as _dt
+        inception_str = _dt.utcfromtimestamp(inception).strftime('%Y-%m-%d') if inception else ''
+        methodology = _infer_etf_methodology(name, sectors, holdings)
+        result = {
+            'ticker': ticker,
+            'nav': nav,
+            'premium': prem,
+            'totalAssets': round(ta / 1e8, 1),
+            'expenseRatio': round(er * 100, 4) if er > 0 else 0,
+            'divYield': dy,
+            'divFreq': div_freq_label,
+            'nextDivEst': next_div_est,
+            'divHistory': div_history[-12:],
+            'holdings': holdings[:10],
+            'sectors': sectors,
+            'assetClasses': asset_classes,
+            'methodology': methodology,
+            'inceptionDate': inception_str,
+            'isLeveraged': is_lev,
+        }
+        _cache_set(f'tw_etf_detail:{ticker}', result, ttl=3600)
+        return jsonify(result)
+    except Exception as e:
+        return jsonify({'error': str(e)})
+
+
+# ── Broker Chips / 三大法人 ───────────────────────────────────────────
+
+_BROKER_TAGS = {
+    '美林': '外資', '摩根大通': '外資', '摩根士丹利': '外資',
+    '高盛': '外資', '瑞銀': '外資', '瑞士信貸': '外資', '瑞信': '外資',
+    '德意志': '外資', '花旗': '外資', '匯豐': '外資', '麥格理': '外資',
+    '野村': '外資', '巴克萊': '外資', '法國巴黎': '外資', '里昂': '外資',
+    '元大': '本土大型', '凱基': '本土大型', '富邦': '本土大型',
+    '國泰': '本土大型', '永豐金': '本土大型', '玉山': '本土大型',
+    '群益': '本土大型', '兆豐': '本土大型', '中信': '本土大型',
+}
+
+def _broker_tag(name):
+    for kw, tag in _BROKER_TAGS.items():
+        if kw in name:
+            return tag
+    return ''
+
+def _recent_trading_dates(n=7):
+    from datetime import date, timedelta
+    d = date.today() - timedelta(days=1)
+    out = []
+    while len(out) < n:
+        if d.weekday() < 5:
+            out.append(d.strftime('%Y%m%d'))
+        d -= timedelta(days=1)
+    return out
+
+def _t86_parse_int(v):
+    s = str(v).strip().replace(',', '')
+    return int(s) if s and s.lstrip('-').isdigit() else 0
+
+def _fetch_t86_for_stock(stock_no, date_str, hdrs):
+    r   = _requests.get('https://www.twse.com.tw/rwd/zh/fund/T86',
+                        params={'date': date_str, 'selectType': 'ALLBUT0999', 'response': 'json'},
+                        headers=hdrs, timeout=8)
+    jd  = r.json()
+    if jd.get('stat') != 'OK':
+        return None
+    for row in (jd.get('data') or []):
+        if str(row[0]).strip() == stock_no:
+            p = _t86_parse_int
+            return {
+                'date':    date_str,
+                'foreign': p(row[4])  + p(row[7]),
+                'trust':   p(row[10]),
+                'dealer':  p(row[11]),
+                'total':   p(row[18]),
+            }
+    return None
+
+def _fetch_tpex_3insti(stock_no, date_str, hdrs):
+    yr  = int(date_str[:4]) - 1911
+    dp  = f'{yr}/{date_str[4:6]}/{date_str[6:8]}'
+    r   = _requests.get(
+            'https://www.tpex.org.tw/web/stock/3insti/daily_trade/3itrade_hedge.php',
+            params={'d': dp, 'stkno': stock_no, 'o': 'json'},
+            headers=hdrs, timeout=8)
+    jd  = r.json()
+    for row in (jd.get('aaData') or []):
+        if str(row[0]).strip() == stock_no:
+            p = _t86_parse_int
+            return {
+                'date':    date_str,
+                'foreign': p(row[4]),
+                'trust':   p(row[7]),
+                'dealer':  p(row[10]),
+                'total':   p(row[4]) + p(row[7]) + p(row[10]),
+            }
+    return None
+
+
+@app.route('/api/tw/broker_chips/<ticker>')
+def get_tw_broker_chips(ticker):
+    if not _valid_tw_ticker(ticker):
+        return jsonify({'hasData': False, 'days': [], 'aggregate': {}}), 400
+    raw      = tw_normalize(ticker)
+    stock_no = raw.split('.')[0]
+    is_otc   = raw.endswith('.TWO')
+    cache_key = f'tw_broker:{stock_no}'
+    cached = _cache_get(cache_key)
+    if cached: return jsonify(cached)
+    hdrs = {
+        'User-Agent':      'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+        'Accept':          'application/json',
+        'X-Requested-With':'XMLHttpRequest',
+    }
+    dates    = _recent_trading_dates(8)
+    day_data = []
+    for date_str in dates:
+        if len(day_data) >= 5:
+            break
+        try:
+            row = (_fetch_tpex_3insti if is_otc else _fetch_t86_for_stock)(stock_no, date_str, hdrs)
+            if row:
+                day_data.append(row)
+        except Exception:
+            pass
+    agg_f = sum(d['foreign'] for d in day_data)
+    agg_t = sum(d['trust']   for d in day_data)
+    agg_d = sum(d['dealer']  for d in day_data)
+    agg_total = sum(d['total'] for d in day_data)
+    result = {
+        'stockNo':  stock_no,
+        'hasData':  len(day_data) > 0,
+        'days':     day_data,
+        'aggregate': {'foreign': agg_f, 'trust': agg_t, 'dealer': agg_d, 'total': agg_total},
+    }
+    _cache_set(cache_key, result, ttl=3600)
+    return jsonify(result)
+
+
+@app.route('/api/tw/margin/<ticker>')
+def get_tw_margin(ticker):
+    if not _valid_tw_ticker(ticker):
+        return jsonify({'error': '無效代碼'}), 400
+    raw      = tw_normalize(ticker)
+    stock_no = raw.split('.')[0]
+    cache_key = f'tw_margin:{stock_no}'
+    cached = _cache_get(cache_key)
+    if cached: return jsonify(cached)
+    from datetime import date, timedelta
+    headers = {'User-Agent': 'Mozilla/5.0'}
+    days_collected = []
+    check_date = date.today()
+    def parse_num(s):
+        try: return int(str(s).replace(',','').replace(' ',''))
+        except: return 0
+    for _ in range(20):
+        if len(days_collected) >= 5:
+            break
+        date_str = check_date.strftime('%Y%m%d')
+        try:
+            url = f'https://www.twse.com.tw/rwd/zh/marginTrading/MI_MARGN?date={date_str}&selectType=ALL&response=json'
+            r = _requests.get(url, headers=headers, timeout=8)
+            d = r.json()
+            tables = d.get('tables', [])
+            data_table = next((t for t in tables if len(t.get('fields', [])) > 8), None)
+            if data_table:
+                for row in data_table.get('data', []):
+                    if row[0] == stock_no:
+                        days_collected.append({
+                            'date':       check_date.strftime('%m/%d'),
+                            'marginBuy':  parse_num(row[2]),
+                            'marginSell': parse_num(row[3]),
+                            'marginBal':  parse_num(row[6]),
+                            'shortBuy':   parse_num(row[8]),
+                            'shortSell':  parse_num(row[9]),
+                            'shortBal':   parse_num(row[12]),
+                        })
+                        break
+        except Exception:
+            pass
+        check_date -= timedelta(days=1)
+    days_collected.reverse()
+    result = {'stockNo': stock_no, 'days': days_collected}
+    _cache_set(cache_key, result, ttl=1800)
+    return jsonify(result)
+
+
+@app.route('/api/tw/institutional/<ticker>')
+def get_tw_institutional(ticker):
+    """三大法人近5個交易日買賣超（TWSE T86）"""
+    if not _valid_tw_ticker(ticker):
+        return jsonify({'error': '無效代碼'}), 400
+    raw      = tw_normalize(ticker)
+    stock_no = raw.split('.')[0]
+    is_otc   = raw.endswith('.TWO')
+    cache_key = f'tw_inst:{stock_no}'
+    cached = _cache_get(cache_key)
+    if cached: return jsonify(cached)
+    from datetime import date, timedelta
+    headers = {'User-Agent': 'Mozilla/5.0'}
+    days_collected = []
+    check_date = date.today()
+    for _ in range(20):
+        if len(days_collected) >= 5:
+            break
+        date_str = check_date.strftime('%Y%m%d')
+        try:
+            if is_otc:
+                row = _fetch_tpex_3insti(stock_no, date_str, headers)
+                if row:
+                    row['date'] = check_date.strftime('%m/%d')
+                    days_collected.append(row)
+            else:
+                url = f'https://www.twse.com.tw/rwd/zh/fund/T86?date={date_str}&selectType=ALLBUT0999&response=json'
+                r = _requests.get(url, headers=headers, timeout=8)
+                d = r.json()
+                rows = d.get('data', [])
+                for row in rows:
+                    if row[0] == stock_no:
+                        def parse_num(s):
+                            try: return int(s.replace(',','').replace(' ',''))
+                            except: return 0
+                        days_collected.append({
+                            'date':    check_date.strftime('%m/%d'),
+                            'foreign': parse_num(row[4]),
+                            'trust':   parse_num(row[10]),
+                            'dealer':  parse_num(row[11]),
+                            'total':   parse_num(row[18]),
+                        })
+                        break
+        except Exception:
+            pass
+        check_date -= timedelta(days=1)
+    days_collected.reverse()
+    result = {'stockNo': stock_no, 'days': days_collected}
+    _cache_set(cache_key, result, ttl=1800)
+    return jsonify(result)
+
+
+@app.route('/api/tw/tick_stats/<ticker>')
+def get_tw_tick_stats(ticker):
+    if not _valid_tw_ticker(ticker):
+        return jsonify({'error': '無效代碼'}), 400
+    raw = tw_normalize(ticker)
+    cache_key = f'tw_tick:{raw}'
+    cached = _cache_get(cache_key)
+    if cached: return jsonify(cached)
+    try:
+        stock = yf.Ticker(raw)
+        hist  = stock.history(period='1d', interval='1m')
+        if hist.empty and raw.endswith('.TW'):
+            alt  = raw.replace('.TW', '.TWO')
+            hist = yf.Ticker(alt).history(period='1d', interval='1m')
+        if hist.empty:
+            return jsonify({'error': '暫無分鐘資料'}), 404
+        last_date = hist.index.date[-1]
+        hist = hist[hist.index.date == last_date]
+        times   = hist.index.tz_convert('Asia/Taipei').strftime('%H:%M').tolist()
+        volumes = [safe_int(v) for v in hist['Volume'].tolist()]
+        closes  = [round(float(c), 2) if not np.isnan(float(c)) else None for c in hist['Close'].tolist()]
+        big, mid, small = 0, 0, 0
+        big_vol, mid_vol, small_vol = 0, 0, 0
+        bars = []
+        for t, v, c in zip(times, volumes, closes):
+            lots = v // 1000
+            cat = 'big' if lots >= 100 else 'mid' if lots >= 10 else 'small'
+            if cat == 'big':   big += 1;   big_vol   += v
+            elif cat == 'mid': mid += 1;   mid_vol   += v
+            else:              small += 1; small_vol += v
+            bars.append({'time': t, 'volume': v, 'close': c, 'cat': cat})
+        result = {
+            'date':  str(last_date),
+            'bars':  bars,
+            'stats': {
+                'big':   {'count': big,   'volume': big_vol},
+                'mid':   {'count': mid,   'volume': mid_vol},
+                'small': {'count': small, 'volume': small_vol},
+            }
+        }
+        _cache_set(cache_key, result, ttl=60)
+        return jsonify(result)
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/tw/screener')
+def get_tw_screener():
+    cache_key = 'tw_screener_simple'
+    cached = _cache_get(cache_key)
+    if cached: return jsonify(cached)
+    SCAN_LIST = [
+        '2330.TW','2317.TW','2454.TW','2382.TW','2308.TW','2303.TW',
+        '2881.TW','2882.TW','2891.TW','2892.TW','2884.TW',
+        '2412.TW','4938.TW','2395.TW','3711.TW','6669.TW','2379.TW',
+        '2615.TW','2609.TW','2603.TW','3008.TW','2207.TW','2474.TW',
+    ]
+    results = []
+    for ticker in SCAN_LIST:
+        try:
+            stock = yf.Ticker(ticker)
+            hist  = stock.history(period='3mo')
+            if hist is None or len(hist) < 30:
+                continue
+            close  = hist['Close']
+            high   = hist['High']
+            low    = hist['Low']
+            volume = hist['Volume']
+            price  = safe_float(close.iloc[-1])
+            prev   = safe_float(close.iloc[-2])
+            chg_pct = round((price - prev) / prev * 100, 2) if prev else 0
+            ma5  = safe_float(close.rolling(5).mean().iloc[-1])
+            ma20 = safe_float(close.rolling(20).mean().iloc[-1])
+            rsi  = safe_float(calc_rsi(close).iloc[-1])
+            k, d_line = calc_kd(high, low, close)
+            k_val = safe_float(k.iloc[-1])
+            d_val = safe_float(d_line.iloc[-1])
+            avg_vol  = safe_float(volume.rolling(10).mean().iloc[-1])
+            cur_vol  = safe_float(volume.iloc[-1])
+            vol_ratio = round(cur_vol / avg_vol, 1) if avg_vol else 1
+            code = ticker.split('.')[0]
+            info = stock.info
+            name = info.get('longName', info.get('shortName', code))[:8]
+            signals = []
+            if k_val > d_val and k_val < 80 and rsi < 60:
+                signals.append('KD黃金交叉')
+            if rsi < 30:
+                signals.append('RSI超賣')
+            if price > ma5 > ma20:
+                signals.append('多頭排列')
+            if vol_ratio >= 2.0:
+                signals.append('放量')
+            if chg_pct >= 5:
+                signals.append('強勢漲停')
+            results.append({
+                'ticker':   code,
+                'name':     name,
+                'price':    round(price, 2),
+                'chgPct':   chg_pct,
+                'rsi':      round(rsi, 1),
+                'kVal':     round(k_val, 1),
+                'dVal':     round(d_val, 1),
+                'volRatio': vol_ratio,
+                'signals':  signals,
+            })
+        except Exception:
+            continue
+    results.sort(key=lambda x: len(x['signals']), reverse=True)
+    result = {'stocks': results, 'scanned': len(SCAN_LIST)}
+    _cache_set(cache_key, result, ttl=600)
+    return jsonify(result)
+
+
+@app.route('/api/tw/sector_heatmap')
+def get_tw_sector_heatmap():
+    cache_key = 'tw_sector'
+    cached = _cache_get(cache_key)
+    if cached: return jsonify(cached)
+    SECTORS = [
+        {'name':'半導體', 'ticker':'5460.TW'},
+        {'name':'台積電', 'ticker':'2330.TW'},
+        {'name':'鴻海', 'ticker':'2317.TW'},
+        {'name':'聯發科', 'ticker':'2454.TW'},
+        {'name':'台達電', 'ticker':'2308.TW'},
+        {'name':'中華電', 'ticker':'2412.TW'},
+        {'name':'國泰金', 'ticker':'2882.TW'},
+        {'name':'富邦金', 'ticker':'2881.TW'},
+        {'name':'廣達', 'ticker':'2382.TW'},
+        {'name':'台塑', 'ticker':'1301.TW'},
+        {'name':'中鋼', 'ticker':'2002.TW'},
+        {'name':'長榮', 'ticker':'2603.TW'},
+    ]
+    stocks = []
+    for s in SECTORS:
+        try:
+            info = yf.Ticker(s['ticker']).info
+            price = safe_float(info.get('regularMarketPrice') or info.get('currentPrice', 0))
+            prev  = safe_float(info.get('regularMarketPreviousClose') or info.get('previousClose', price))
+            chg   = round((price - prev) / prev * 100, 2) if prev else 0
+            vol   = safe_int(info.get('regularMarketVolume', 0))
+            stocks.append({'name': s['name'], 'ticker': s['ticker'].replace('.TW',''), 'price': round(price,2), 'chgPct': chg, 'volume': vol})
+        except Exception:
+            continue
+    result = {'sectors': stocks}
+    _cache_set(cache_key, result, ttl=120)
+    return jsonify(result)
+
+
+@app.route('/api/tw/peers/<ticker>')
+def get_tw_peers(ticker):
+    if not _valid_tw_ticker(ticker):
+        return jsonify({'error': '無效代碼'}), 400
+    raw = tw_normalize(ticker)
+    cache_key = f'tw_peers:{raw}'
+    cached = _cache_get(cache_key)
+    if cached: return jsonify(cached)
+    TW_CN_NAMES = {
+        '2330':'台積電','2454':'聯發科','2303':'聯電','3711':'日月光投控','2379':'瑞昱',
+        '6669':'緯穎','2337':'旺宏','2317':'鴻海','2382':'廣達','2357':'華碩',
+        '3231':'緯創','2354':'鴻準','2353':'宏碁','2881':'富邦金','2882':'國泰金',
+        '2891':'中信金','2892':'第一金','2884':'玉山金','2886':'兆豐金',
+        '2603':'長榮','2615':'萬海','2609':'陽明','2610':'華航','5880':'合庫金',
+        '2412':'中華電','2308':'台達電','2301':'光寶科',
+        '2395':'研華','3008':'大立光','6415':'矽力-KY',
+        '2345':'智邦','3034':'聯詠','4966':'譜瑞-KY','2347':'聯強',
+        '2352':'佳世達','1301':'台塑','1303':'南亞','1326':'台化',
+        '2002':'中鋼','2912':'統一超','2207':'和泰車','2408':'南亞科',
+    }
+    PEER_GROUPS = {
+        '2330': ['2454','2303','3711','2379','6669','2337'],
+        '2454': ['2330','2303','3711','6669','2337','2379'],
+        '2303': ['2330','2454','3711','2337','2379','6669'],
+        '2317': ['2382','2357','3231','2354','2353'],
+        '2382': ['2317','2357','3231','2354','2353'],
+        '2881': ['2882','2891','2892','2884','2886'],
+        '2882': ['2881','2891','2892','2884','2886'],
+        '2603': ['2615','2609','2610','5880'],
+    }
+    stock_no = raw.split('.')[0]
+    peers = PEER_GROUPS.get(stock_no, [])
+    if not peers:
+        return jsonify({'peers': [], 'self': stock_no})
+    all_tickers = [raw] + [f'{p}.TW' for p in peers]
+    results = []
+    for t in all_tickers:
+        try:
+            hist = yf.Ticker(t).history(period='1mo')
+            if hist is None or len(hist) < 5:
+                continue
+            close = hist['Close']
+            base  = safe_float(close.iloc[0])
+            cur   = safe_float(close.iloc[-1])
+            ret20 = round((cur / base - 1) * 100, 2) if base else 0
+            ret1  = round((cur / safe_float(close.iloc[-2]) - 1) * 100, 2) if len(close) > 1 else 0
+            code  = t.split('.')[0]
+            cn_name = TW_CN_NAMES.get(code)
+            if cn_name:
+                name = cn_name
+            else:
+                info = yf.Ticker(t).info
+                name = info.get('shortName', code)[:8]
+            results.append({'ticker': code, 'name': name, 'price': round(cur,2), 'ret1d': ret1, 'ret20d': ret20, 'isSelf': t == raw})
+        except Exception:
+            continue
+    results.sort(key=lambda x: x['ret20d'], reverse=True)
+    result = {'peers': results, 'self': stock_no}
+    _cache_set(cache_key, result, ttl=1800)
+    return jsonify(result)
+
+
+@app.route('/api/sector_heatmap')
+def get_sector_heatmap():
+    cache_key = 'us_sector'
+    cached = _cache_get(cache_key)
+    if cached: return jsonify(cached)
+    SECTORS = [
+        {'name': '科技',       'ticker': 'XLK'},
+        {'name': '通訊服務',   'ticker': 'XLC'},
+        {'name': '金融',       'ticker': 'XLF'},
+        {'name': '醫療',       'ticker': 'XLV'},
+        {'name': '工業',       'ticker': 'XLI'},
+        {'name': '非必需消費', 'ticker': 'XLY'},
+        {'name': '必需消費',   'ticker': 'XLP'},
+        {'name': '能源',       'ticker': 'XLE'},
+        {'name': '材料',       'ticker': 'XLB'},
+        {'name': '房地產',     'ticker': 'XLRE'},
+        {'name': '公用事業',   'ticker': 'XLU'},
+        {'name': 'AI 晶片',    'ticker': 'NVDA'},
+        {'name': '電動車',     'ticker': 'TSLA'},
+        {'name': '比特幣',     'ticker': 'MSTR'},
+    ]
+    stocks = []
+    for s in SECTORS:
+        try:
+            info  = yf.Ticker(s['ticker']).info
+            price = safe_float(info.get('regularMarketPrice') or info.get('currentPrice', 0))
+            prev  = safe_float(info.get('regularMarketPreviousClose') or info.get('previousClose', price))
+            chg   = round((price - prev) / prev * 100, 2) if prev else 0
+            mktcap = safe_float(info.get('marketCap', 0))
+            stocks.append({'name': s['name'], 'ticker': s['ticker'], 'price': round(price, 2), 'chgPct': chg, 'marketCap': mktcap})
+        except Exception:
+            continue
+    result = {'sectors': stocks}
+    _cache_set(cache_key, result, ttl=120)
+    return jsonify(result)
+
+
+@app.route('/api/screener')
+def get_screener():
+    cache_key = 'us_screener_simple'
+    cached = _cache_get(cache_key)
+    if cached: return jsonify(cached)
+    SCAN_LIST = [
+        'NVDA','AAPL','MSFT','AMZN','META','GOOGL','TSLA','AMD','AVGO','QCOM',
+        'TSM','INTC','ORCL','CRM','SNOW','PLTR','COIN','MSTR','RKLB','CRCL',
+        'JPM','BAC','GS','MS','V','MA','PYPL',
+        'LLY','JNJ','UNH','ABBV','PFE',
+        'NFLX','DIS','SPOT',
+        'XOM','CVX',
+    ]
+    results = []
+    for ticker in SCAN_LIST:
+        try:
+            stock = yf.Ticker(ticker)
+            hist  = stock.history(period='3mo')
+            if hist is None or len(hist) < 20:
+                continue
+            close  = hist['Close']
+            high   = hist['High']
+            low    = hist['Low']
+            volume = hist['Volume']
+            price  = safe_float(close.iloc[-1])
+            prev   = safe_float(close.iloc[-2])
+            chg_pct = round((price - prev) / prev * 100, 2) if prev else 0
+            ma5  = safe_float(close.rolling(5).mean().iloc[-1])
+            ma20 = safe_float(close.rolling(20).mean().iloc[-1])
+            rsi  = safe_float(calc_rsi(close).iloc[-1])
+            k_s, d_s = calc_kd(high, low, close)
+            k_val = safe_float(k_s.iloc[-1])
+            d_val = safe_float(d_s.iloc[-1])
+            avg_vol   = safe_float(volume.rolling(10).mean().iloc[-1])
+            cur_vol   = safe_float(volume.iloc[-1])
+            vol_ratio = round(cur_vol / avg_vol, 1) if avg_vol else 1
+            macd_s, sig_s, _ = calc_macd(close)
+            macd_v = safe_float(macd_s.iloc[-1])
+            dea_v  = safe_float(sig_s.iloc[-1])
+            info = stock.info
+            name = (info.get('shortName') or ticker)[:20]
+            signals = []
+            if k_val > d_val and k_val < 80 and rsi < 65:
+                signals.append('KD黃金交叉')
+            if rsi < 35:
+                signals.append('RSI超賣')
+            if price > ma5 > ma20:
+                signals.append('多頭排列')
+            if vol_ratio >= 2.0:
+                signals.append('放量')
+            if macd_v > dea_v and macd_v > 0:
+                signals.append('MACD強勢')
+            if chg_pct >= 3:
+                signals.append('強勢上漲')
+            results.append({
+                'ticker': ticker, 'name': name,
+                'price': round(price, 2), 'chgPct': chg_pct,
+                'rsi': round(rsi, 1), 'kVal': round(k_val, 1), 'dVal': round(d_val, 1),
+                'volRatio': vol_ratio, 'signals': signals,
+            })
+        except Exception:
+            continue
+    results.sort(key=lambda x: len(x['signals']), reverse=True)
+    result = {'stocks': results, 'scanned': len(SCAN_LIST)}
+    _cache_set(cache_key, result, ttl=600)
+    return jsonify(result)
+
+
+@app.route('/api/peers/<ticker>')
+def get_peers(ticker):
+    ticker = ticker.upper().strip()
+    if not _valid_ticker(ticker):
+        return jsonify({'error': '無效代碼'}), 400
+    cache_key = f'us_peers:{ticker}'
+    cached = _cache_get(cache_key)
+    if cached: return jsonify(cached)
+    PEER_GROUPS = {
+        'NVDA': ['AMD','AVGO','QCOM','TSM','INTC'],
+        'AMD':  ['NVDA','INTC','AVGO','QCOM','TSM'],
+        'AAPL': ['MSFT','GOOGL','META','AMZN','SONY'],
+        'MSFT': ['AAPL','GOOGL','AMZN','CRM','ORCL'],
+        'GOOGL':['MSFT','META','AMZN','NFLX','SNAP'],
+        'META': ['GOOGL','SNAP','PINS','NFLX','DIS'],
+        'AMZN': ['MSFT','GOOGL','BABA','WMT','TGT'],
+        'TSLA': ['GM','F','RIVN','NIO','LI'],
+        'COIN': ['MSTR','HOOD','MARA','RIOT','CRCL'],
+        'JPM':  ['BAC','GS','MS','C','WFC'],
+        'BAC':  ['JPM','GS','MS','C','WFC'],
+        'LLY':  ['JNJ','UNH','ABBV','PFE','MRK'],
+        'NFLX': ['DIS','PARA','WBD','SPOT','ROKU'],
+        'AVGO': ['NVDA','AMD','QCOM','TSM','MRVL'],
+        'CRM':  ['MSFT','ORCL','SAP','NOW','SNOW'],
+        'PLTR': ['AI','BBAI','SOUN','SNOW','CRM'],
+        'RKLB': ['SPCE','BA','LMT','RTX','NOC'],
+        'CRCL': ['COIN','MSTR','MARA','RIOT','HOOD'],
+        'MSTR': ['COIN','CRCL','MARA','RIOT','HOOD'],
+        'SNOW': ['CRM','ORCL','NOW','DDOG','MDB'],
+        'INTC': ['NVDA','AMD','AVGO','QCOM','TSM'],
+        'QCOM': ['NVDA','AMD','AVGO','INTC','TSM'],
+        'V':    ['MA','PYPL','SQ','AXP','FIS'],
+        'MA':   ['V','PYPL','SQ','AXP','FIS'],
+        'UNH':  ['LLY','JNJ','ABBV','PFE','MRK'],
+    }
+    peers = PEER_GROUPS.get(ticker, [])
+    if not peers:
+        return jsonify({'peers': [], 'self': ticker})
+    all_tickers = [ticker] + peers
+    results = []
+    for t in all_tickers:
+        try:
+            hist = yf.Ticker(t).history(period='1mo')
+            if hist is None or len(hist) < 5:
+                continue
+            close = hist['Close']
+            base  = safe_float(close.iloc[0])
+            cur   = safe_float(close.iloc[-1])
+            ret20 = round((cur / base - 1) * 100, 2) if base else 0
+            ret1  = round((cur / safe_float(close.iloc[-2]) - 1) * 100, 2) if len(close) > 1 else 0
+            info  = yf.Ticker(t).info
+            name  = (info.get('shortName') or t)[:20]
+            mktcap = safe_float(info.get('marketCap', 0))
+            results.append({'ticker': t, 'name': name, 'price': round(cur, 2),
+                            'ret1d': ret1, 'ret20d': ret20,
+                            'marketCap': mktcap, 'isSelf': t == ticker})
+        except Exception:
+            continue
+    results.sort(key=lambda x: x['ret20d'], reverse=True)
+    result = {'peers': results, 'self': ticker}
+    _cache_set(cache_key, result, ttl=1800)
+    return jsonify(result)
+
+
+US_ETF_INFO = {
+    'SPY':   {'name':'S&P 500 ETF','index':'S&P 500','provider':'State Street','category':'大型股指數'},
+    'QQQ':   {'name':'納斯達克100 ETF','index':'Nasdaq-100','provider':'Invesco','category':'科技/成長'},
+    'IWM':   {'name':'羅素2000 ETF','index':'Russell 2000','provider':'iShares','category':'小型股'},
+    'GLD':   {'name':'黃金ETF','index':'Gold Spot','provider':'SPDR','category':'大宗商品'},
+    'TLT':   {'name':'20年期美債ETF','index':'ICE 20+Y US Treasury','provider':'iShares','category':'長期國債'},
+    'XLK':   {'name':'科技類股ETF','index':'Technology Select Sector','provider':'SPDR','category':'科技'},
+    'XLF':   {'name':'金融類股ETF','index':'Financial Select Sector','provider':'SPDR','category':'金融'},
+    'ARKK':  {'name':'ARK創新ETF','index':'ARK Innovation','provider':'ARK Invest','category':'主動型/科技'},
+    'VTI':   {'name':'全美股市ETF','index':'CRSP US Total Market','provider':'Vanguard','category':'全市場'},
+    'IEMG':  {'name':'新興市場ETF','index':'MSCI Emerging Markets','provider':'iShares','category':'新興市場'},
+    'SOXS':  {'name':'半導體3倍反向ETF','index':'PHLX Semiconductor','provider':'Direxion','category':'槓桿反向'},
+    'SOXL':  {'name':'半導體3倍做多ETF','index':'PHLX Semiconductor','provider':'Direxion','category':'槓桿做多'},
+    'TQQQ':  {'name':'納斯達克3倍做多ETF','index':'Nasdaq-100','provider':'ProShares','category':'槓桿做多'},
+    'NVDL':  {'name':'NVDA 2倍做多ETF','index':'NVDA x2','provider':'GraniteShares','category':'槓桿做多'},
+}
+
+@app.route('/api/etf/<ticker>')
+def get_us_etf(ticker):
+    ticker = ticker.upper().strip()
+    if not _valid_ticker(ticker):
+        return jsonify({'error': '無效代碼'}), 400
+    cache_key = f'us_etf:{ticker}'
+    cached = _cache_get(cache_key)
+    if cached: return jsonify(cached)
+    try:
+        stock = yf.Ticker(ticker)
+        info  = stock.info
+        quoteType = (info.get('quoteType') or '').upper()
+        if quoteType not in ('ETF', 'MUTUALFUND') and ticker not in US_ETF_INFO:
+            return jsonify({'isETF': False})
+        price = safe_float(info.get('regularMarketPrice') or info.get('navPrice') or info.get('currentPrice', 0))
+        prev  = safe_float(info.get('regularMarketPreviousClose') or info.get('previousClose', price))
+        aum   = safe_float(info.get('totalAssets', 0))
+        nav   = safe_float(info.get('navPrice', price))
+        expense_ratio = round(safe_float(info.get('annualReportExpenseRatio') or info.get('totalExpenseRatio', 0)) * 100, 3)
+        div_yield = round(safe_div_yield_pct(info), 2)
+        week52h = safe_float(info.get('fiftyTwoWeekHigh', 0))
+        week52l = safe_float(info.get('fiftyTwoWeekLow', 0))
+        ytd_return = round(safe_float(info.get('ytdReturn', 0)) * 100, 2)
+        three_yr   = round(safe_float(info.get('threeYearAverageReturn', 0)) * 100, 2)
+        five_yr    = round(safe_float(info.get('fiveYearAverageReturn', 0)) * 100, 2)
+        beta       = round(safe_float(info.get('beta3Year', info.get('beta', 0))), 2)
+        holdings = []
+        try:
+            fh = stock.funds_data
+            if fh and hasattr(fh, 'top_holdings') and fh.top_holdings is not None:
+                for i, (sym, row) in enumerate(fh.top_holdings.iterrows()):
+                    if i >= 10: break
+                    pct = safe_float(row.get('Holding Percent', 0)) * 100
+                    holdings.append({'symbol': str(sym), 'name': str(row.get('Description', sym))[:30], 'pct': round(pct, 2)})
+        except:
+            pass
+        divs = []
+        try:
+            div_hist = stock.dividends
+            if div_hist is not None and not div_hist.empty:
+                recent = div_hist.iloc[-8:]
+                for dt, amt in recent.items():
+                    divs.append({'date': str(dt)[:10], 'amount': round(float(amt), 4)})
+                divs = list(reversed(divs))
+        except:
+            pass
+        static = US_ETF_INFO.get(ticker, {})
+        result = {
+            'isETF': True,
+            'ticker': ticker,
+            'name': static.get('name') or info.get('longName', ticker),
+            'index': static.get('index', info.get('category', '')),
+            'provider': static.get('provider', info.get('fundFamily', '')),
+            'category': static.get('category', ''),
+            'price': round(price, 2),
+            'nav': round(nav, 2),
+            'aum': round(aum / 1e9, 2),
+            'expenseRatio': expense_ratio,
+            'divYield': div_yield,
+            'week52High': round(week52h, 2),
+            'week52Low':  round(week52l, 2),
+            'ytdReturn': ytd_return,
+            'threeYrReturn': three_yr,
+            'fiveYrReturn': five_yr,
+            'beta': beta,
+            'holdings': holdings,
+            'dividends': divs,
+        }
+        _cache_set(cache_key, result, ttl=3600)
+        return jsonify(result)
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
 @app.route('/api/tw/intraday/<ticker>')
 def get_tw_intraday(ticker):
     ticker = tw_normalize(ticker)
@@ -2628,6 +3600,7 @@ def _scan_ticker(ticker, conditions, is_tw, period='1y'):
 
 
 @app.route('/screener')
+@login_required
 def screener_page():
     return render_template('screener.html')
 

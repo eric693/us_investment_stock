@@ -182,6 +182,48 @@
 .wc-desc   { font-size:0.74rem; color:var(--text-dim); line-height:1.45; min-height:1.2em; }
 .wc-tag    { font-size:0.68rem; }
 .wc-skeleton .wc-name, .wc-skeleton .wc-desc { opacity:.5; }
+/* ── Broker Chips ──────────────────────────────────────────── */
+.bc-agg-row { display:flex; flex-wrap:wrap; gap:8px; margin-bottom:14px; }
+.bc-agg-pill { display:flex; flex-direction:column; gap:3px; background:#060c18; border:1px solid var(--border); border-radius:8px; padding:8px 16px; flex:1; min-width:80px; }
+.bc-agg-pill.total { border-color:rgba(61,142,248,.3); }
+.bc-agg-label { font-size:0.68rem; color:var(--text-dim); font-weight:600; letter-spacing:.3px; }
+.bc-agg-val { font-size:0.9rem; font-weight:800; }
+.bc-agg-val.pos { color:var(--green); }
+.bc-agg-val.neg { color:var(--red); }
+.bc-table-wrap { overflow-x:auto; margin-bottom:14px; }
+.bc-table { width:100%; border-collapse:collapse; font-size:0.78rem; }
+.bc-table th { color:var(--text-dim); font-size:0.68rem; font-weight:700; text-align:left; padding:4px 8px; border-bottom:1px solid var(--border); white-space:nowrap; }
+.bc-table td { padding:6px 8px; border-bottom:1px solid #0e1828; vertical-align:middle; }
+.bc-td-date { color:var(--text-dim); white-space:nowrap; font-size:0.75rem; min-width:44px; }
+.bc-bar-wrap { display:flex; align-items:center; gap:6px; }
+.bc-bar { height:5px; border-radius:3px; min-width:2px; flex-shrink:0; }
+.bc-bar.buy  { background:var(--green); }
+.bc-bar.sell { background:var(--red); }
+.bc-vol { font-size:0.72rem; font-weight:700; white-space:nowrap; min-width:54px; }
+.bc-vol.buy  { color:var(--green); }
+.bc-vol.sell { color:var(--red); }
+.bc-total-val { font-size:0.8rem; font-weight:800; white-space:nowrap; }
+.bc-total-val.pos { color:var(--green); }
+.bc-total-val.neg { color:var(--red); }
+.bc-links { display:flex; flex-wrap:wrap; gap:8px; margin-top:14px; padding-top:12px; border-top:1px solid var(--border); }
+.bc-link { font-size:0.72rem; padding:4px 12px; border-radius:6px; text-decoration:none; border:1px solid var(--border); color:var(--text-dim); transition:all .15s; }
+.bc-link:hover { border-color:var(--accent); color:var(--accent); }
+.bc-no-data { font-size:0.82rem; color:var(--text-dim); padding:16px 0; text-align:center; line-height:1.7; }
+.bc-tip { font-size:0.72rem; color:var(--text-dim); margin-top:0; line-height:1.6; background:#060c18; border:1px solid var(--border); border-radius:7px; padding:10px 14px; }
+.bc-tip strong { color:var(--text-mid); }
+.bc-header { display:flex; justify-content:space-between; align-items:center; margin-bottom:10px; }
+.bc-date-range { font-size:0.7rem; color:var(--text-dim); }
+/* ── Mobile Bottom Nav ────────────────────────────────────────── */
+.mobile-nav { display:none; position:fixed; bottom:0; left:0; right:0; height:58px; background:#0c1220; border-top:1px solid #1a2a3a; z-index:1000; }
+.mnav-btn { flex:1; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:2px; background:none; border:none; color:var(--text-dim); font-size:0.62rem; cursor:pointer; padding:4px 0; transition:color .15s; }
+.mnav-btn.active { color:var(--accent); }
+.mnav-icon { font-size:0.85rem; font-weight:700; }
+.mnav-label { font-size:0.6rem; }
+@media (max-width: 768px) {
+  .mobile-nav { display:flex; }
+  #dashboard { padding-bottom: 70px; }
+}
+.no-data { font-size:0.82rem; color:var(--text-dim); padding:16px 0; text-align:center; }
 </style>
 </head>
 <body>
@@ -629,6 +671,36 @@
     <div id="strategy"></div>
   </div>
 
+  <!-- 籌碼分析 -->
+  <div class="card" id="institutionalCard">
+    <div class="card-title">三大法人買賣超（近5日）<span id="instUpdateTime" style="font-size:0.7rem;color:var(--text-dim);margin-left:8px"></span></div>
+    <div id="institutionalPanel"><div class="mini-loading">載入中...</div></div>
+  </div>
+
+  <div class="card" id="marginCard">
+    <div class="card-title">融資融券餘額（近5日）<span style="font-size:0.7rem;color:var(--text-dim);margin-left:8px">資料來源：證交所</span></div>
+    <div id="marginPanel"><div class="mini-loading">載入中...</div></div>
+  </div>
+
+  <div class="card" id="tickStatsCard">
+    <div class="card-title">大中小單統計（當日分鐘）<span style="font-size:0.7rem;color:var(--text-dim);margin-left:8px">每分鐘更新</span></div>
+    <div id="tickStatsPanel"><div class="mini-loading">載入中...</div></div>
+  </div>
+
+  <div class="card" id="brokerChipsCard">
+    <div class="bc-header">
+      <div class="card-title" style="margin:0;border:none;padding:0">券商分點進出</div>
+      <span class="bc-date-range" id="bcDateRange">載入中...</span>
+    </div>
+    <div id="brokerChipsPanel"><div class="mini-loading">載入中...</div></div>
+  </div>
+
+  <!-- 同業比較 -->
+  <div class="card" id="peersCard">
+    <div class="card-title">同產業表現比較（近20日）</div>
+    <div id="peersPanel"><div class="mini-loading">載入中...</div></div>
+  </div>
+
   <!-- 9. Compare -->
   <div class="card" id="compareCard">
     <div class="cmp-title-row">
@@ -655,9 +727,28 @@
     <div id="newsContainer"><div class="news-loading">新聞載入中...</div></div>
   </div>
 
-  <div class="footer-note">本分析為技術指標自動化計算，僅供參考，投資有風險，請謹慎評估</div>
+  <div class="footer-note" style="padding-bottom:70px">本分析為技術指標自動化計算，僅供參考，投資有風險，請謹慎評估</div>
 
 </div><!-- /#dashboard -->
+
+<!-- 手機版底部 Tab 導覽 -->
+<nav id="mobileNav" class="mobile-nav">
+  <button class="mnav-btn active" onclick="mnavGo('chart')" data-tab="chart">
+    <span class="mnav-icon">K</span><span class="mnav-label">K線</span>
+  </button>
+  <button class="mnav-btn" onclick="mnavGo('chips')" data-tab="chips">
+    <span class="mnav-icon">籌</span><span class="mnav-label">籌碼</span>
+  </button>
+  <button class="mnav-btn" onclick="mnavGo('fundament')" data-tab="fundament">
+    <span class="mnav-icon">財</span><span class="mnav-label">基本面</span>
+  </button>
+  <button class="mnav-btn" onclick="mnavGo('tv')" data-tab="tv">
+    <span class="mnav-icon">TV</span><span class="mnav-label">即時圖</span>
+  </button>
+  <button class="mnav-btn" onclick="mnavGo('news')" data-tab="news">
+    <span class="mnav-icon">新</span><span class="mnav-label">新聞</span>
+  </button>
+</nav>
 
 <!-- Alert Modal -->
 <div id="alertModal" class="modal-overlay hidden" onclick="closeAlertModal()">
@@ -1014,6 +1105,11 @@ async function loadStock(raw) {
     updateAlertBadge();
     loadNews(d.ticker);
     loadFundamentals(d.ticker, d);
+    loadInstitutional(d.ticker);
+    loadMargin(d.ticker);
+    loadTickStats(d.ticker);
+    loadBrokerChips(d.ticker);
+    loadPeers(d.ticker);
   } catch(e) {
     showError('網路錯誤，請稍後再試：' + e.message);
   }
@@ -2657,6 +2753,312 @@ async function _runRealtime() {
     const triggered = checkAlerts(currentData.ticker, d.price);
     if (triggered.length) showAlertBanner(triggered);
   } catch(e) {}
+}
+
+// ── Margin Trading (融資融券) ─────────────────────────────────────────
+async function loadMargin(ticker) {
+  setHTML('marginPanel', '<div class="mini-loading">載入中...</div>');
+  try {
+    const r = await fetch('/api/tw/margin/' + encodeURIComponent(ticker));
+    const d = await r.json();
+    if (d.error || !d.days || d.days.length === 0) {
+      setHTML('marginPanel', '<div class="no-data">暫無資料（僅上市股票，ETF/上櫃不適用）</div>');
+      return;
+    }
+    renderMargin(d);
+  } catch(e) {
+    setHTML('marginPanel', '<div class="no-data">載入失敗</div>');
+  }
+}
+
+function renderMargin(d) {
+  const days = d.days;
+  const BG = '#0c1220', GRID = '#121e30';
+  const dates = days.map(x => x.date);
+  const chartDiv = document.createElement('div');
+  chartDiv.id = 'marginChart';
+  chartDiv.style.cssText = 'width:100%;height:220px';
+  document.getElementById('marginPanel').innerHTML = '';
+  document.getElementById('marginPanel').appendChild(chartDiv);
+  const marginBals = days.map(x => x.marginBal);
+  const shortBals  = days.map(x => x.shortBal);
+  Plotly.newPlot('marginChart', [
+    { type:'bar', name:'融資餘額(張)', x:dates, y:marginBals, marker:{color:'rgba(232,70,70,0.75)'}, yaxis:'y' },
+    { type:'bar', name:'融券餘額(張)', x:dates, y:shortBals,  marker:{color:'rgba(0,214,143,0.75)'}, yaxis:'y2' },
+  ], {
+    paper_bgcolor:BG, plot_bgcolor:BG, font:{color:'#6888a0', size:11}, barmode:'overlay',
+    legend:{orientation:'h', x:0, y:1.15, bgcolor:'rgba(0,0,0,0)', font:{size:11,color:'#8aaabf'}},
+    margin:{t:30, b:36, l:60, r:60},
+    xaxis:{gridcolor:GRID, tickfont:{color:'#8aaabf'}},
+    yaxis:{gridcolor:GRID, tickfont:{color:'#e84646',size:10}, side:'left', title:{text:'融資', font:{color:'#e84646',size:10}}},
+    yaxis2:{gridcolor:'rgba(0,0,0,0)', tickfont:{color:'#00d68f',size:10}, side:'right', overlaying:'y', title:{text:'融券', font:{color:'#00d68f',size:10}}},
+    hovermode:'x unified',
+  }, {responsive:true, displayModeBar:false});
+  const fmtN = v => v >= 10000 ? (v/10000).toFixed(1)+'萬' : v.toLocaleString();
+  const chg = (arr, i) => i === 0 ? '' : (() => { const dv = arr[i]-arr[i-1]; const s = dv>=0?'+':''; const c = dv>0?'color:#e84646':dv<0?'color:#00d68f':''; return `<span style="${c}">${s}${fmtN(dv)}</span>`; })();
+  const rows = days.map((day, i) => `
+    <tr>
+      <td style="color:#8aaabf">${day.date}</td>
+      <td style="text-align:right">${fmtN(day.marginBal)}</td>
+      <td style="text-align:right;font-size:0.75rem">${chg(marginBals,i)}</td>
+      <td style="text-align:right">${fmtN(day.shortBal)}</td>
+      <td style="text-align:right;font-size:0.75rem">${chg(shortBals,i)}</td>
+    </tr>`).join('');
+  const tableDiv = document.createElement('div');
+  tableDiv.innerHTML = `
+    <table style="width:100%;border-collapse:collapse;font-size:0.78rem;margin-top:6px">
+      <thead><tr style="color:#4a6070;border-bottom:1px solid #1a2a3a">
+        <th style="text-align:left;padding:3px 2px">日期</th>
+        <th style="text-align:right;padding:3px 4px" colspan="2">融資餘額(張)</th>
+        <th style="text-align:right;padding:3px 4px" colspan="2">融券餘額(張)</th>
+      </tr></thead>
+      <tbody>${rows}</tbody>
+    </table>`;
+  document.getElementById('marginPanel').appendChild(tableDiv);
+}
+
+// ── Institutional (三大法人) ──────────────────────────────────────────
+async function loadInstitutional(ticker) {
+  setHTML('institutionalPanel', '<div class="mini-loading">載入中...</div>');
+  try {
+    const r = await fetch('/api/tw/institutional/' + encodeURIComponent(ticker));
+    const d = await r.json();
+    if (d.error || !d.days || d.days.length === 0) {
+      setHTML('institutionalPanel', '<div class="no-data">暫無資料（假日或上市未滿5日）</div>');
+      return;
+    }
+    renderInstitutionalChart(d);
+    const el = document.getElementById('instUpdateTime');
+    if (el) el.textContent = '資料來源：證交所 T86';
+  } catch(e) {
+    setHTML('institutionalPanel', '<div class="no-data">載入失敗</div>');
+  }
+}
+
+function renderInstitutionalChart(d) {
+  const days = d.days;
+  const BG = '#0c1220', GRID = '#121e30';
+  const fmtV = v => {
+    const sign = v >= 0 ? '+' : '';
+    if (Math.abs(v) >= 10000) return sign + (v/10000).toFixed(1) + '萬';
+    if (Math.abs(v) >= 1000)  return sign + (v/1000).toFixed(1) + 'K';
+    return sign + v.toLocaleString();
+  };
+  const col = v => v > 0 ? '#e84646' : v < 0 ? '#00d68f' : '#6888a0';
+  const chartDiv = document.createElement('div');
+  chartDiv.id = 'instChart';
+  chartDiv.style.cssText = 'width:100%;height:280px';
+  document.getElementById('institutionalPanel').innerHTML = '';
+  document.getElementById('institutionalPanel').appendChild(chartDiv);
+  const dates = days.map(x => x.date);
+  Plotly.newPlot('instChart', [
+    { type:'bar', name:'外資', x:dates, y:days.map(x=>x.foreign), marker:{color: days.map(x=>x.foreign>=0?'rgba(232,70,70,0.85)':'rgba(0,214,143,0.85)')} },
+    { type:'bar', name:'投信', x:dates, y:days.map(x=>x.trust),   marker:{color: days.map(x=>x.trust>=0?'rgba(255,160,0,0.85)':'rgba(0,180,200,0.85)')} },
+    { type:'bar', name:'自營商', x:dates, y:days.map(x=>x.dealer),marker:{color: days.map(x=>x.dealer>=0?'rgba(150,100,232,0.85)':'rgba(100,150,232,0.85)')} },
+  ], {
+    paper_bgcolor:BG, plot_bgcolor:BG, font:{color:'#6888a0', size:11}, barmode:'group',
+    legend:{orientation:'h', x:0, y:1.15, bgcolor:'rgba(0,0,0,0)', font:{size:11,color:'#8aaabf'}},
+    margin:{t:40, b:36, l:65, r:12},
+    xaxis:{gridcolor:GRID, tickfont:{color:'#8aaabf'}},
+    yaxis:{gridcolor:GRID, tickfont:{color:'#8aaabf'}, zeroline:true, zerolinecolor:'#3a4a60', zerolinewidth:1.5},
+    hovermode:'x unified',
+  }, {responsive:true, displayModeBar:false});
+  const rows = days.map(day => `
+    <tr>
+      <td style="color:#8aaabf">${day.date}</td>
+      <td style="color:${col(day.foreign)};text-align:right">${fmtV(day.foreign)}</td>
+      <td style="color:${col(day.trust)};text-align:right">${fmtV(day.trust)}</td>
+      <td style="color:${col(day.dealer)};text-align:right">${fmtV(day.dealer)}</td>
+      <td style="color:${col(day.total)};text-align:right;font-weight:600">${fmtV(day.total)}</td>
+    </tr>`).join('');
+  const total5 = days.reduce((s,x) => s + x.total, 0);
+  const tableDiv = document.createElement('div');
+  tableDiv.innerHTML = `
+    <table style="width:100%;border-collapse:collapse;font-size:0.78rem;margin-top:8px">
+      <thead><tr style="color:#4a6070;border-bottom:1px solid #1a2a3a">
+        <th style="text-align:left;padding:4px 2px">日期</th>
+        <th style="text-align:right;padding:4px 4px">外資</th>
+        <th style="text-align:right;padding:4px 4px">投信</th>
+        <th style="text-align:right;padding:4px 4px">自營商</th>
+        <th style="text-align:right;padding:4px 4px">合計</th>
+      </tr></thead>
+      <tbody>${rows}</tbody>
+      <tfoot><tr style="border-top:1px solid #1a2a3a;color:#6888a0">
+        <td style="padding:4px 2px">5日合計</td>
+        <td colspan="3"></td>
+        <td style="text-align:right;font-weight:700;color:${col(total5)}">${fmtV(total5)}</td>
+      </tr></tfoot>
+    </table>`;
+  document.getElementById('institutionalPanel').appendChild(tableDiv);
+}
+
+// ── Tick Stats (大中小單) ─────────────────────────────────────────────
+async function loadTickStats(ticker) {
+  setHTML('tickStatsPanel', '<div class="mini-loading">載入中...</div>');
+  try {
+    const r = await fetch('/api/tw/tick_stats/' + encodeURIComponent(ticker));
+    const d = await r.json();
+    if (d.error) { setHTML('tickStatsPanel', `<div class="no-data">${d.error}</div>`); return; }
+    renderTickStats(d);
+  } catch(e) {
+    setHTML('tickStatsPanel', '<div class="no-data">載入失敗</div>');
+  }
+}
+
+function renderTickStats(d) {
+  const bars = d.bars, stats = d.stats;
+  const BG = '#0c1220', GRID = '#121e30';
+  const times  = bars.map(b => b.time);
+  const vBig   = bars.map(b => b.cat==='big'   ? b.volume : 0);
+  const vMid   = bars.map(b => b.cat==='mid'   ? b.volume : 0);
+  const vSmall = bars.map(b => b.cat==='small' ? b.volume : 0);
+  Plotly.newPlot('tickStatsPanel', [
+    { type:'bar', name:'大單(≥100張)', x:times, y:vBig,   marker:{color:'#e84646'} },
+    { type:'bar', name:'中單(10~99張)',x:times, y:vMid,   marker:{color:'#ffa000'} },
+    { type:'bar', name:'小單(<10張)',  x:times, y:vSmall, marker:{color:'#36c6ff'} },
+  ], {
+    paper_bgcolor:BG, plot_bgcolor:BG, font:{color:'#6888a0', size:11}, barmode:'stack',
+    legend:{orientation:'h', x:0, y:1.12, bgcolor:'rgba(0,0,0,0)', font:{size:11,color:'#8aaabf'}},
+    margin:{t:30, b:40, l:55, r:10},
+    xaxis:{gridcolor:GRID, tickfont:{color:'#8aaabf'}, nticks:12},
+    yaxis:{gridcolor:GRID, tickfont:{color:'#8aaabf'}},
+    height:230,
+  }, {responsive:true, displayModeBar:false});
+  const total_vol = stats.big.volume + stats.mid.volume + stats.small.volume || 1;
+  const bigPct   = (stats.big.volume   / total_vol * 100).toFixed(1);
+  const midPct   = (stats.mid.volume   / total_vol * 100).toFixed(1);
+  const smallPct = (stats.small.volume / total_vol * 100).toFixed(1);
+  const summary = document.createElement('div');
+  summary.style.cssText = 'display:flex;gap:12px;justify-content:center;padding:6px 0 2px;font-size:0.78rem;flex-wrap:wrap';
+  summary.innerHTML = `
+    <span style="color:#e84646">■ 大單 ${bigPct}%（${stats.big.count}筆）</span>
+    <span style="color:#ffa000">■ 中單 ${midPct}%（${stats.mid.count}筆）</span>
+    <span style="color:#36c6ff">■ 小單 ${smallPct}%（${stats.small.count}筆）</span>
+  `;
+  document.getElementById('tickStatsPanel').appendChild(summary);
+}
+
+// ── Peers Comparison ──────────────────────────────────────────────────
+async function loadPeers(ticker) {
+  setHTML('peersPanel', '<div class="mini-loading">載入中...</div>');
+  try {
+    const r = await fetch('/api/tw/peers/' + encodeURIComponent(ticker));
+    const d = await r.json();
+    if (!d.peers || d.peers.length === 0) {
+      setHTML('peersPanel', '<div class="no-data">暫無同產業對比資料</div>');
+      return;
+    }
+    const rows = d.peers.map(p => {
+      const up20 = p.ret20d >= 0, up1 = p.ret1d >= 0, self = p.isSelf;
+      const click = self ? '' : `onclick="loadStock('${p.ticker}')" style="cursor:pointer" onmouseover="this.style.background='#141e30'" onmouseout="this.style.background=''"`;
+      return `<div ${click} style="display:flex;align-items:center;gap:8px;padding:6px 4px;border-bottom:1px solid #1a2a3a;${self?'background:rgba(51,153,255,0.08);border-radius:6px':''}">
+        <div style="width:40px;font-weight:700;color:${self?'var(--accent)':'var(--text)'}">${p.ticker}</div>
+        <div style="flex:1;font-size:0.8rem;color:${self?'#fff':'var(--text-dim)'}">${p.name}${self?' *':''}</div>
+        <div style="width:52px;text-align:right;font-size:0.76rem;font-weight:600;color:${up1?'var(--red)':'var(--green)'}">${up1?'+':''}${p.ret1d}%</div>
+        <div style="width:60px;text-align:right;font-size:0.76rem;font-weight:600;color:${up20?'var(--red)':'var(--green)'}">${up20?'+':''}${p.ret20d}%</div>
+      </div>`;
+    }).join('');
+    setHTML('peersPanel', `
+      <div style="display:flex;padding:4px 4px 2px;font-size:0.68rem;color:#4a6070;border-bottom:1px solid #1a2a3a">
+        <div style="width:40px"></div><div style="flex:1">名稱</div>
+        <div style="width:52px;text-align:right">今日</div>
+        <div style="width:60px;text-align:right">近20日</div>
+      </div>${rows}`);
+  } catch(e) {
+    setHTML('peersPanel', '<div class="no-data">載入失敗</div>');
+  }
+}
+
+// ── Broker Chips ──────────────────────────────────────────────────────
+async function loadBrokerChips(ticker) {
+  const stockNo = ticker.replace('.TWO','').replace('.TW','');
+  setHTML('brokerChipsPanel', '<div class="mini-loading">載入中...</div>');
+  const bcDate = document.getElementById('bcDateRange');
+  if (bcDate) bcDate.textContent = '載入中...';
+  try {
+    const r = await fetch('/api/tw/broker_chips/' + encodeURIComponent(ticker));
+    const d = await r.json();
+    renderBrokerChips(d, stockNo);
+  } catch(e) {
+    renderBrokerChips({hasData: false}, stockNo);
+  }
+}
+
+function fmtInstVol(shares) {
+  const lots = Math.round(shares / 1000);
+  if (!lots) return '0';
+  const abs = Math.abs(lots);
+  if (abs >= 10000) return (lots > 0 ? '+' : '') + (lots/10000).toFixed(1) + '萬張';
+  return (lots > 0 ? '+' : '') + lots.toLocaleString() + '張';
+}
+
+function renderBrokerChips(d, stockNo) {
+  const days = d.days || [];
+  const dateLabel = days.length > 0
+    ? `近${days.length}日 (${days[days.length-1].date.slice(4,6)}/${days[days.length-1].date.slice(6,8)}～${days[0].date.slice(4,6)}/${days[0].date.slice(6,8)})`
+    : '暫無資料';
+  const bcDate = document.getElementById('bcDateRange');
+  if (bcDate) bcDate.textContent = dateLabel;
+  const extLinks = `
+    <div class="bc-links">
+      <span style="font-size:0.72rem;color:var(--text-dim);align-self:center">分點明細：</span>
+      <a class="bc-link" href="https://goodinfo.tw/tw/StockBrokerTradeDetail.asp?STOCK_ID=${stockNo}" target="_blank" rel="noopener">Goodinfo 分點</a>
+      <a class="bc-link" href="https://www.wantgoo.com/stock/${stockNo}/major-investors" target="_blank" rel="noopener">玩股網 分點</a>
+      <a class="bc-link" href="https://www.cmoney.tw/follow/symbol/tse_${stockNo}.tw" target="_blank" rel="noopener">CMoney 籌碼</a>
+      <a class="bc-link" href="https://tw.stock.yahoo.com/quote/${stockNo}.TW/institutional-trading" target="_blank" rel="noopener">Yahoo!股市 法人</a>
+    </div>`;
+  const tip = `<div class="bc-tip">
+    <strong>解讀提示：</strong>外資連續買超且投信同步追進，代表籌碼集中、主力做多信心強；
+    外資賣超但投信買進為拉鋸格局；三大法人同步賣超需提高警覺。
+  </div>`;
+  if (!d.hasData || days.length === 0) {
+    setHTML('brokerChipsPanel', `<div class="bc-no-data">暫無近期法人流向資料</div>${tip}${extLinks}`);
+    return;
+  }
+  const agg = d.aggregate || {};
+  const aggHtml = `
+    <div class="bc-agg-row">
+      <div class="bc-agg-pill"><span class="bc-agg-label">外資</span><span class="bc-agg-val ${agg.foreign>=0?'pos':'neg'}">${fmtInstVol(agg.foreign)}</span></div>
+      <div class="bc-agg-pill"><span class="bc-agg-label">投信</span><span class="bc-agg-val ${agg.trust>=0?'pos':'neg'}">${fmtInstVol(agg.trust)}</span></div>
+      <div class="bc-agg-pill"><span class="bc-agg-label">自營商</span><span class="bc-agg-val ${agg.dealer>=0?'pos':'neg'}">${fmtInstVol(agg.dealer)}</span></div>
+      <div class="bc-agg-pill total"><span class="bc-agg-label">三大合計</span><span class="bc-agg-val ${agg.total>=0?'pos':'neg'}" style="font-size:1rem">${fmtInstVol(agg.total)}</span></div>
+    </div>`;
+  const maxAbs = Math.max(...days.flatMap(d => [Math.abs(d.foreign), Math.abs(d.trust), Math.abs(d.dealer)]), 1);
+  function barCell(v, maxV) {
+    const w = Math.round(Math.abs(v) / maxV * 60);
+    const cls = v >= 0 ? 'buy' : 'sell';
+    return `<div class="bc-bar-wrap"><div class="bc-bar ${cls}" style="width:${w}px"></div><span class="bc-vol ${cls}">${fmtInstVol(v)}</span></div>`;
+  }
+  const tableRows = days.map(day => `
+    <tr>
+      <td class="bc-td-date">${day.date.slice(4,6)}/${day.date.slice(6,8)}</td>
+      <td>${barCell(day.foreign, maxAbs)}</td>
+      <td>${barCell(day.trust,   maxAbs)}</td>
+      <td>${barCell(day.dealer,  maxAbs)}</td>
+      <td><span class="bc-total-val ${day.total>=0?'pos':'neg'}">${fmtInstVol(day.total)}</span></td>
+    </tr>`).join('');
+  const tableHtml = `
+    <div class="bc-table-wrap">
+      <table class="bc-table">
+        <thead><tr><th>日期</th><th>外資</th><th>投信</th><th>自營商</th><th>合計</th></tr></thead>
+        <tbody>${tableRows}</tbody>
+      </table>
+    </div>`;
+  setHTML('brokerChipsPanel', `${aggHtml}${tableHtml}${tip}${extLinks}`);
+}
+
+// ── Mobile Nav ────────────────────────────────────────────────────────
+const _mnavTargets = {
+  chart:    () => document.querySelector('.chart-row') || document.querySelector('.card'),
+  chips:    () => document.getElementById('institutionalCard'),
+  fundament:() => document.getElementById('earningsCard') || document.getElementById('finHealthCard'),
+  tv:       () => document.getElementById('tvCard'),
+  news:     () => document.getElementById('newsCard'),
+};
+function mnavGo(tab) {
+  document.querySelectorAll('.mnav-btn').forEach(b => b.classList.toggle('active', b.dataset.tab === tab));
+  const el = _mnavTargets[tab] && _mnavTargets[tab]();
+  if (el) el.scrollIntoView({behavior:'smooth', block:'start'});
 }
 
 // ── News ──────────────────────────────────────────────────────────────
