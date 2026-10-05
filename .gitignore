@@ -1,0 +1,10 @@
+venv/
+__pycache__/
+*.log
+users.json
+.secret_key
+monitor_config.json
+tw_market.db*
+tw_realtime.json
+tw_watchlist.json
+.tw_*

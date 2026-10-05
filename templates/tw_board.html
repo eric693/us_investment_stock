@@ -1,0 +1,363 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>台股看盤</title>
+<link rel="stylesheet" href="/static/css/style.css">
+<style>
+.bd-nav{position:sticky;top:0;z-index:200;display:flex;align-items:center;gap:12px;flex-wrap:wrap;background:rgba(6,10,16,.96);border-bottom:1px solid var(--card-bd);padding:10px 20px;backdrop-filter:blur(12px);}
+.bd-nav .brand{font-size:1rem;font-weight:900;letter-spacing:1px;color:#fff;padding:5px 12px;background:linear-gradient(135deg,#1a6fd4,#0e4a9a);border-radius:6px;}
+.bd-nav .brand span{color:var(--gold);}
+.nav-link{padding:5px 12px;border-radius:6px;color:var(--text-mid);font-size:.83rem;font-weight:600;border:1px solid transparent;text-decoration:none;}
+.nav-link:hover{color:var(--text);border-color:var(--card-bd2);background:#0d1828;text-decoration:none;}
+.nav-link.active{color:var(--green);border-color:rgba(0,214,143,.4);background:rgba(0,214,143,.08);}
+.nav-right{margin-left:auto;display:flex;gap:10px;align-items:center;font-size:.78rem;color:var(--text-dim);}
+.dot{display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--text-dim);margin-right:5px;}
+.dot.live{background:var(--red);box-shadow:0 0 6px var(--red);animation:pulse 1.5s infinite;}
+@keyframes pulse{50%{opacity:.4}}
+
+.wrap{max-width:1600px;margin:0 auto;padding:14px 16px;}
+.tabs{display:flex;gap:4px;border-bottom:1px solid var(--card-bd);margin-bottom:12px;overflow-x:auto;}
+.tab{padding:9px 18px;border:none;background:none;color:var(--text-mid);font-size:.9rem;font-weight:700;cursor:pointer;border-bottom:2px solid transparent;white-space:nowrap;}
+.tab.active{color:var(--text);border-bottom-color:var(--accent);}
+.tab .cnt{font-size:.72rem;color:var(--text-dim);margin-left:4px;}
+
+.toolbar{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:10px;}
+.inp{padding:6px 10px;border-radius:7px;border:1px solid var(--card-bd2);background:#0a1320;color:var(--text);font-size:.84rem;outline:none;}
+.inp:focus{border-color:var(--accent);}
+.inp.num{width:72px;}
+.btn{padding:6px 14px;border-radius:7px;border:none;font-size:.83rem;font-weight:700;cursor:pointer;}
+.btn-primary{background:var(--accent);color:#fff;}
+.btn-primary:disabled{opacity:.5;cursor:wait;}
+.btn-ghost{background:rgba(255,255,255,.05);color:var(--text-mid);border:1px solid var(--card-bd);}
+.btn-ghost:hover{color:var(--text);}
+.chk{display:inline-flex;align-items:center;gap:5px;font-size:.82rem;color:var(--text-mid);cursor:pointer;user-select:none;}
+.meta{font-size:.78rem;color:var(--text-dim);}
+
+.tbl-wrap{background:var(--card-bg);border:1px solid var(--card-bd);border-radius:10px;overflow:auto;max-height:calc(100vh - 230px);}
+table.q{width:100%;border-collapse:collapse;font-size:.84rem;font-variant-numeric:tabular-nums;}
+table.q th{position:sticky;top:0;background:#0d1626;color:var(--text-mid);font-weight:700;font-size:.78rem;padding:8px 10px;text-align:right;cursor:pointer;white-space:nowrap;border-bottom:1px solid var(--card-bd2);user-select:none;z-index:1;}
+table.q th.l,table.q td.l{text-align:left;}
+table.q th:hover{color:var(--text);}
+table.q th.sorted{color:var(--blue);}
+table.q td{padding:6px 10px;text-align:right;border-bottom:1px solid rgba(21,32,48,.7);white-space:nowrap;}
+table.q tr:hover td{background:rgba(61,142,248,.06);}
+.up{color:#ff4d4f;} .dn{color:#00c26e;} .flat{color:var(--text);}
+.lnk{color:var(--text);cursor:pointer;font-weight:700;}
+.lnk:hover{color:var(--blue);text-decoration:underline;}
+.code{color:var(--gold);}
+.star{cursor:pointer;color:var(--text-dim);font-size:1rem;padding:0 2px;}
+.star.on{color:var(--gold);}
+.tag{display:inline-block;padding:1px 7px;border-radius:4px;font-size:.72rem;font-weight:700;margin-right:3px;}
+.tag.buy{background:rgba(255,77,79,.14);color:#ff6b6b;}
+.tag.sell{background:rgba(0,194,110,.14);color:#2bd98a;}
+.mkt{font-size:.72rem;color:var(--text-dim);}
+.empty{padding:40px;text-align:center;color:var(--text-dim);}
+
+.panel{background:var(--card-bg);border:1px solid var(--card-bd);border-radius:10px;padding:14px 16px;margin-bottom:12px;}
+.panel h3{font-size:.9rem;margin-bottom:10px;}
+.rule-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(330px,1fr));gap:6px 18px;margin-bottom:12px;}
+.rule-grid .chk{font-size:.84rem;}
+.params{display:flex;flex-wrap:wrap;gap:14px;align-items:center;font-size:.82rem;color:var(--text-mid);}
+.params label{display:flex;align-items:center;gap:6px;}
+.hint{font-size:.76rem;color:var(--text-dim);margin-top:8px;line-height:1.6;}
+.seg{display:inline-flex;border:1px solid var(--card-bd2);border-radius:7px;overflow:hidden;}
+.seg button{background:none;border:none;color:var(--text-mid);padding:5px 10px;font-size:.8rem;cursor:pointer;}
+.seg button.on{background:var(--accent);color:#fff;}
+@media(max-width:700px){.nav-right{margin-left:0}.hide-sm{display:none}}
+</style>
+</head>
+<body>
+<nav class="bd-nav">
+  <div class="brand">Stock<span>Lens</span></div>
+  <a class="nav-link" href="/">美股分析</a>
+  <a class="nav-link" href="/tw">台股分析</a>
+  <a class="nav-link active" href="/tw/board">台股看盤</a>
+  <a class="nav-link" href="/portfolio">投資組合</a>
+  <a class="nav-link" href="/screener">策略選股</a>
+  <div class="nav-right">
+    <span id="liveBadge"><span class="dot"></span>收盤資料</span>
+    <span id="syncInfo"></span>
+    <a class="nav-link" href="/logout">登出</a>
+  </div>
+</nav>
+
+<div class="wrap">
+  <div class="tabs">
+    <button class="tab" data-tab="all">全部行情<span class="cnt" id="cntAll"></span></button>
+    <button class="tab" data-tab="watch">自選股<span class="cnt" id="cntWatch"></span></button>
+    <button class="tab" data-tab="after">盤後選股<span class="cnt" id="cntAfter"></span></button>
+    <button class="tab" data-tab="rt">即時選股<span class="cnt" id="cntRt"></span></button>
+  </div>
+
+  <!-- 盤後選股條件 -->
+  <div class="panel hidden" id="afterPanel">
+    <h3>盤後選股：法人持股(張) 穿越持股均線 ＋ KD 交叉 <span class="meta">（法人買賣超於盤後公布）</span></h3>
+    <div class="rule-grid" id="afterRules"></div>
+    <div class="params">
+      <label>持股均線
+        <span class="seg" id="maSeg"><button data-v="3">3日</button><button data-v="5" class="on">5日</button></span>
+        <input class="inp num" id="maN" type="number" min="2" max="60" value="5" title="自訂天數">
+      </label>
+      <label title="1 = 兩個交叉都發生在同一天；3 = 最近 3 日內都發生過且目前仍維持">訊號容許天數 <input class="inp num" id="within" type="number" min="1" max="10" value="1"></label>
+      <label>KD 週期 <input class="inp num" id="kdN" type="number" min="3" max="30" value="9"></label>
+      <label>最低成交量(張) <input class="inp num" id="minVol" type="number" min="0" value="0"></label>
+      <label>資料日期 <input class="inp" id="asof" type="date" title="留空 = 最新交易日"></label>
+      <label class="chk"><input type="checkbox" id="afterEtf">含 ETF</label>
+      <button class="btn btn-primary" id="runAfter">開始選股</button>
+    </div>
+    <div class="hint">
+      金叉：法人持股線由下往上穿越其 N 日均線，且 K 由下往上穿越 D；死叉反之。多個條件之間為「或」。<br>
+      投信／自營商沒有公開的逐日持股，持股線以「累計買賣超(張)」表示（交叉判斷不受影響）；外資以證交所／櫃買中心公布的實際持股張數為基準。
+    </div>
+  </div>
+
+  <!-- 即時選股條件 -->
+  <div class="panel hidden" id="rtPanel">
+    <h3>即時選股 <span class="meta">（盤中以即時報價計算當日 KD；收盤後使用收盤資料）</span></h3>
+    <div class="rule-grid" id="rtRules"></div>
+    <div class="params">
+      <label>K 低檔 &lt; <input class="inp num" id="kLow" type="number" value="20"></label>
+      <label>K 高檔 &gt; <input class="inp num" id="kHigh" type="number" value="80"></label>
+      <label>均量天數 <input class="inp num" id="volN" type="number" min="2" max="60" value="5"></label>
+      <label>KD 週期 <input class="inp num" id="rtKdN" type="number" min="3" max="30" value="9"></label>
+      <label class="chk"><input type="checkbox" id="rtEtf">含 ETF</label>
+      <label class="chk"><input type="checkbox" id="rtAuto" checked>盤中每 60 秒自動重跑</label>
+      <button class="btn btn-primary" id="runRt">開始選股</button>
+    </div>
+  </div>
+
+  <div class="toolbar">
+    <input class="inp" id="search" placeholder="搜尋代碼 / 名稱" style="width:180px">
+    <select class="inp" id="fMarket"><option value="">全部市場</option><option value="TSE">上市</option><option value="OTC">上櫃</option></select>
+    <select class="inp" id="fInd"><option value="">全部產業</option></select>
+    <label class="chk" id="etfWrap"><input type="checkbox" id="fEtf">含 ETF</label>
+    <span class="meta" id="tblMeta"></span>
+  </div>
+  <div class="tbl-wrap"><table class="q" id="tbl"><thead></thead><tbody></tbody></table></div>
+  <div class="hint">點代碼或名稱進入技術分析圖；在圖上可用滑鼠滾輪／方向鍵依目前清單的順序一檔一檔往下看。</div>
+</div>
+
+<script>
+const $ = s => document.querySelector(s);
+const ss = {get(k,d){try{const v=sessionStorage.getItem(k);return v==null?d:JSON.parse(v)}catch(e){return d}},
+            set(k,v){try{sessionStorage.setItem(k,JSON.stringify(v))}catch(e){}}};
+const st = Object.assign({tab:'all', sort:'volume', dir:-1, search:'', market:'', ind:'', etf:false}, ss.get('twBoardState', {}));
+let ALL = [], BYCODE = {}, WATCH = [], AFTER = null, RT = null, marketOpen = false;
+
+const BASE_COLS = [
+  ['star','',  'l'], ['code','代碼','l'], ['name','名稱','l'], ['market','市場','l hide-sm'], ['industry','產業','l hide-sm'],
+  ['price','股價'], ['chg','漲跌'], ['chg_pct','漲跌%'], ['volume','成交量(張)'],
+  ['open','開盤','hide-sm'], ['high','最高','hide-sm'], ['low','最低','hide-sm'], ['prev','昨收','hide-sm'],
+];
+const SCREEN_COLS = [['signals','訊號','l'], ['k','K'], ['d','D']];
+
+async function api(url, opt) {
+  const r = await fetch(url, opt);
+  if (r.status === 401) { location.href = '/login?next=' + encodeURIComponent(location.pathname); throw new Error('未登入'); }
+  const j = await r.json();
+  if (!r.ok) throw new Error(j.error || r.statusText);
+  return j;
+}
+const fmt = (v, d=2) => v == null || isNaN(v) ? '-' : Number(v).toLocaleString('zh-TW', {minimumFractionDigits:d, maximumFractionDigits:d});
+const cls = v => v > 0 ? 'up' : v < 0 ? 'dn' : 'flat';
+const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+
+async function loadList() {
+  const j = await api('/api/tw/board/list');
+  marketOpen = j.market_open;
+  ALL = j.rows.map(r => Object.fromEntries(j.fields.map((f, i) => [f, r[i]])));
+  BYCODE = Object.fromEntries(ALL.map(r => [r.code, r]));
+  $('#liveBadge').innerHTML = j.realtime
+    ? `<span class="dot live"></span>即時 ${esc((j.ts||'').slice(11,19))}`
+    : `<span class="dot"></span>收盤資料 ${esc(j.date||'')}`;
+  const inds = [...new Set(ALL.map(r => r.industry).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'zh-TW'));
+  const cur = $('#fInd').value || st.ind;
+  $('#fInd').innerHTML = '<option value="">全部產業</option>' + inds.map(i => `<option${i===cur?' selected':''}>${esc(i)}</option>`).join('');
+  $('#cntAll').textContent = ALL.filter(r => r.kind === 'stock').length;
+}
+
+async function loadWatch() { WATCH = await api('/api/tw/board/watchlist'); $('#cntWatch').textContent = WATCH.length; }
+
+async function loadStatus() {
+  try {
+    const s = await api('/api/tw/board/status');
+    $('#syncInfo').textContent = s.phase === 'backfill' ? s.message
+      : `歷史 ${s.trading_days} 日・法人 ${s.latest_inst || '-'}`;
+  } catch (e) {}
+}
+
+function currentRows() {
+  let rows;
+  if (st.tab === 'all') rows = ALL;
+  else if (st.tab === 'watch') rows = WATCH.map(c => BYCODE[c] || {code:c, name:c});
+  else {
+    const res = st.tab === 'after' ? AFTER : RT;
+    // 即時選股的價格用清單上最新（盤中即時）的報價；盤後選股維持選股當日的收盤
+    rows = (res?.results || []).map(r => {
+      const live = st.tab === 'rt' && BYCODE[r.code];
+      return Object.assign({}, r, {price: r.close},
+        live ? {price: live.price, chg: live.chg, chg_pct: live.chg_pct, volume: live.volume} : {});
+    });
+  }
+  const q = st.search.trim().toLowerCase();
+  rows = rows.filter(r =>
+    (!q || r.code.toLowerCase().includes(q) || (r.name||'').toLowerCase().includes(q)) &&
+    (!st.market || r.market === st.market) &&
+    (!st.ind || r.industry === st.ind) &&
+    (st.tab !== 'all' || st.etf || r.kind === 'stock'));
+  const k = st.sort, dir = st.dir;
+  rows = rows.slice().sort((a, b) => {
+    let x = a[k], y = b[k];
+    if (k === 'signals') { x = (x||[]).length; y = (y||[]).length; }
+    if (x == null && y == null) return 0;
+    if (x == null) return 1;
+    if (y == null) return -1;
+    return (typeof x === 'string' ? x.localeCompare(y, 'zh-TW') : x - y) * dir;
+  });
+  return rows;
+}
+
+function render() {
+  ss.set('twBoardState', st);
+  document.querySelectorAll('.tab').forEach(t => t.classList.toggle('active', t.dataset.tab === st.tab));
+  $('#afterPanel').classList.toggle('hidden', st.tab !== 'after');
+  $('#rtPanel').classList.toggle('hidden', st.tab !== 'rt');
+  $('#etfWrap').classList.toggle('hidden', st.tab !== 'all');
+  const cols = st.tab === 'after' || st.tab === 'rt' ? BASE_COLS.slice(0, 9).concat(SCREEN_COLS) : BASE_COLS;
+  const rows = currentRows();
+  $('#tbl thead').innerHTML = '<tr>' + cols.map(([k, t, c='']) =>
+    `<th class="${c}${st.sort===k?' sorted':''}" data-k="${k}">${t}${st.sort===k ? (st.dir>0?' ▲':' ▼') : ''}</th>`).join('') + '</tr>';
+  const wset = new Set(WATCH);
+  const LIMIT = 3000;
+  $('#tbl tbody').innerHTML = rows.length ? rows.slice(0, LIMIT).map(r => '<tr>' + cols.map(([k, , c='']) => {
+    const v = r[k];
+    switch (k) {
+      case 'star': return `<td class="l"><span class="star${wset.has(r.code)?' on':''}" data-star="${esc(r.code)}">${wset.has(r.code)?'★':'☆'}</span></td>`;
+      case 'code': return `<td class="l"><span class="lnk code" data-go="${esc(r.code)}">${esc(r.code)}</span></td>`;
+      case 'name': return `<td class="l"><span class="lnk" data-go="${esc(r.code)}">${esc(r.name)}</span></td>`;
+      case 'market': return `<td class="${c}"><span class="mkt">${r.market==='TSE'?'上市':r.market==='OTC'?'上櫃':''}</span></td>`;
+      case 'industry': return `<td class="${c}"><span class="mkt">${esc(v||'')}</span></td>`;
+      case 'price': case 'open': case 'high': case 'low':
+        return `<td class="${c} ${k==='price'?cls(r.chg):''}">${fmt(v)}</td>`;
+      case 'prev': return `<td class="${c}">${fmt(v)}</td>`;
+      case 'chg': return `<td class="${cls(v)}">${v==null?'-':(v>0?'▲':v<0?'▼':'')+fmt(Math.abs(v))}</td>`;
+      case 'chg_pct': return `<td class="${cls(v)}">${v==null?'-':(v>0?'+':'')+fmt(v)+'%'}</td>`;
+      case 'volume': return `<td>${fmt(v,0)}</td>`;
+      case 'signals': return `<td class="l">${(v||[]).map(s => `<span class="tag ${s.side}">${esc(s.label.split('：')[0])}${st.tab==='after'?(s.side==='buy'?' BUY':' SELL'):''}</span>`).join('')}</td>`;
+      case 'k': case 'd': return `<td>${fmt(v,1)}</td>`;
+    }
+    return `<td>${esc(v)}</td>`;
+  }).join('') + '</tr>').join('') : `<tr><td colspan="${cols.length}" class="empty">${emptyText()}</td></tr>`;
+  $('#tblMeta').textContent = `${rows.length} 檔` + (rows.length > LIMIT ? `（顯示前 ${LIMIT}）` : '');
+}
+
+function emptyText() {
+  if (st.tab === 'watch') return '尚無自選股，點清單左側的 ☆ 加入';
+  if (st.tab === 'after') return AFTER ? `${AFTER.date} 沒有符合條件的股票` : '勾選條件後按「開始選股」';
+  if (st.tab === 'rt') return RT ? '目前沒有符合條件的股票' : '勾選條件後按「開始選股」';
+  return ALL.length ? '沒有符合篩選的股票' : '資料載入中（首次啟動需要下載歷史資料，約數分鐘）';
+}
+
+$('#tbl').addEventListener('click', async e => {
+  const th = e.target.closest('th');
+  if (th && th.dataset.k && th.dataset.k !== 'star') {
+    const k = th.dataset.k;
+    if (st.sort === k) st.dir = -st.dir; else { st.sort = k; st.dir = ['code','name','market','industry'].includes(k) ? 1 : -1; }
+    return render();
+  }
+  const star = e.target.closest('[data-star]');
+  if (star) {
+    const code = star.dataset.star, on = WATCH.includes(code);
+    WATCH = await api('/api/tw/board/watchlist', {method: on ? 'DELETE' : 'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({code})});
+    $('#cntWatch').textContent = WATCH.length;
+    return render();
+  }
+  const go = e.target.closest('[data-go]');
+  if (go) {
+    // 把目前清單（依排序）交給技術分析頁，讓它可以依序切換
+    const list = currentRows().map(r => [r.code, r.name]);
+    const label = {all:'全部行情', watch:'自選股', after:'盤後選股', rt:'即時選股'}[st.tab];
+    ss.set('twNavList', {label, list});
+    location.href = '/tw/board/chart?code=' + encodeURIComponent(go.dataset.go);
+  }
+});
+
+document.querySelectorAll('.tab').forEach(t => t.onclick = () => { st.tab = t.dataset.tab; render(); });
+$('#search').oninput = e => { st.search = e.target.value; render(); };
+$('#fMarket').onchange = e => { st.market = e.target.value; render(); };
+$('#fInd').onchange = e => { st.ind = e.target.value; render(); };
+$('#fEtf').onchange = e => { st.etf = e.target.checked; render(); };
+
+// ── 盤後選股 ──
+const INV = [['trust','投信'], ['foreign','外資'], ['dealer','自營商'], ['total','法人']];
+const afterSel = ss.get('twAfterRules', ['trust:buy']);
+$('#afterRules').innerHTML = INV.map(([k, n]) => ['buy','sell'].map(s =>
+  `<label class="chk"><input type="checkbox" value="${k}:${s}"${afterSel.includes(k+':'+s)?' checked':''}>
+   <span class="tag ${s}">${s==='buy'?'BUY':'SELL'}</span>${n}持股${s==='buy'?'金叉':'死叉'}持股均線 且 KD${s==='buy'?'金叉':'死叉'}</label>`).join('')).join('');
+$('#maSeg').onclick = e => { const b = e.target.closest('button'); if (!b) return; $('#maN').value = b.dataset.v; syncSeg(); };
+$('#maN').oninput = syncSeg;
+function syncSeg() { document.querySelectorAll('#maSeg button').forEach(b => b.classList.toggle('on', b.dataset.v === $('#maN').value)); }
+
+$('#runAfter').onclick = async () => {
+  const rules = [...document.querySelectorAll('#afterRules input:checked')].map(i => { const [investor, side] = i.value.split(':'); return {investor, side}; });
+  ss.set('twAfterRules', rules.map(r => r.investor + ':' + r.side));
+  const btn = $('#runAfter'); btn.disabled = true; btn.textContent = '計算中…';
+  try {
+    AFTER = await api('/api/tw/board/screen/after', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({
+      rules, ma_n: +$('#maN').value, within: +$('#within').value, kd_n: +$('#kdN').value,
+      min_volume: +$('#minVol').value, include_etf: $('#afterEtf').checked, asof: $('#asof').value || null})});
+    $('#cntAfter').textContent = AFTER.results.length;
+    st.sort = 'volume'; st.dir = -1;
+    render();
+    $('#tblMeta').textContent += `・資料日 ${AFTER.date}（${AFTER.days} 個交易日）`;
+  } catch (e) { alert(e.message); }
+  btn.disabled = false; btn.textContent = '開始選股';
+};
+
+// ── 即時選股 ──
+let rtTimer = null;
+async function initRt() {
+  const rules = await api('/api/tw/board/screen/realtime');
+  const sel = ss.get('twRtRules', rules.map(r => r.id));
+  $('#rtRules').innerHTML = rules.map(r => `<label class="chk"><input type="checkbox" value="${r.id}"${sel.includes(r.id)?' checked':''}>
+    <span class="tag ${r.side}">${r.side==='buy'?'BUY':'SELL'}</span>${esc(r.label.split('：')[1] || r.label)}</label>`).join('');
+}
+async function runRt(silent) {
+  const rules = [...document.querySelectorAll('#rtRules input:checked')].map(i => i.value);
+  ss.set('twRtRules', rules);
+  const btn = $('#runRt'); if (!silent) { btn.disabled = true; btn.textContent = '計算中…'; }
+  try {
+    RT = await api('/api/tw/board/screen/realtime', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({
+      rules, k_low: +$('#kLow').value, k_high: +$('#kHigh').value, vol_n: +$('#volN').value, kd_n: +$('#rtKdN').value,
+      include_etf: $('#rtEtf').checked})});
+    $('#cntRt').textContent = RT.results.length;
+    if (st.tab === 'rt') {
+      render();
+      $('#tblMeta').textContent += RT.source === 'realtime' ? `・即時 ${RT.ts?.slice(11,19)||''}` : `・收盤資料 ${RT.date}`;
+    }
+  } catch (e) { if (!silent) alert(e.message); }
+  btn.disabled = false; btn.textContent = '開始選股';
+  clearTimeout(rtTimer);
+  if ($('#rtAuto').checked && RT?.market_open) rtTimer = setTimeout(() => runRt(true), 60000);
+}
+$('#runRt').onclick = () => runRt(false);
+
+// 盤中自動更新行情
+async function tick() {
+  try { await loadList(); if (st.tab === 'all' || st.tab === 'watch') render(); } catch (e) {}
+  setTimeout(tick, marketOpen ? 20000 : 300000);
+}
+
+(async () => {
+  $('#search').value = st.search; $('#fMarket').value = st.market; $('#fEtf').checked = st.etf;
+  render();
+  await Promise.all([loadList().catch(e => console.error(e)), loadWatch(), initRt(), loadStatus()]);
+  render();
+  setTimeout(tick, marketOpen ? 20000 : 300000);
+  setInterval(loadStatus, 60000);
+})();
+</script>
+</body>
+</html>

@@ -14,27 +14,85 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 warnings.filterwarnings('ignore')
 
 app = Flask(__name__)
-app.secret_key = 'stocklens-secret-2024'
 
-PASSWORD = '123456789'
+# ── 登入（帳號 + 密碼）──────────────────────────────────────────────────
+# 帳號存在 users.json（密碼為雜湊，不進版控），用 manage_users.py 新增 / 改密碼。
+from werkzeug.security import check_password_hash
+from datetime import timedelta
+
+_BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+USERS_FILE = os.path.join(_BASE_DIR, 'users.json')
+_SECRET_FILE = os.path.join(_BASE_DIR, '.secret_key')
+
+
+def _secret_key():
+    if not os.path.exists(_SECRET_FILE):
+        fd = os.open(_SECRET_FILE, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+        with os.fdopen(fd, 'w') as f:
+            f.write(os.urandom(32).hex())
+    with open(_SECRET_FILE) as f:
+        return f.read().strip()
+
+
+try:
+    app.secret_key = _secret_key()
+except FileExistsError:          # 另一個 worker 剛好同時建立
+    time.sleep(0.5)
+    app.secret_key = _secret_key()
+app.config.update(SESSION_COOKIE_HTTPONLY=True, SESSION_COOKIE_SAMESITE='Lax',
+                  SESSION_COOKIE_SECURE=os.environ.get('SESSION_COOKIE_SECURE', '1') == '1',
+                  PERMANENT_SESSION_LIFETIME=timedelta(days=7))
+
+
+def _load_users():
+    try:
+        with open(USERS_FILE, encoding='utf-8') as f:
+            return json.load(f)
+    except (OSError, ValueError):
+        return {}
+
+
+_login_fail = {}   # ip → [失敗時間...]
+
 
 def login_required(f):
-    from functools import wraps
-    @wraps(f)
-    def decorated(*args, **kwargs):
-        if not session.get('authenticated'):
-            return redirect(url_for('login'))
-        return f(*args, **kwargs)
-    return decorated
+    # 實際的檢查在 _require_login（套用到所有路由）；保留此裝飾器讓既有路由不用改
+    return f
+
+
+@app.before_request
+def _require_login():
+    if request.endpoint in ('login', 'static') or session.get('user'):
+        return None
+    if request.path.startswith('/api/'):
+        return jsonify(error='未登入'), 401
+    return redirect(url_for('login', next=request.full_path.rstrip('?')))
+
 
 @app.route('/login', methods=['GET', 'POST'])
 def login():
     error = None
     if request.method == 'POST':
-        if request.form.get('password') == PASSWORD:
-            session['authenticated'] = True
-            return redirect(url_for('index'))
-        error = '密碼錯誤，請再試一次'
+        ip = request.headers.get('X-Real-IP', request.remote_addr)
+        now = time.time()
+        fails = [t for t in _login_fail.get(ip, []) if now - t < 900]
+        if len(fails) >= 10:
+            error = '嘗試次數過多，請 15 分鐘後再試'
+        else:
+            username = request.form.get('username', '').strip()
+            pw_hash = _load_users().get(username)
+            if pw_hash and check_password_hash(pw_hash, request.form.get('password', '')):
+                session.clear()
+                session.permanent = True
+                session['user'] = username
+                _login_fail.pop(ip, None)
+                nxt = request.args.get('next', '')
+                return redirect(nxt if nxt.startswith('/') and not nxt.startswith('//')
+                                else url_for('index'))
+            fails.append(now)
+            _login_fail[ip] = fails
+            time.sleep(1)
+            error = '帳號或密碼錯誤'
     return render_template('login.html', error=error)
 
 @app.route('/logout')
@@ -3827,6 +3885,10 @@ def _run_server_scan_with_exit():
 # Replace the scan function used by the loop
 import sys
 sys.modules[__name__].__dict__['_run_server_scan'] = _run_server_scan_with_exit
+
+
+import tw_board
+tw_board.init(app, login_required)
 
 
 if __name__ == '__main__':
