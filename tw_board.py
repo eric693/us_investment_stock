@@ -37,7 +37,12 @@ WATCH_FILE = os.path.join(BASE_DIR, 'tw_watchlist.json')
 SYNC_LOCK_FILE = os.path.join(BASE_DIR, '.tw_sync.lock')
 RT_LOCK_FILE = os.path.join(BASE_DIR, '.tw_rt.lock')
 
-BACKFILL_DAYS = int(os.environ.get('TW_BACKFILL_DAYS', '250'))   # 交易日
+BACKFILL_DAYS = int(os.environ.get('TW_BACKFILL_DAYS', '250'))   # 交易日（行情 + 法人）
+INST_BACKFILL_DAYS = int(os.environ.get('TW_INST_BACKFILL_DAYS', '500'))   # 法人資料再往前補，持股線更完整
+BACKUP_DIR = os.path.join(BASE_DIR, 'backups')
+BACKUP_KEEP = 7
+ALERT_FILE = os.path.join(BASE_DIR, 'tw_alerts.json')
+MONITOR_FILE = os.path.join(BASE_DIR, 'monitor_config.json')
 HDRS = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 '
                       '(KHTML, like Gecko) Chrome/124.0 Safari/537.36'}
 CODE_RE = re.compile(r'^(\d{4}|00\d{2,4}[A-Z]?)$')
@@ -261,13 +266,14 @@ def _sync_source(src, d, today):
     return bool(rows)
 
 
-def _sync_day(d, today):
+def _sync_day(d, today, sources=None):
     """TWSE 與 TPEx 是不同主機，兩邊平行抓。"""
     done = _done_sources(d.strftime('%Y-%m-%d'))
+    want = set(sources or SOURCES)
 
     def run(srcs):
         for src in srcs:
-            if src not in done:
+            if src in want and src not in done:
                 _sync_source(src, d, today)
 
     th = threading.Thread(target=run, args=(['tpex_px', 'tpex_inst'],))
@@ -323,10 +329,34 @@ def _sync_foreign_hold():
                 break
 
 
-def _trading_days_loaded():
+def _trading_days_loaded(source='twse_px'):
     with _db() as con:
-        return con.execute("SELECT COUNT(*) FROM sync_log WHERE source='twse_px' AND status='ok'"
-                           ).fetchone()[0]
+        return con.execute("SELECT COUNT(*) FROM sync_log WHERE source=? AND status='ok'",
+                           (source,)).fetchone()[0]
+
+
+def _backup_db():
+    """每天備份一次資料庫（gzip），保留最近 BACKUP_KEEP 份。"""
+    import gzip
+    import shutil
+    os.makedirs(BACKUP_DIR, exist_ok=True)
+    name = os.path.join(BACKUP_DIR, f"tw_market-{_now():%Y%m%d}.db.gz")
+    if os.path.exists(name):
+        return
+    tmp = os.path.join(BACKUP_DIR, '.backup.tmp')
+    src = _db()
+    dst = sqlite3.connect(tmp)
+    try:
+        src.backup(dst)   # SQLite 線上備份，不必停機
+    finally:
+        dst.close()
+        src.close()
+    with open(tmp, 'rb') as fi, gzip.open(name + '.part', 'wb', compresslevel=6) as fo:
+        shutil.copyfileobj(fi, fo, 1 << 20)
+    os.replace(name + '.part', name)
+    os.remove(tmp)
+    for old in sorted(f for f in os.listdir(BACKUP_DIR) if f.startswith('tw_market-'))[:-BACKUP_KEEP]:
+        os.remove(os.path.join(BACKUP_DIR, old))
 
 
 def run_sync():
@@ -348,13 +378,33 @@ def run_sync():
         if n >= BACKFILL_DAYS:
             break
         _status.update(phase='backfill', message=f'回補歷史 {day}（已載入 {n} 個交易日）')
+        _write_status()
         _sync_day(d, today)
+    # 法人買賣超再往前補（只抓法人，持股估計線更長）
+    span = int(INST_BACKFILL_DAYS * 7 / 5) + 30
+    for i in range(1, span):
+        if _trading_days_loaded('twse_inst') >= INST_BACKFILL_DAYS:
+            break
+        d = pd.Timestamp(today - dt.timedelta(days=i))
+        if d.weekday() >= 5:
+            continue
+        done = _done_sources(d.strftime('%Y-%m-%d'))
+        if {'twse_inst', 'tpex_inst'} <= done:
+            continue
+        _status.update(phase='backfill', message=f"回補法人資料 {d:%Y-%m-%d}（{_trading_days_loaded('twse_inst')} 日）")
+        _write_status()
+        _sync_day(d, today, ['twse_inst', 'tpex_inst'])
     _sync_foreign_hold()
     with _db() as con:
         need_meta = con.execute("SELECT COUNT(*) FROM stocks WHERE industry=''").fetchone()[0]
     if need_meta or _status.get('meta_day') != str(today):
         _sync_meta()
         _status['meta_day'] = str(today)
+    if _now().hour >= 18 or _now().weekday() >= 5:
+        try:
+            _backup_db()
+        except Exception as e:
+            print(f'[tw_board] backup: {e}')
     _status.update(phase='idle', message=f'已載入 {_trading_days_loaded()} 個交易日',
                    updated=_now().strftime('%Y-%m-%d %H:%M'))
 
@@ -461,9 +511,12 @@ def _rt_loop():
         while True:
             t0 = time.time()
             try:
-                if _rt_wanted() and _market_open():
+                alerts_on = _load_alerts().get('enabled')
+                if (_rt_wanted() or alerts_on) and _market_open():
                     snap = _poll_realtime_once(snap if snap.get('date') == _now().strftime('%Y%m%d')
                                                else {})
+                    if alerts_on:
+                        _check_alerts()
             except Exception as e:
                 print(f'[tw_board] rt loop: {e}')
             time.sleep(max(5, 20 - (time.time() - t0)))
@@ -514,7 +567,31 @@ def calc_kd_frame(high, low, close, n=9):
             pd.DataFrame(d, index=close.index, columns=close.columns))
 
 
+_frames_cache = {}
+_frames_lock = threading.Lock()
+
+
+def _data_version():
+    with _db() as con:
+        return con.execute('SELECT MAX(ts), COUNT(*) FROM sync_log').fetchone()
+
+
 def _load_frames(n_days, asof=None):
+    """選股用的寬表（日期 × 代碼）。資料沒更新前重複使用，回傳複本避免被呼叫端改到。"""
+    key = (n_days, asof, _data_version())
+    with _frames_lock:
+        hit = _frames_cache.get(key)
+        if hit is None:
+            hit = _load_frames_db(n_days, asof)
+            if len(_frames_cache) > 6:
+                _frames_cache.clear()
+            _frames_cache[key] = hit
+    if hit is None:
+        return None
+    return {k: (v.copy() if isinstance(v, pd.DataFrame) else v) for k, v in hit.items()}
+
+
+def _load_frames_db(n_days, asof=None):
     with _db() as con:
         q = "SELECT date FROM sync_log WHERE source='twse_px' AND status='ok'"
         args = []
@@ -607,6 +684,149 @@ def screen_after_hours(rules, ma_n=5, within=1, kd_n=9, min_volume=0, include_et
     return dict(date=f['dates'][-1], days=len(f['dates']), results=list(out.values()))
 
 
+def backtest_after_hours(rules, ma_list=(3, 5), within=1, kd_n=9, min_volume=0,
+                         include_etf=False, horizons=(5, 10, 20)):
+    """把盤後選股條件套用到歷史上每一天，統計訊號出現後 N 日的報酬。
+
+    買進訊號的「勝率」= 之後上漲的比例；賣出訊號的「勝率」= 之後下跌的比例。
+    報酬以收盤價計算，未還原除權息。
+    """
+    f = _load_frames(BACKFILL_DAYS + 10)
+    if f is None or len(f['dates']) < 60:
+        return None
+    close, vol = f['close'], f['volume']
+    cols = [c for c in close.columns if include_etf or not c.startswith('00')]
+    close, vol = close[cols], vol[cols]
+    k, d = calc_kd_frame(f['high'][cols], f['low'][cols], close, kd_n)
+    warm = max(30, max(ma_list) + 2)              # KD 與均線暖機期不計
+    valid = pd.Series(np.arange(len(close)) >= warm, index=close.index)
+
+    def recent(ev):
+        return ev.rolling(within, min_periods=1).max().astype(bool) if within > 1 else ev
+
+    kd_up, kd_dn = recent(_cross_up(k, d)), recent(_cross_dn(k, d))
+    fwd = {h: close.shift(-h) / close - 1 for h in horizons}
+    vol_ok = vol >= min_volume
+    base = {h: float(np.nanmean(fwd[h].values[warm:])) * 100 for h in horizons}
+    out = []
+    for ma_n in ma_list:
+        for rule in rules:
+            col, label = INVESTORS[rule['investor']]
+            hold = f[col][cols].cumsum()
+            ma = hold.rolling(ma_n).mean()
+            if rule['side'] == 'buy':
+                hit = recent(_cross_up(hold, ma)) & kd_up & (hold > ma) & (k > d)
+            else:
+                hit = recent(_cross_dn(hold, ma)) & kd_dn & (hold < ma) & (k < d)
+            hit = hit & vol_ok & valid.values[:, None]
+            row = dict(ma_n=ma_n, investor=rule['investor'], label=label, side=rule['side'],
+                       signals=int(hit.values.sum()), stats={})
+            for h in horizons:
+                r = fwd[h].values[hit.values]
+                r = r[~np.isnan(r)]
+                if len(r):
+                    win = (r > 0) if rule['side'] == 'buy' else (r < 0)
+                    row['stats'][h] = dict(n=int(len(r)), avg=round(float(r.mean()) * 100, 2),
+                                           median=round(float(np.median(r)) * 100, 2),
+                                           win=round(float(win.mean()) * 100, 1))
+            out.append(row)
+    return dict(start=f['dates'][warm], end=f['dates'][-1], days=len(f['dates']) - warm,
+                horizons=list(horizons), baseline={h: round(v, 2) for h, v in base.items()},
+                results=out)
+
+
+# ── LINE 推播（即時選股訊號）─────────────────────────────────────────
+_alert_lock = threading.Lock()
+
+
+def _load_alerts():
+    try:
+        with open(ALERT_FILE, encoding='utf-8') as f:
+            return json.load(f)
+    except (OSError, ValueError):
+        return {'enabled': False, 'scope': 'watch', 'rules': list(RT_RULES), 'params': {},
+                'include_etf': False, 'sent': {}, 'log': []}
+
+
+def _save_alerts(cfg):
+    with open(ALERT_FILE + '.tmp', 'w', encoding='utf-8') as f:
+        json.dump(cfg, f, ensure_ascii=False, indent=1)
+    os.replace(ALERT_FILE + '.tmp', ALERT_FILE)
+
+
+def _line_creds():
+    try:
+        with open(MONITOR_FILE, encoding='utf-8') as f:
+            c = json.load(f)
+        return c.get('line_token', ''), c.get('line_user_id', '')
+    except (OSError, ValueError):
+        return '', ''
+
+
+def _push_line(text):
+    token, uid = _line_creds()
+    if not token or not uid:
+        return False, '尚未設定 LINE Channel Token 與 User ID'
+    try:
+        r = requests.post('https://api.line.me/v2/bot/message/push', timeout=10,
+                          headers={'Authorization': f'Bearer {token}'},
+                          json={'to': uid, 'messages': [{'type': 'text', 'text': text[:4900]}]})
+        return r.ok, ('' if r.ok else f'LINE 回應 {r.status_code}：{r.text[:200]}')
+    except Exception as e:
+        return False, str(e)
+
+
+def _scope_codes(scope):
+    if scope == 'all':
+        return None
+    groups = _load_watch()['groups']
+    if scope == 'watch':
+        return {c for g in groups for c in g['codes']}
+    return {c for g in groups if g['name'] == scope for c in g['codes']}
+
+
+def _check_alerts():
+    """盤中每次更新報價後跑一次即時選股；新出現的訊號推播到 LINE（同一檔同一條件一天只推一次）。"""
+    with _alert_lock:
+        cfg = _load_alerts()
+        if not cfg.get('enabled'):
+            return
+        res = screen_realtime(cfg.get('rules') or list(RT_RULES), cfg.get('params') or {},
+                              include_etf=cfg.get('include_etf', False))
+        if not res or res.get('source') != 'realtime':
+            return
+        allow = _scope_codes(cfg.get('scope', 'watch'))
+        today = _now().strftime('%Y-%m-%d')
+        sent = set(cfg.get('sent', {}).get(today, []))
+        new = []
+        for r in res['results']:
+            if allow is not None and r['code'] not in allow:
+                continue
+            for sig in r['signals']:
+                key = f"{r['code']}:{sig['rule']}"
+                if key not in sent:
+                    sent.add(key)
+                    new.append((r, sig))
+        if not new:
+            return
+        lines = [f"【台股即時選股】{_now():%H:%M}"]
+        for r, sig in new[:30]:
+            lines.append(f"{'🔴 BUY' if sig['side'] == 'buy' else '🟢 SELL'} {r['code']} {r['name']} "
+                         f"{r['close']}（{'+' if (r.get('chg_pct') or 0) > 0 else ''}{r.get('chg_pct')}%）"
+                         f" K{r['k']} D{r['d']}")
+        if len(new) > 30:
+            lines.append(f"…另有 {len(new) - 30} 檔")
+        ok, err = _push_line('\n'.join(lines))
+        cfg['sent'] = {today: sorted(sent)}
+        log = cfg.get('log', [])
+        for r, sig in new:
+            log.append(dict(ts=_now().strftime('%Y-%m-%d %H:%M'), code=r['code'], name=r['name'],
+                            side=sig['side'], rule=sig['rule'], price=r['close'], pushed=ok))
+        cfg['log'] = log[-100:]
+        cfg['last_error'] = err
+        _save_alerts(cfg)
+
+
 # 即時選股條件；新增條件只要在這裡加一個函式並登錄到 RT_RULES。
 def _rt_kdj_buy(k, d, vol, vol_ma, p):
     return _cross_up(k, d).iloc[-1] & (k.iloc[-1] < p.get('k_low', 20)) & (vol > vol_ma)
@@ -675,18 +895,38 @@ def screen_realtime(rule_ids, params, include_etf=False):
 _watch_lock = threading.Lock()
 
 
+DEFAULT_GROUP = '自選股'
+
+
 def _load_watch():
+    """{'groups': [{'name': ..., 'codes': [...]}, ...]}；舊版的單一清單自動轉成預設群組。"""
     try:
-        with open(WATCH_FILE) as f:
-            return json.load(f)
+        with open(WATCH_FILE, encoding='utf-8') as f:
+            data = json.load(f)
     except (OSError, ValueError):
-        return []
+        data = []
+    if isinstance(data, list):
+        data = {'groups': [{'name': DEFAULT_GROUP, 'codes': data}]}
+    if not data.get('groups'):
+        data['groups'] = [{'name': DEFAULT_GROUP, 'codes': []}]
+    return data
 
 
-def _save_watch(codes):
-    with open(WATCH_FILE + '.tmp', 'w') as f:
-        json.dump(codes, f)
+def _save_watch(data):
+    with open(WATCH_FILE + '.tmp', 'w', encoding='utf-8') as f:
+        json.dump(data, f, ensure_ascii=False)
     os.replace(WATCH_FILE + '.tmp', WATCH_FILE)
+
+
+def _watch_payload(data):
+    codes = {c for g in data['groups'] for c in g['codes']}
+    names = {}
+    if codes:
+        with _db() as con:
+            q = ','.join('?' * len(codes))
+            names = dict(con.execute(f'SELECT code, name FROM stocks WHERE code IN ({q})',
+                                     list(codes)))
+    return dict(groups=data['groups'], names={c: names.get(c, c) for c in codes})
 
 
 # ── API ───────────────────────────────────────────────────────────────
@@ -707,20 +947,39 @@ def api_status():
     return jsonify(st)
 
 
-@bp.route('/api/tw/board/list')
-def api_list():
-    _touch_active()
+_list_cache = {}
+
+
+def _list_base():
+    """收盤資料部分只在資料更新時重查（約 0.6 秒 → 0）。"""
+    ver = _data_version()
+    hit = _list_cache.get('base')
+    if hit and hit[0] == ver:
+        return hit[1], hit[2], hit[3]
     with _db() as con:
-        latest = con.execute("SELECT MAX(date) FROM daily").fetchone()[0]
+        latest = con.execute("SELECT MAX(date) FROM sync_log WHERE source='twse_px' AND status='ok'"
+                             ).fetchone()[0]
         if not latest:
-            return jsonify(dict(date=None, rows=[]))
+            return None, [], {}
         rows = con.execute(
             'SELECT s.code, s.name, s.market, s.industry, s.kind, d.open, d.high, d.low, d.close, '
             'd.chg, d.volume FROM stocks s LEFT JOIN daily d ON d.code=s.code AND d.date=? ',
             (latest,)).fetchall()
-        last_close = dict(con.execute(
-            'SELECT code, close FROM daily d WHERE date=(SELECT MAX(date) FROM daily d2 '
-            'WHERE d2.code=d.code)').fetchall())
+        # 當天沒成交的股票：用最近 30 天內最後一筆收盤
+        # SQLite：與 MAX() 一起選的欄位取自日期最大的那一列
+        last_close = {c: v for c, v, _ in con.execute(
+            "SELECT code, close, MAX(date) FROM daily WHERE date > date(?, '-45 days') "
+            'GROUP BY code', (latest,))}
+    _list_cache['base'] = (ver, latest, rows, last_close)
+    return latest, rows, last_close
+
+
+@bp.route('/api/tw/board/list')
+def api_list():
+    _touch_active()
+    latest, rows, last_close = _list_base()
+    if not latest:
+        return jsonify(dict(date=None, rows=[]))
     snap = _rt_today()
     rt = snap['quotes'] if snap and latest < _now().strftime('%Y-%m-%d') else {}
     out = []
@@ -772,26 +1031,26 @@ def api_quote(code):
 
 def _yf_bars(code, market, period):
     sym = f"{code}.{'TW' if market == 'TSE' else 'TWO'}"
-    # 週線由日線自己合成：yfinance 的週線常缺本週
-    cfg = {'60': ('2y', '60m'), 'D': ('5y', '1d'), 'W': ('15y', '1d')}[period]
+    # 週 / 月線由日線自己合成：yfinance 的週線常缺本週
+    cfg = PERIODS[period]
     key = f'tw_board_bars:{sym}:{period}'
     hit = _bar_cache.get(key)
-    if hit and time.time() - hit[0] < (120 if period == '60' else 600):
+    if hit and time.time() - hit[0] < cfg[2]:
         return hit[1]
     h = yf.Ticker(sym).history(period=cfg[0], interval=cfg[1], auto_adjust=False)
     if h is None or h.empty:
         return []
     h = h.dropna(subset=['Open', 'High', 'Low', 'Close'])
-    if period == 'W':
+    if period in ('W', 'M'):
         h.index = h.index.tz_localize(None) if h.index.tz is not None else h.index
-        wk = h.index.to_period('W-SUN')
+        wk = h.index.to_period('W-SUN' if period == 'W' else 'M')
         h = h.groupby(wk).agg(Open=('Open', 'first'), High=('High', 'max'), Low=('Low', 'min'),
                               Close=('Close', 'last'), Volume=('Volume', 'sum'),
                               first=('Open', lambda x: x.index[0]))
-        h.index = pd.DatetimeIndex(h.pop('first'))   # 以該週第一個交易日標示
+        h.index = pd.DatetimeIndex(h.pop('first'))   # 以該週 / 該月第一個交易日標示
     bars = []
     for ts, r in h.iterrows():
-        if period == '60':
+        if period in INTRADAY:
             t = ts.tz_convert('Asia/Taipei') if ts.tzinfo else ts
             # lightweight-charts 以 UTC 顯示；把台北牆上時間當成 UTC，圖上看到的就是台北時間
             tv = int(t.tz_localize(None).timestamp())
@@ -802,11 +1061,17 @@ def _yf_bars(code, market, period):
                          high=round(float(r['High']), 2), low=round(float(r['Low']), 2),
                          close=round(float(r['Close']), 2),
                          volume=round(float(r['Volume']) / 1000)))
+    if len(_bar_cache) > 300:
+        _bar_cache.clear()
     _bar_cache[key] = (time.time(), bars)
     return bars
 
 
 _bar_cache = {}
+# 週期 → (yfinance period, interval, 快取秒數)
+PERIODS = {'1': ('7d', '1m', 30), '15': ('60d', '15m', 60), '60': ('2y', '60m', 120),
+           'D': ('5y', '1d', 600), 'W': ('15y', '1d', 1800), 'M': ('max', '1d', 3600)}
+INTRADAY = ('1', '15', '60')
 
 
 def _db_bars(code):
@@ -820,8 +1085,8 @@ def _db_bars(code):
 @bp.route('/api/tw/board/chart/<code>')
 def api_chart(code):
     period = request.args.get('period', 'D')
-    if period not in ('60', 'D', 'W'):
-        return jsonify(error='period 必須是 60 / D / W'), 400
+    if period not in PERIODS:
+        return jsonify(error='period 必須是 1 / 15 / 60 / D / W / M'), 400
     with _db() as con:
         meta = con.execute('SELECT name, market FROM stocks WHERE code=?', (code,)).fetchone()
         inst = con.execute('SELECT date, foreign_net, trust_net, dealer_net, total_net FROM inst '
@@ -866,26 +1131,60 @@ def api_chart(code):
 
 @bp.route('/api/tw/board/watchlist', methods=['GET', 'POST', 'DELETE'])
 def api_watchlist():
+    """GET：所有群組；POST {code, group}：加入；DELETE {code, group?}：移出（不給 group = 從所有群組移出）。"""
     with _watch_lock:
-        codes = _load_watch()
+        data = _load_watch()
         if request.method == 'GET':
-            if request.args.get('names'):
-                with _db() as con:
-                    names = dict(con.execute('SELECT code, name FROM stocks'))
-                return jsonify([[c, names.get(c, c)] for c in codes])
-            return jsonify(codes)
+            return jsonify(_watch_payload(data))
         body = request.get_json(silent=True) or {}
         code = str(body.get('code', '')).strip()
-        if request.method == 'POST' and 'codes' in body:   # 重新排序
-            codes = [c for c in body['codes'] if CODE_RE.match(str(c))]
-        elif not CODE_RE.match(code):
+        gname = body.get('group')
+        if not CODE_RE.match(code):
             return jsonify(error='代碼格式錯誤'), 400
-        elif request.method == 'POST' and code not in codes:
-            codes.append(code)
-        elif request.method == 'DELETE' and code in codes:
-            codes.remove(code)
-        _save_watch(codes)
-        return jsonify(codes)
+        groups = data['groups']
+        if request.method == 'POST':
+            g = next((g for g in groups if g['name'] == gname), groups[0])
+            if code not in g['codes']:
+                g['codes'].append(code)
+        else:
+            for g in groups:
+                if (gname is None or g['name'] == gname) and code in g['codes']:
+                    g['codes'].remove(code)
+        _save_watch(data)
+        return jsonify(_watch_payload(data))
+
+
+@bp.route('/api/tw/board/watchlist/groups', methods=['POST'])
+def api_watch_groups():
+    """{action: add | rename | delete | reorder, name, new_name, codes}"""
+    b = request.get_json(silent=True) or {}
+    action, name = b.get('action'), str(b.get('name', '')).strip()
+    with _watch_lock:
+        data = _load_watch()
+        groups = data['groups']
+        names = [g['name'] for g in groups]
+        if action == 'add':
+            if not name or len(name) > 20 or name in names:
+                return jsonify(error='群組名稱不可空白、重複或超過 20 字'), 400
+            groups.append({'name': name, 'codes': []})
+        elif action == 'rename':
+            new = str(b.get('new_name', '')).strip()
+            if name not in names or not new or len(new) > 20 or new in names:
+                return jsonify(error='群組名稱不可空白、重複或超過 20 字'), 400
+            groups[names.index(name)]['name'] = new
+        elif action == 'delete':
+            if name not in names or len(groups) == 1:
+                return jsonify(error='至少要保留一個群組'), 400
+            groups.pop(names.index(name))
+        elif action == 'reorder':
+            if name not in names:
+                return jsonify(error='查無群組'), 400
+            g = groups[names.index(name)]
+            g['codes'] = [c for c in b.get('codes', []) if CODE_RE.match(str(c))]
+        else:
+            return jsonify(error='未知的動作'), 400
+        _save_watch(data)
+        return jsonify(_watch_payload(data))
 
 
 @bp.route('/api/tw/board/screen/after', methods=['POST'])
@@ -907,6 +1206,52 @@ def api_screen_after():
     if res is None:
         return jsonify(error='歷史資料尚未載入完成，請稍後再試'), 503
     return jsonify(res)
+
+
+@bp.route('/api/tw/board/backtest', methods=['POST'])
+def api_backtest():
+    b = request.get_json(silent=True) or {}
+    rules = [r for r in b.get('rules', []) if r.get('investor') in INVESTORS
+             and r.get('side') in ('buy', 'sell')]
+    if not rules:
+        return jsonify(error='請至少選擇一個條件'), 400
+    try:
+        ma_list = sorted({max(2, min(60, int(x))) for x in (b.get('ma_list') or [3, 5])})[:4]
+        res = backtest_after_hours(rules, ma_list=ma_list,
+                                   within=max(1, min(10, int(b.get('within', 1)))),
+                                   kd_n=max(3, min(30, int(b.get('kd_n', 9)))),
+                                   min_volume=float(b.get('min_volume', 0) or 0),
+                                   include_etf=bool(b.get('include_etf')))
+    except (TypeError, ValueError) as e:
+        return jsonify(error=f'參數錯誤：{e}'), 400
+    if res is None:
+        return jsonify(error='歷史資料不足（至少需要 60 個交易日）'), 503
+    return jsonify(res)
+
+
+@bp.route('/api/tw/board/alerts', methods=['GET', 'POST'])
+def api_alerts():
+    with _alert_lock:
+        cfg = _load_alerts()
+        if request.method == 'POST':
+            b = request.get_json(silent=True) or {}
+            cfg['enabled'] = bool(b.get('enabled'))
+            cfg['scope'] = str(b.get('scope') or 'watch')
+            cfg['rules'] = [r for r in b.get('rules', []) if r in RT_RULES] or list(RT_RULES)
+            cfg['params'] = {k: float(v) for k, v in (b.get('params') or {}).items()
+                             if k in ('kd_n', 'vol_n', 'k_low', 'k_high')}
+            cfg['include_etf'] = bool(b.get('include_etf'))
+            _save_alerts(cfg)
+    token, uid = _line_creds()
+    out = {k: v for k, v in cfg.items() if k != 'sent'}
+    out['line_ready'] = bool(token and uid)
+    return jsonify(out)
+
+
+@bp.route('/api/tw/board/alerts/test', methods=['POST'])
+def api_alerts_test():
+    ok, err = _push_line(f'【StockLens】LINE 推播測試成功 {_now():%Y-%m-%d %H:%M}')
+    return (jsonify(ok=True), 200) if ok else (jsonify(error=err), 400)
 
 
 @bp.route('/api/tw/board/screen/realtime', methods=['GET', 'POST'])

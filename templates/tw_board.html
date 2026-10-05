@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>台股看盤</title>
-<link rel="stylesheet" href="/static/css/style.css?v=3">
+<link rel="stylesheet" href="/static/css/style.css?v=4">
 {% include "_head.html" %}
 <style>
 .wrap { max-width: 1680px; margin: 0 auto; padding: 22px 22px 40px; }
@@ -151,6 +151,41 @@ table.q tbody tr:hover td:first-child { box-shadow: inset 3px 0 0 var(--accent);
 .empty svg { width: 42px; height: 42px; opacity: .4; margin-bottom: 10px; }
 .foot-hint { font-size: .76rem; color: var(--text-dim); margin-top: 12px; display: flex; gap: 6px; align-items: center; }
 .foot-hint kbd { font-family: 'JetBrains Mono', monospace; font-size: .68rem; border: 1px solid var(--card-bd2); border-radius: 5px; padding: 0 5px; }
+/* 自選股群組 */
+.groups { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-bottom: 14px; }
+.gchip { display: inline-flex; align-items: center; gap: 7px; height: 34px; padding: 0 14px; border-radius: 999px; cursor: pointer; font-size: .84rem; font-weight: 600;
+         background: var(--card-bg); border: 1px solid var(--card-bd); color: var(--text-mid); transition: all .15s; }
+.gchip:hover { color: var(--text); border-color: var(--card-bd2); }
+.gchip.on { color: var(--accent); border-color: var(--accent); background: rgba(109,93,252,.08); }
+.gchip .n { font-family: 'JetBrains Mono', monospace; font-size: .7rem; color: var(--text-dim); }
+.gact { height: 34px; padding: 0 12px; border-radius: 999px; border: 1px dashed var(--card-bd2); background: none; color: var(--text-dim); font-size: .8rem; cursor: pointer; }
+.gact:hover { color: var(--text); border-color: var(--text-dim); }
+/* 回測 */
+.bt { margin-top: 16px; border-top: 1px solid var(--line); padding-top: 14px; }
+.bt-head { display: flex; justify-content: space-between; align-items: baseline; flex-wrap: wrap; gap: 8px; margin-bottom: 10px; font-size: .8rem; color: var(--text-dim); }
+.bt-head b { color: var(--text); font-size: .92rem; }
+.bt table { width: 100%; border-collapse: collapse; font-size: .8rem; }
+.bt th { text-align: right; color: var(--text-dim); font-weight: 600; font-size: .7rem; padding: 6px 8px; border-bottom: 1px solid var(--line); white-space: nowrap; }
+.bt td { text-align: right; padding: 7px 8px; border-bottom: 1px solid var(--line); font-family: 'JetBrains Mono', monospace; white-space: nowrap; }
+.bt th.l, .bt td.l { text-align: left; font-family: 'Inter', 'Noto Sans TC', sans-serif; }
+.bt tr.base td { color: var(--text-dim); font-style: italic; }
+.bt td.best { background: rgba(109,93,252,.1); font-weight: 700; }
+.btn2 { display: inline-flex; align-items: center; gap: 7px; height: 40px; padding: 0 18px; border-radius: 12px; cursor: pointer; font-weight: 600; font-size: .86rem;
+        background: var(--surface-1); color: var(--text); border: 1px solid var(--card-bd2); }
+.btn2:hover { border-color: var(--accent); color: var(--accent); }
+.btn2:disabled { opacity: .6; cursor: wait; }
+/* 推播 */
+.alert-box { margin-top: 16px; border-top: 1px solid var(--line); padding-top: 14px; display: grid; grid-template-columns: 1.2fr 1fr; gap: 18px; }
+@media (max-width: 1000px) { .alert-box { grid-template-columns: 1fr; } }
+.alert-box h4 { font-size: .9rem; margin-bottom: 10px; display: flex; align-items: center; gap: 8px; }
+.alert-box .row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-bottom: 8px; font-size: .8rem; color: var(--text-mid); }
+.txt-in { height: 34px; padding: 0 10px; border-radius: 10px; border: 1px solid var(--card-bd); background: var(--surface-1); color: var(--text); font-size: .8rem; flex: 1; min-width: 160px; }
+.pill { font-size: .7rem; font-weight: 700; padding: 2px 8px; border-radius: 999px; }
+.pill.ok { background: rgba(18,209,142,.14); color: var(--green); } .pill.no { background: var(--overlay-2); color: var(--text-dim); }
+.alog { max-height: 180px; overflow: auto; font-size: .78rem; }
+.alog div { display: flex; gap: 8px; padding: 5px 0; border-bottom: 1px solid var(--line); }
+.alog .t { font-family: 'JetBrains Mono', monospace; color: var(--text-dim); }
+.more-row td { text-align: center !important; color: var(--text-dim); font-family: 'Inter', 'Noto Sans TC', sans-serif !important; padding: 14px !important; }
 @media (max-width: 760px) { .hide-sm { display: none; } .wrap { padding: 14px 12px 30px; } .search { min-width: 0; flex: 1; } }
 </style>
 </head>
@@ -203,6 +238,9 @@ table.q tbody tr:hover td:first-child { box-shadow: inset 3px 0 0 var(--accent);
     </div>
   </div>
 
+  <!-- 自選股群組 -->
+  <div class="groups hidden" id="groupBar"></div>
+
   <!-- 盤後選股 -->
   <section class="panel hidden" id="afterPanel">
     <div class="panel-head"><h3>法人持股 × KD 交叉</h3><span>法人買賣超於盤後公布・多個條件之間為「或」</span></div>
@@ -216,8 +254,11 @@ table.q tbody tr:hover td:first-child { box-shadow: inset 3px 0 0 var(--accent);
       <div class="param">最低量(張) <input class="num-in" id="minVol" type="number" min="0" value="0"></div>
       <div class="param">資料日期 <input class="date-in" id="asof" type="date" title="留空 = 最新交易日"></div>
       <label class="chip-toggle"><input type="checkbox" id="afterEtf"><span class="sw"></span>含 ETF</label>
-      <button class="run" id="runAfter"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>開始選股</button>
+      <button class="btn2" id="runBt" title="把勾選的條件套用到過去每一天，看訊號出現後的報酬與勝率" style="margin-left:auto"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3 3v18h18"/><path d="M7 15l3-3 3 3 5-6"/></svg>歷史回測</button>
+      <button class="run" id="runAfter" style="margin-left:0"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>開始選股</button>
     </div>
+    <div class="param" style="margin-top:10px">回測比較的持股均線 <input class="txt-in" id="btMa" value="3,5,10" style="flex:0;min-width:110px" title="用逗號分隔，最多 4 個"></div>
+    <div class="bt hidden" id="btBox"></div>
     <div class="hint">金叉：法人持股線由下往上穿越其 N 日均線，且 K 由下往上穿越 D；死叉反之。投信／自營商沒有公開的逐日持股，持股線以「累計買賣超(張)」表示（交叉判斷不受影響）；外資以證交所／櫃買中心公布的實際持股張數為基準。</div>
   </section>
 
@@ -234,6 +275,28 @@ table.q tbody tr:hover td:first-child { box-shadow: inset 3px 0 0 var(--accent);
       <label class="chip-toggle"><input type="checkbox" id="rtAuto" checked><span class="sw"></span>盤中每 60 秒重跑</label>
       <button class="run" id="runRt"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>開始選股</button>
     </div>
+    <div class="alert-box">
+      <div>
+        <h4>LINE 即時推播 <span class="pill no" id="alertState">未啟用</span></h4>
+        <div class="row">盤中每次更新報價就用上面的條件與參數選股，新出現的訊號推播到 LINE（同一檔同一條件每天只推一次）。不必開著網頁。</div>
+        <div class="row">
+          <label class="chip-toggle"><input type="checkbox" id="alertOn"><span class="sw"></span>啟用推播</label>
+          範圍 <select class="sel" id="alertScope" style="height:34px"></select>
+          <button class="btn2" id="alertSave" style="height:34px">儲存設定</button>
+        </div>
+        <div class="row">
+          <input class="txt-in" id="lineToken" type="password" placeholder="LINE Channel access token" autocomplete="off">
+          <input class="txt-in" id="lineUser" placeholder="LINE User ID（U 開頭）" autocomplete="off">
+          <button class="btn2" id="lineSave" style="height:34px">儲存 LINE</button>
+          <button class="btn2" id="lineTest" style="height:34px">傳送測試</button>
+        </div>
+        <div class="row" id="alertErr" style="color:var(--red)"></div>
+      </div>
+      <div>
+        <h4>最近推播</h4>
+        <div class="alog" id="alertLog"><span style="color:var(--text-dim)">尚無紀錄</span></div>
+      </div>
+    </div>
   </section>
 
   <section class="table-card">
@@ -248,7 +311,9 @@ const $ = s => document.querySelector(s);
 const ss = {get(k,d){try{const v=sessionStorage.getItem(k);return v==null?d:JSON.parse(v)}catch(e){return d}},
             set(k,v){try{sessionStorage.setItem(k,JSON.stringify(v))}catch(e){}}};
 const st = Object.assign({tab:'all', sort:'volume', dir:-1, search:'', market:'', ind:'', etf:false}, ss.get('twBoardState', {}));
-let ALL = [], BYCODE = {}, WATCH = [], AFTER = null, RT = null, marketOpen = false, LIST_META = {};
+let ALL = [], BYCODE = {}, WATCH = [], WGROUPS = [], WNAMES = {}, AFTER = null, RT = null, marketOpen = false, LIST_META = {};
+const PAGE = 200;          // 表格一次畫 200 列，捲到底再補
+let shown = PAGE, ROWS = [], COLS = [];
 
 const BASE_COLS = [
   ['star','',  'l'], ['code','代碼','l'], ['name','名稱','l'], ['market','市場','l hide-sm'], ['industry','產業','l hide-sm'],
@@ -305,7 +370,35 @@ function renderPulse() {
   $('#mvVol').innerHTML = mv([...stocks].sort((a, b) => b.volume - a.volume).slice(0, 5), 'vol');
 }
 
-async function loadWatch() { WATCH = await api('/api/tw/board/watchlist'); $('#cntWatch').textContent = WATCH.length || ''; }
+function setWatch(p) {
+  WGROUPS = p.groups; WNAMES = p.names;
+  WATCH = [...new Set(WGROUPS.flatMap(g => g.codes))];
+  if (!WGROUPS.some(g => g.name === st.group)) st.group = WGROUPS[0]?.name;
+  $('#cntWatch').textContent = WATCH.length || '';
+  renderGroups();
+}
+async function loadWatch() { setWatch(await api('/api/tw/board/watchlist')); }
+const curGroup = () => WGROUPS.find(g => g.name === st.group) || WGROUPS[0] || {name: '自選股', codes: []};
+
+function renderGroups() {
+  $('#groupBar').innerHTML = WGROUPS.map(g =>
+    `<span class="gchip${g.name === st.group ? ' on' : ''}" data-g="${esc(g.name)}">${esc(g.name)}<span class="n">${g.codes.length}</span></span>`).join('') +
+    `<button class="gact" data-gact="add">＋ 新增群組</button><button class="gact" data-gact="rename">重新命名</button>` +
+    (WGROUPS.length > 1 ? `<button class="gact" data-gact="delete">刪除群組</button>` : '');
+}
+async function groupAction(action, extra) {
+  try { setWatch(await api('/api/tw/board/watchlist/groups', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(Object.assign({action, name: st.group}, extra))})); render(); }
+  catch (e) { alert(e.message); }
+}
+$('#groupBar').addEventListener('click', e => {
+  const g = e.target.closest('[data-g]');
+  if (g) { st.group = g.dataset.g; renderGroups(); return render(); }
+  const a = e.target.closest('[data-gact]');
+  if (!a) return;
+  if (a.dataset.gact === 'add') { const n = prompt('新群組名稱'); if (n) { groupAction('add', {name: n.trim()}).then(() => { st.group = n.trim(); renderGroups(); render(); }); } }
+  if (a.dataset.gact === 'rename') { const n = prompt('新名稱', st.group); if (n && n.trim() !== st.group) groupAction('rename', {new_name: n.trim()}).then(() => { st.group = n.trim(); renderGroups(); render(); }); }
+  if (a.dataset.gact === 'delete' && confirm(`刪除群組「${st.group}」？群組內的股票會一併移出。`)) groupAction('delete');
+});
 
 async function loadStatus() {
   try {
@@ -320,7 +413,7 @@ async function loadStatus() {
 function currentRows() {
   let rows;
   if (st.tab === 'all') rows = ALL;
-  else if (st.tab === 'watch') rows = WATCH.map(c => BYCODE[c] || {code:c, name:c});
+  else if (st.tab === 'watch') rows = curGroup().codes.map(c => BYCODE[c] || {code:c, name: WNAMES[c] || c});
   else {
     const res = st.tab === 'after' ? AFTER : RT;
     // 即時選股的價格用清單上最新（盤中即時）的報價；盤後選股維持選股當日的收盤
@@ -359,9 +452,21 @@ function render() {
   const maxVol = Math.max(1, ...rows.slice(0, 300).map(r => r.volume || 0));
   $('#tbl thead').innerHTML = '<tr>' + cols.map(([k, t, c='']) =>
     `<th class="${c}${st.sort===k?' sorted':''}" data-k="${k}">${t}<span class="arr">${st.sort===k ? (st.dir>0?'▲':'▼') : ''}</span></th>`).join('') + '</tr>';
+  $('#groupBar').classList.toggle('hidden', st.tab !== 'watch');
+  ROWS = rows; COLS = cols; shown = PAGE;
+  $('#tbl tbody').innerHTML = rows.length ? rowsHtml(0, shown, maxVol) : `<tr><td colspan="${cols.length}" class="empty">${emptyText()}</td></tr>`;
+  let meta = `<b class="num" style="color:var(--text)">${rows.length}</b> 檔`;
+  if (st.tab === 'after' && AFTER) meta += `・資料日 <span class="num">${AFTER.date}</span>（${AFTER.days} 個交易日）`;
+  if (st.tab === 'rt' && RT) meta += RT.source === 'realtime' ? `・即時 <span class="num">${RT.ts?.slice(11,19)||''}</span>` : `・收盤資料 <span class="num">${RT.date}</span>`;
+  $('#tblMeta').innerHTML = meta;
+}
+
+function rowsHtml(from, to, maxVol) {
+  const rows = ROWS, cols = COLS;
+  maxVol = maxVol || Math.max(1, ...rows.slice(0, 300).map(r => r.volume || 0));
   const wset = new Set(WATCH);
-  const LIMIT = 3000;
-  $('#tbl tbody').innerHTML = rows.length ? rows.slice(0, LIMIT).map(r => '<tr>' + cols.map(([k, , c='']) => {
+  const more = to < rows.length ? `<tr class="more-row" id="moreRow"><td colspan="${cols.length}">載入更多…（${to} / ${rows.length}）</td></tr>` : '';
+  return rows.slice(from, to).map(r => '<tr>' + cols.map(([k, , c='']) => {
     const v = r[k];
     switch (k) {
       case 'star': return `<td class="l"><span class="star${wset.has(r.code)?' on':''}" data-star="${esc(r.code)}" title="自選股">${wset.has(r.code)?STAR:STAR_O}</span></td>`;
@@ -378,12 +483,17 @@ function render() {
       case 'k': case 'd': return `<td>${fmt(v,1)}</td>`;
     }
     return `<td>${esc(v)}</td>`;
-  }).join('') + '</tr>').join('') : `<tr><td colspan="${cols.length}" class="empty">${emptyText()}</td></tr>`;
-  let meta = `<b class="num" style="color:var(--text)">${rows.length}</b> 檔` + (rows.length > LIMIT ? `（顯示前 ${LIMIT}）` : '');
-  if (st.tab === 'after' && AFTER) meta += `・資料日 <span class="num">${AFTER.date}</span>（${AFTER.days} 個交易日）`;
-  if (st.tab === 'rt' && RT) meta += RT.source === 'realtime' ? `・即時 <span class="num">${RT.ts?.slice(11,19)||''}</span>` : `・收盤資料 <span class="num">${RT.date}</span>`;
-  $('#tblMeta').innerHTML = meta;
+  }).join('') + '</tr>').join('') + more;
 }
+
+// 捲到表格底部時補畫下一批
+$('.tbl-wrap').addEventListener('scroll', e => {
+  const w = e.target;
+  if (shown >= ROWS.length || w.scrollTop + w.clientHeight < w.scrollHeight - 400) return;
+  const from = shown; shown = Math.min(ROWS.length, shown + PAGE);
+  $('#moreRow')?.remove();
+  $('#tbl tbody').insertAdjacentHTML('beforeend', rowsHtml(from, shown));
+});
 
 function emptyText() {
   const icon = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg><br>';
@@ -408,12 +518,16 @@ $('#tbl').addEventListener('click', async e => {
   const star = e.target.closest('[data-star]');
   if (star) {
     const code = star.dataset.star, on = WATCH.includes(code);
-    WATCH = await api('/api/tw/board/watchlist', {method: on ? 'DELETE' : 'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({code})});
-    $('#cntWatch').textContent = WATCH.length || '';
-    return render();
+    // 已在任何群組 → 從所有群組移除；否則加到目前選的群組
+    setWatch(await api('/api/tw/board/watchlist', {method: on ? 'DELETE' : 'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({code, group: st.group})}));
+    const keep = $('.tbl-wrap').scrollTop;
+    if (st.tab === 'watch') render();
+    else star.outerHTML = `<span class="star${on ? '' : ' on'}" data-star="${esc(code)}" title="自選股">${on ? STAR_O : STAR}</span>`;
+    $('.tbl-wrap').scrollTop = keep;
+    return;
   }
   const go = e.target.closest('[data-go]');
-  if (go) openChart(go.dataset.go, currentRows(), {all:'全部行情', watch:'自選股', after:'盤後選股', rt:'即時選股'}[st.tab]);
+  if (go) openChart(go.dataset.go, currentRows(), {all:'全部行情', watch: curGroup().name, after:'盤後選股', rt:'即時選股'}[st.tab]);
 });
 document.querySelector('.pulse').addEventListener('click', e => {
   const m = e.target.closest('[data-go]');
@@ -456,6 +570,73 @@ $('#runAfter').onclick = async () => {
   btn.disabled = false;
 };
 
+$('#runBt').onclick = async () => {
+  const rules = [...document.querySelectorAll('#afterRules input:checked')].map(i => { const [investor, side] = i.value.split(':'); return {investor, side}; });
+  const ma_list = $('#btMa').value.split(/[,，\s]+/).map(Number).filter(n => n >= 2);
+  const btn = $('#runBt'); btn.disabled = true; btn.lastChild.textContent = '回測中…';
+  try {
+    const r = await api('/api/tw/board/backtest', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({
+      rules, ma_list, within: +$('#within').value, kd_n: +$('#kdN').value, min_volume: +$('#minVol').value, include_etf: $('#afterEtf').checked})});
+    renderBacktest(r);
+  } catch (e) { alert(e.message); }
+  btn.disabled = false; btn.lastChild.textContent = '歷史回測';
+};
+function renderBacktest(r) {
+  const H = r.horizons;
+  // 每個條件 × 天數，標出平均報酬最好的均線（賣出訊號看最低）
+  const best = {};
+  for (const x of r.results) for (const h of H) {
+    const v = x.stats[h]?.avg; if (v == null) continue;
+    const key = x.investor + x.side + h, better = x.side === 'buy' ? v > (best[key]?.v ?? -1e9) : v < (best[key]?.v ?? 1e9);
+    if (better) best[key] = {v, ma: x.ma_n};
+  }
+  const pct = v => v == null ? '-' : `<span class="${v > 0 ? 'up' : v < 0 ? 'dn' : ''}">${v > 0 ? '+' : ''}${v.toFixed(2)}%</span>`;
+  $('#btBox').innerHTML = `<div class="bt-head"><b>歷史回測</b><span>${r.start} ～ ${r.end}・${r.days} 個交易日・收盤價計算、未還原除權息</span></div>
+  <div style="overflow:auto"><table><thead><tr><th class="l">條件</th><th>均線</th><th>訊號數</th>${H.map(h => `<th>${h}日平均</th><th>${h}日勝率</th>`).join('')}</tr></thead><tbody>
+  ${r.results.map(x => `<tr><td class="l"><span class="side ${x.side}">${x.side === 'buy' ? 'BUY' : 'SELL'}</span> ${x.label}</td><td>${x.ma_n}日</td><td>${x.signals}</td>` +
+    H.map(h => { const s = x.stats[h]; const b = best[x.investor + x.side + h]?.ma === x.ma_n; return `<td class="${b ? 'best' : ''}">${pct(s?.avg)}</td><td>${s ? s.win.toFixed(1) + '%' : '-'}</td>`; }).join('') + '</tr>').join('')}
+  <tr class="base"><td class="l">全市場平均（對照）</td><td></td><td></td>${H.map(h => `<td>${pct(r.baseline[h])}</td><td></td>`).join('')}</tr>
+  </tbody></table></div>
+  <div class="hint">勝率：BUY 為之後上漲的比例，SELL 為之後下跌的比例。紫色底 = 該條件下平均報酬表現最好的均線天數。訊號比全市場平均好越多，條件越有參考價值。</div>`;
+  $('#btBox').classList.remove('hidden');
+}
+
+// ── LINE 推播 ──
+async function loadAlerts() {
+  try {
+    const a = await api('/api/tw/board/alerts');
+    $('#alertOn').checked = a.enabled;
+    $('#alertScope').innerHTML = `<option value="watch">全部自選股</option>` + WGROUPS.map(g => `<option value="${esc(g.name)}">群組：${esc(g.name)}</option>`).join('') + `<option value="all">全部上市櫃</option>`;
+    $('#alertScope').value = a.scope || 'watch';
+    $('#alertState').className = 'pill ' + (a.enabled && a.line_ready ? 'ok' : 'no');
+    $('#alertState').textContent = a.enabled ? (a.line_ready ? '推播中' : '待設定 LINE') : '未啟用';
+    $('#alertErr').textContent = a.last_error || '';
+    const log = (a.log || []).slice(-15).reverse();
+    $('#alertLog').innerHTML = log.length ? log.map(x => `<div><span class="t">${esc(x.ts.slice(5))}</span><span class="side ${x.side}">${x.side === 'buy' ? 'BUY' : 'SELL'}</span><span>${esc(x.code)} ${esc(x.name)}</span><span class="num">${x.price}</span>${x.pushed ? '' : '<span style="color:var(--red)">未送出</span>'}</div>`).join('') : '<span style="color:var(--text-dim)">尚無紀錄</span>';
+    const lc = await api('/api/tw/line/config');
+    $('#lineUser').value = lc.line_user_id || '';
+    $('#lineToken').placeholder = lc.line_token ? '已設定（輸入新值可更新）' : 'LINE Channel access token';
+  } catch (e) {}
+}
+$('#alertSave').onclick = async () => {
+  const rules = [...document.querySelectorAll('#rtRules input:checked')].map(i => i.value);
+  try {
+    await api('/api/tw/board/alerts', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({
+      enabled: $('#alertOn').checked, scope: $('#alertScope').value, rules, include_etf: $('#rtEtf').checked,
+      params: {k_low: +$('#kLow').value, k_high: +$('#kHigh').value, vol_n: +$('#volN').value, kd_n: +$('#rtKdN').value}})});
+    loadAlerts();
+  } catch (e) { alert(e.message); }
+};
+$('#lineSave').onclick = async () => {
+  const lc = await api('/api/tw/line/config');
+  await api('/api/tw/line/config', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({
+    line_token: $('#lineToken').value.trim() || lc.line_token, line_user_id: $('#lineUser').value.trim()})});
+  $('#lineToken').value = ''; loadAlerts();
+};
+$('#lineTest').onclick = async () => {
+  try { await api('/api/tw/board/alerts/test', {method: 'POST'}); alert('已傳送測試訊息，請檢查 LINE'); } catch (e) { alert(e.message); }
+};
+
 // ── 即時選股 ──
 let rtTimer = null;
 async function initRt() {
@@ -491,6 +672,7 @@ async function tick() {
   $('#search').value = st.search; $('#fMarket').value = st.market; $('#fEtf').checked = st.etf;
   render();
   await Promise.all([loadList().catch(e => console.error(e)), loadWatch(), initRt(), loadStatus()]);
+  loadAlerts();
   render();
   setTimeout(tick, marketOpen ? 20000 : 300000);
   setInterval(loadStatus, 60000);

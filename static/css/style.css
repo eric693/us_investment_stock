@@ -1224,3 +1224,38 @@ input[type=checkbox] { accent-color: var(--accent); }
 
 /* 主題切換時的過場 */
 .theme-anim, .theme-anim * { transition: background-color .35s ease, border-color .35s ease, color .35s ease !important; }
+
+/* 使用者選單 */
+.user-menu { position: relative; }
+.user-menu summary { list-style: none; cursor: pointer; padding: 3px 8px 3px 3px; border-radius: 999px; border: 1px solid transparent; }
+.user-menu summary::-webkit-details-marker { display: none; }
+.user-menu[open] summary, .user-menu summary:hover { border-color: var(--line); background: var(--overlay-1); }
+.user-pop { position: absolute; right: 0; top: calc(100% + 8px); min-width: 190px; padding: 6px; border-radius: 14px; z-index: 400;
+            background: var(--card-bg); border: 1px solid var(--card-bd2); box-shadow: 0 16px 40px rgba(0,0,0,.25); }
+.user-pop a { display: block; padding: 8px 12px; border-radius: 9px; color: var(--text); font-size: .84rem; }
+.user-pop a:hover { background: var(--overlay-2); text-decoration: none; }
+.user-pop a.danger { color: var(--red); }
+.user-pop-head { padding: 8px 12px 10px; border-bottom: 1px solid var(--line); margin-bottom: 4px; font-weight: 700; font-size: .88rem; display: flex; justify-content: space-between; align-items: center; gap: 10px; }
+.user-pop-head span { font-size: .68rem; font-weight: 700; padding: 2px 8px; border-radius: 999px; background: rgba(109,93,252,.12); color: var(--accent); }
+/* 表單頁共用 */
+.form-page { max-width: 760px; margin: 0 auto; padding: 32px 20px 60px; }
+.form-page h1 { font-family: 'Space Grotesk', 'Noto Sans TC', sans-serif; font-size: 1.8rem; letter-spacing: -.02em; margin-bottom: 6px; }
+.form-page .sub { color: var(--text-mid); font-size: .9rem; margin-bottom: 24px; }
+.fcard { background: var(--card-bg); border: 1px solid var(--card-bd); border-radius: 18px; padding: 22px 24px; box-shadow: var(--shadow); margin-bottom: 16px; }
+.fcard h2 { font-size: 1rem; margin-bottom: 14px; }
+.frow { display: grid; grid-template-columns: 140px 1fr; gap: 10px; align-items: center; margin-bottom: 12px; font-size: .86rem; color: var(--text-mid); }
+@media (max-width: 600px) { .frow { grid-template-columns: 1fr; } }
+.finput { height: 42px; padding: 0 12px; border-radius: 11px; border: 1px solid var(--card-bd2); background: var(--surface-1); color: var(--text); font-size: .92rem; width: 100%; }
+.fbtn { height: 42px; padding: 0 20px; border: none; border-radius: 11px; background: var(--accent-grad); color: #fff; font-weight: 700; cursor: pointer; box-shadow: var(--glow); }
+.fbtn.ghost { background: var(--surface-1); color: var(--text); border: 1px solid var(--card-bd2); box-shadow: none; }
+.fbtn.danger { background: var(--red-soft); color: var(--red); border: 1px solid var(--red-line); box-shadow: none; }
+.fbtn.sm { height: 32px; padding: 0 12px; font-size: .78rem; }
+.fmsg { padding: 10px 14px; border-radius: 11px; font-size: .86rem; margin-bottom: 14px; }
+.fmsg.ok { background: rgba(18,209,142,.1); color: var(--green); border: 1px solid rgba(18,209,142,.3); }
+.fmsg.err { background: var(--red-soft); color: var(--red); border: 1px solid var(--red-line); }
+.utable { width: 100%; border-collapse: collapse; font-size: .86rem; }
+.utable th { text-align: left; font-size: .72rem; color: var(--text-dim); font-weight: 600; padding: 8px 10px; border-bottom: 1px solid var(--line); }
+.utable td { padding: 10px; border-bottom: 1px solid var(--line); vertical-align: middle; }
+.utable td.acts { display: flex; gap: 6px; justify-content: flex-end; flex-wrap: wrap; }
+.role { font-size: .7rem; font-weight: 700; padding: 2px 9px; border-radius: 999px; background: var(--overlay-2); color: var(--text-mid); }
+.role.admin { background: rgba(109,93,252,.12); color: var(--accent); }

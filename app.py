@@ -15,90 +15,33 @@ warnings.filterwarnings('ignore')
 
 app = Flask(__name__)
 
-# ── 登入（帳號 + 密碼）──────────────────────────────────────────────────
-# 帳號存在 users.json（密碼為雜湊，不進版控），用 manage_users.py 新增 / 改密碼。
-from werkzeug.security import check_password_hash
-from datetime import timedelta
+# ── 登入（帳號 + 密碼）：見 auth.py ─────────────────────────────────────
+from auth import init_auth, login_required, load_users as _load_users, USERS_FILE   # noqa: F401
 
 _BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-USERS_FILE = os.path.join(_BASE_DIR, 'users.json')
-_SECRET_FILE = os.path.join(_BASE_DIR, '.secret_key')
+init_auth(app)
+app.config.update(SEND_FILE_MAX_AGE_DEFAULT=86400 * 365)   # 靜態檔以 ?v= 版本號更新
 
 
-def _secret_key():
-    if not os.path.exists(_SECRET_FILE):
-        fd = os.open(_SECRET_FILE, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
-        with os.fdopen(fd, 'w') as f:
-            f.write(os.urandom(32).hex())
-    with open(_SECRET_FILE) as f:
-        return f.read().strip()
+@app.after_request
+def _gzip(resp):
+    """JSON / HTML 回應壓縮（行情清單約可從 270KB 降到 60KB）。"""
+    if (resp.status_code < 200 or resp.status_code >= 300 or resp.direct_passthrough
+            or 'gzip' not in request.headers.get('Accept-Encoding', '')
+            or resp.headers.get('Content-Encoding')
+            or resp.mimetype not in ('application/json', 'text/html', 'text/css',
+                                     'application/javascript', 'text/javascript')):
+        return resp
+    data = resp.get_data()
+    if len(data) < 1024:
+        return resp
+    import gzip as _gz
+    resp.set_data(_gz.compress(data, compresslevel=5))
+    resp.headers['Content-Encoding'] = 'gzip'
+    resp.headers['Content-Length'] = str(len(resp.get_data()))
+    resp.headers.add('Vary', 'Accept-Encoding')
+    return resp
 
-
-try:
-    app.secret_key = _secret_key()
-except FileExistsError:          # 另一個 worker 剛好同時建立
-    time.sleep(0.5)
-    app.secret_key = _secret_key()
-app.config.update(SESSION_COOKIE_HTTPONLY=True, SESSION_COOKIE_SAMESITE='Lax',
-                  SESSION_COOKIE_SECURE=os.environ.get('SESSION_COOKIE_SECURE', '1') == '1',
-                  PERMANENT_SESSION_LIFETIME=timedelta(days=7))
-
-
-def _load_users():
-    try:
-        with open(USERS_FILE, encoding='utf-8') as f:
-            return json.load(f)
-    except (OSError, ValueError):
-        return {}
-
-
-_login_fail = {}   # ip → [失敗時間...]
-
-
-def login_required(f):
-    # 實際的檢查在 _require_login（套用到所有路由）；保留此裝飾器讓既有路由不用改
-    return f
-
-
-@app.before_request
-def _require_login():
-    if request.endpoint in ('login', 'static') or session.get('user'):
-        return None
-    if request.path.startswith('/api/'):
-        return jsonify(error='未登入'), 401
-    return redirect(url_for('login', next=request.full_path.rstrip('?')))
-
-
-@app.route('/login', methods=['GET', 'POST'])
-def login():
-    error = None
-    if request.method == 'POST':
-        ip = request.headers.get('X-Real-IP', request.remote_addr)
-        now = time.time()
-        fails = [t for t in _login_fail.get(ip, []) if now - t < 900]
-        if len(fails) >= 10:
-            error = '嘗試次數過多，請 15 分鐘後再試'
-        else:
-            username = request.form.get('username', '').strip()
-            pw_hash = _load_users().get(username)
-            if pw_hash and check_password_hash(pw_hash, request.form.get('password', '')):
-                session.clear()
-                session.permanent = True
-                session['user'] = username
-                _login_fail.pop(ip, None)
-                nxt = request.args.get('next', '')
-                return redirect(nxt if nxt.startswith('/') and not nxt.startswith('//')
-                                else url_for('index'))
-            fails.append(now)
-            _login_fail[ip] = fails
-            time.sleep(1)
-            error = '帳號或密碼錯誤'
-    return render_template('login.html', error=error)
-
-@app.route('/logout')
-def logout():
-    session.clear()
-    return redirect(url_for('login'))
 
 # ── Server-side Monitor ────────────────────────────────────────────────
 MONITOR_FILE = os.path.join(os.path.dirname(__file__), 'monitor_config.json')
@@ -182,7 +125,17 @@ def _run_server_scan():
             print(f'[Monitor] scan {ticker}: {e}')
 
 def _server_scan_loop():
+    # 多個 gunicorn worker 只讓拿到檔案鎖的那一個跑監控，避免 LINE 重複推播
+    import fcntl
     time.sleep(15)  # let app finish startup
+    while True:
+        lock = open(os.path.join(_BASE_DIR, '.monitor.lock'), 'w')
+        try:
+            fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            break
+        except OSError:
+            lock.close()
+            time.sleep(60)
     while True:
         try:
             _run_server_scan()
@@ -1687,14 +1640,27 @@ def tw_index():
 def get_tw_market():
     cached = _cache_get('tw_market')
     if cached: return jsonify(cached)
+    # 加權 / 櫃買指數用證交所 MIS 即時資料（Yahoo 沒有 ^TWOII）
+    result = {}
+    try:
+        r = _requests.get('https://mis.twse.com.tw/stock/api/getStockInfo.jsp?json=1&delay=0'
+                          '&ex_ch=tse_t00.tw|otc_o00.tw',
+                          headers={'User-Agent': 'Mozilla/5.0'}, timeout=8).json()
+        for m in r.get('msgArray', []):
+            cur, prev = safe_float(m.get('z')), safe_float(m.get('y'))
+            if cur > 0:
+                key = 'twii' if m.get('c') == 't00' else 'twoii'
+                result[key] = {'v': round(cur, 2),
+                               'pct': round((cur / prev - 1) * 100, 2) if prev else 0}
+    except Exception as e:
+        print(f'[tw_market] MIS index: {e}')
     syms = {
-        'twii':   '^TWII',
-        'twoii':  '^TWOII',
         'usdtwd': 'USDTWD=X',
         'gold':   'GC=F',
         'vix':    '^VIX',
     }
-    result = {}
+    if 'twii' not in result:
+        syms['twii'] = '^TWII'
     for key, sym in syms.items():
         try:
             h = yf.Ticker(sym).history(period='2d')

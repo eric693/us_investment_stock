@@ -8,3 +8,7 @@ tw_market.db*
 tw_realtime.json
 tw_watchlist.json
 .tw_*
+backups/
+tw_alerts.json
+.login_fail.json
+.monitor.lock

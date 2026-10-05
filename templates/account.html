@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>帳號設定</title>
+<link rel="stylesheet" href="/static/css/style.css?v=4">
+{% include "_head.html" %}
+</head>
+<body>
+{% include "_appbar.html" %}
+<main class="form-page">
+  <h1>帳號設定</h1>
+  <p class="sub">{{ user.name }}・{{ '管理員' if user.role == 'admin' else '使用者' }}</p>
+  {% if msg %}<div class="fmsg ok">{{ msg }}</div>{% endif %}
+  {% if err %}<div class="fmsg err">{{ err }}</div>{% endif %}
+  <form class="fcard" method="POST" autocomplete="off">
+    <h2>變更密碼</h2>
+    <div class="frow"><label for="current">目前密碼</label><input class="finput" id="current" name="current" type="password" autocomplete="current-password" required></div>
+    <div class="frow"><label for="new">新密碼</label><input class="finput" id="new" name="new" type="password" autocomplete="new-password" minlength="8" required placeholder="至少 8 碼，需含英文與數字"></div>
+    <div class="frow"><label for="new2">再輸入一次</label><input class="finput" id="new2" name="new2" type="password" autocomplete="new-password" minlength="8" required></div>
+    <div class="frow"><span></span><div><button class="fbtn" type="submit">更新密碼</button></div></div>
+    <p style="font-size:.78rem;color:var(--text-dim)">更新後，其他裝置上的登入會自動失效。</p>
+  </form>
+</main>
+</body>
+</html>

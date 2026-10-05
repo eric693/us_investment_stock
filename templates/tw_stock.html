@@ -5,8 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>台股投資分析儀表板</title>
 <script src="https://cdn.plot.ly/plotly-2.26.0.min.js"></script>
-<script src="https://s3.tradingview.com/tv.js"></script>
-<link rel="stylesheet" href="/static/css/style.css?v=3">
+<link rel="stylesheet" href="/static/css/style.css?v=4">
 {% include "_head.html" %}
 <style>
 /* ── ETF Panel ─────────────────────────────────────────────────── */
@@ -492,37 +491,15 @@
     <div id="etfPanel"></div>
   </div>
 
-  <!-- TV. TradingView Chart -->
+  <!-- TV. K 線圖（台股看盤的圖表，嵌入） -->
   <div class="card tv-card hidden" id="tvCard">
     <div class="tv-toolbar">
-      <span class="tv-title">TradingView 圖表</span>
+      <span class="tv-title">K 線技術分析</span>
       <span id="tvSymLabel" class="tv-sym">--</span>
-      <div class="tv-tf-tabs" id="tvTfTabs">
-        <button class="tv-tf-btn" data-tf="1" onclick="setTVInterval('1')">1分</button>
-        <button class="tv-tf-btn" data-tf="15" onclick="setTVInterval('15')">15分</button>
-        <button class="tv-tf-btn" data-tf="60" onclick="setTVInterval('60')">60分</button>
-        <button class="tv-tf-btn active" data-tf="D" onclick="setTVInterval('D')">日線</button>
-        <button class="tv-tf-btn" data-tf="W" onclick="setTVInterval('W')">週線</button>
-        <button class="tv-tf-btn" data-tf="M" onclick="setTVInterval('M')">月線</button>
-      </div>
+      <span style="font-size:0.72rem;color:var(--text-dim)">1分～月線・均線・布林・KDJ・RSI・MACD・法人持股</span>
+      <a id="tvOpenBoard" href="/tw/board/chart" style="margin-left:auto;font-size:0.76rem;font-weight:600">在看盤中開啟 ↗</a>
     </div>
-    <div class="tv-indicator-row">
-      <span class="tv-ind-label">指標：</span>
-      <span class="tv-ind-badge active" data-study="MASimple@tv-basicstudies" onclick="toggleTVStudy(this,'MASimple@tv-basicstudies')">MA</span>
-      <span class="tv-ind-badge" data-study="RSI@tv-basicstudies" onclick="toggleTVStudy(this,'RSI@tv-basicstudies')">RSI</span>
-      <span class="tv-ind-badge" data-study="MACD@tv-basicstudies" onclick="toggleTVStudy(this,'MACD@tv-basicstudies')">MACD</span>
-      <span class="tv-ind-badge" data-study="BB@tv-basicstudies" onclick="toggleTVStudy(this,'BB@tv-basicstudies')">布林</span>
-      <span class="tv-ind-badge" data-study="Volume@tv-basicstudies" onclick="toggleTVStudy(this,'Volume@tv-basicstudies')">成交量</span>
-      <span class="tv-ind-badge" data-study="Stochastic@tv-basicstudies" onclick="toggleTVStudy(this,'Stochastic@tv-basicstudies')">KD</span>
-      <span style="margin-left:auto;font-size:0.7rem;color:var(--text-dim)">Powered by TradingView · 右鍵可畫線、加指標</span>
-    </div>
-    <div id="tvUnsupportedWarn" class="hidden" style="padding:28px 20px;text-align:center;color:var(--text-dim);font-size:0.83rem;line-height:1.7">
-      <div style="font-size:1.3rem;margin-bottom:8px">此代碼 TradingView 不支援</div>
-      槓桿/反向 ETF（如 00631L、00670L、00632R）在 TradingView 上無法正確對應台灣交易所代碼，<br>
-      載入後會顯示完全不相關的標的。<br>
-      <span style="color:var(--green);font-weight:600">請使用下方的 K 線圖（資料來源：Yahoo Finance）作為主要參考。</span>
-    </div>
-    <div id="tvChartContainer"></div>
+    <iframe id="tvChartFrame" title="K 線圖" style="width:100%;height:660px;border:0;display:block;background:transparent"></iframe>
   </div>
 
   <!-- 2. Performance Returns -->
@@ -1574,98 +1551,17 @@ function _loadMonitorSettings(ticker) {
   return all[ticker] || { mode: 'off', profile: 'aggressive' };
 }
 
-// ── TradingView Chart ───────────────────────────────────────────────────
-let _tvInterval = 'D';
-let _tvStudies  = ['MASimple@tv-basicstudies'];
-let _tvSymbol   = '';
-let _tvWidget   = null;
-
-function twTickerToTV(ticker) {
-  if (ticker.includes('.TWO')) return 'TPEX:' + ticker.replace('.TWO','');
-  return 'TWSE:' + ticker.replace('.TW','');
-}
-
-// TradingView 不支援台灣槓桿/反向ETF（代碼含英文字母，如00631L、00670L、00632R）
-function _isTVUnsupported(ticker) {
-  const code = ticker.replace(/\.(TW|TWO)$/i, '');
-  return /^\d{4,6}[A-Za-z]+$/.test(code);
-}
-
+// ── K 線圖：嵌入 /tw/board/chart（資料來源與看盤頁相同，支援上市櫃與槓桿型 ETF）──
 function renderTradingView(d) {
-  const card = $('tvCard');
-  card.classList.remove('hidden');
-  _tvSymbol = twTickerToTV(d.ticker);
-  $('tvSymLabel').textContent = _tvSymbol;
-  const warn = $('tvUnsupportedWarn');
-  if (_isTVUnsupported(d.ticker)) {
-    $('tvChartContainer').innerHTML = '';
-    $('tvTfTabs').style.opacity = '0.35';
-    $('tvTfTabs').style.pointerEvents = 'none';
-    document.querySelectorAll('.tv-ind-badge').forEach(b => { b.style.opacity='0.35'; b.style.pointerEvents='none'; });
-    if (warn) warn.classList.remove('hidden');
-  } else {
-    $('tvTfTabs').style.opacity = '';
-    $('tvTfTabs').style.pointerEvents = '';
-    document.querySelectorAll('.tv-ind-badge').forEach(b => { b.style.opacity=''; b.style.pointerEvents=''; });
-    if (warn) warn.classList.add('hidden');
-    _buildTVWidget();
+  const code = d.ticker.replace(/\.(TW|TWO)$/i, '');
+  $('tvCard').classList.remove('hidden');
+  $('tvSymLabel').textContent = code;
+  $('tvOpenBoard').href = '/tw/board/chart?code=' + encodeURIComponent(code);
+  const f = $('tvChartFrame');
+  if (f.dataset.code !== code) {
+    f.dataset.code = code;
+    f.src = '/tw/board/chart?embed=1&code=' + encodeURIComponent(code);
   }
-}
-
-function _buildTVWidget() {
-  const container = $('tvChartContainer');
-  if (!container) return;
-  container.innerHTML = '';
-  if (typeof TradingView === 'undefined') return;
-  _tvWidget = new TradingView.widget({
-    autosize:        true,
-    symbol:          _tvSymbol,
-    interval:        _tvInterval,
-    timezone:        'Asia/Taipei',
-    theme:           (window.Theme ? Theme.mode() : 'dark'),
-    style:           '1',
-    locale:          'zh_TW',
-    toolbar_bg:      Theme.resolve('var(--surface-1)'),
-    enable_publishing: false,
-    withdateranges:  true,
-    hide_side_toolbar: false,
-    allow_symbol_change: false,
-    save_image:      false,
-    container_id:    'tvChartContainer',
-    studies:         [..._tvStudies],
-    overrides: Theme.resolveDeep({
-      'paneProperties.background':         'var(--surface-1)',
-      'paneProperties.backgroundType':     'solid',
-      'paneProperties.vertGridProperties.color': 'var(--card-bd)',
-      'paneProperties.horzGridProperties.color': 'var(--card-bd)',
-      'scalesProperties.textColor':        'var(--text-mid)',
-      'mainSeriesProperties.candleStyle.upColor':          '#e84646',
-      'mainSeriesProperties.candleStyle.downColor':        '#00d68f',
-      'mainSeriesProperties.candleStyle.borderUpColor':    '#e84646',
-      'mainSeriesProperties.candleStyle.borderDownColor':  '#00d68f',
-      'mainSeriesProperties.candleStyle.wickUpColor':      '#e84646',
-      'mainSeriesProperties.candleStyle.wickDownColor':    '#00d68f',
-    }),
-  });
-}
-
-function setTVInterval(interval) {
-  _tvInterval = interval;
-  document.querySelectorAll('.tv-tf-btn').forEach(b =>
-    b.classList.toggle('active', b.dataset.tf === interval));
-  _buildTVWidget();
-}
-
-function toggleTVStudy(el, study) {
-  const idx = _tvStudies.indexOf(study);
-  if (idx >= 0) {
-    _tvStudies.splice(idx, 1);
-    el.classList.remove('active');
-  } else {
-    _tvStudies.push(study);
-    el.classList.add('active');
-  }
-  _buildTVWidget();
 }
 
 // ── ETF State ──────────────────────────────────────────────────────────
@@ -3089,6 +2985,6 @@ async function loadNews(ticker) {
 }
 </script>
 
-<script>window.addEventListener('themechange', () => { if (typeof _buildTVWidget === 'function' && document.getElementById('tvChartContainer')?.childElementCount) _buildTVWidget(); });</script>
+<script>window.addEventListener('themechange', e => { try { document.getElementById('tvChartFrame').contentWindow.Theme.set(e.detail); } catch (_) {} });</script>
 </body>
 </html>

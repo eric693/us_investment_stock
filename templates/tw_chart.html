@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>技術分析</title>
-<link rel="stylesheet" href="/static/css/style.css?v=3">
+<link rel="stylesheet" href="/static/css/style.css?v=4">
 {% include "_head.html" %}
 <script src="https://unpkg.com/lightweight-charts@5.0.9/dist/lightweight-charts.standalone.production.js"></script>
 <style>
@@ -82,6 +82,11 @@ kbd { font-family: 'JetBrains Mono', monospace; border: 1px solid var(--card-bd2
 .side-item .c { font-family: 'JetBrains Mono', monospace; font-size: .76rem; color: var(--gold); width: 48px; flex-shrink: 0; }
 .side-item .n { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 @media (max-width: 1000px) { .side { display: none; } .main { padding: 8px; } .ohlc { display: none; } }
+/* 嵌入台股分析頁時：只留工具列與圖表 */
+body.embed .appbar, body.embed .side, body.embed .head, body.embed .foot, body.embed .wheel-grp { display: none !important; }
+body.embed .main { padding: 0; }
+body.embed .card2 { border-radius: 12px; box-shadow: none; }
+body.embed::before { display: none; }
 </style>
 </head>
 <body>
@@ -102,12 +107,12 @@ kbd { font-family: 'JetBrains Mono', monospace; border: 1px solid var(--card-bd2
       </div>
     </div>
     <div class="tools card2">
-      <div class="grp"><b>週期</b><span class="seg"><button data-period="60">60分</button><button data-period="D">日</button><button data-period="W">週</button></span></div>
+      <div class="grp"><b>週期</b><span class="seg"><button data-period="1">1分</button><button data-period="15">15分</button><button data-period="60">60分</button><button data-period="D">日</button><button data-period="W">週</button><button data-period="M">月</button></span></div>
       <div class="grp" id="maToggles"></div>
       <div class="grp" id="mainToggles"></div>
       <div class="grp" id="paneToggles"></div>
       <div class="grp"><b>持股均線</b><input class="inp" id="holdN" type="number" min="2" max="60" title="法人持股均線天數（3 或 5，可自訂）"><span>日</span></div>
-      <div class="grp"><b>滾輪</b><span class="seg"><button data-wheel="switch" title="在圖上滾動滑鼠滾輪切換上一檔 / 下一檔">換股</button><button data-wheel="zoom" title="在圖上滾動滑鼠滾輪縮放 K 線">縮放</button></span></div>
+      <div class="grp wheel-grp"><b>滾輪</b><span class="seg"><button data-wheel="switch" title="在圖上滾動滑鼠滾輪切換上一檔 / 下一檔">換股</button><button data-wheel="zoom" title="在圖上滾動滑鼠滾輪縮放 K 線">縮放</button></span></div>
     </div>
     <div class="chart-box card2" id="box">
       <div id="chart"></div>
@@ -154,18 +159,25 @@ function themeColors() {
 themeColors();
 var MAS;
 const PANES = [
-  ['vol','成交量'], ['kdj','KDJ'],
+  ['vol','成交量'], ['kdj','KDJ'], ['rsi','RSI'], ['macd','MACD'],
   ['trust','投信持股'], ['foreign','外資持股'], ['dealer','自營商持股'], ['total','法人持股'],
 ];
 var HOLD_COLOR, KDJ_C;
 
+const QS = new URLSearchParams(location.search);
+const EMBED = QS.get('embed') === '1';
+const CFG_KEY = EMBED ? 'twChartCfgEmbed' : 'twChartCfg';
+const INTRADAY = ['1', '15', '60'];
 const cfg = Object.assign({period:'D', ma:[5,10,20,60,120,240], boll:true, signals:true,
-  panes:['vol','kdj','trust','foreign'], holdN:5, wheel:'switch', bars:120}, ls.get('twChartCfg', {}));
-const saveCfg = () => ls.set('twChartCfg', cfg);
+  panes:['vol','kdj','trust','foreign'], holdN:5, wheel: EMBED ? 'zoom' : 'switch', bars:120}, ls.get(CFG_KEY, {}));
+if (EMBED) { cfg.wheel = 'zoom'; document.body.classList.add('embed'); }
+if (QS.get('period') && ['1','15','60','D','W','M'].includes(QS.get('period'))) cfg.period = QS.get('period');
+const saveCfg = () => ls.set(CFG_KEY, cfg);
 
-let code = new URLSearchParams(location.search).get('code') || '2330';
+let code = QS.get('code') || '2330';
 let nav = ss.get('twNavList', null);
-let WATCH = [], WATCH_NAMES = [];
+let WATCH = [], WGROUPS = [], WNAMES = {};
+function setWatch(p) { WGROUPS = p.groups || []; WNAMES = p.names || {}; WATCH = [...new Set(WGROUPS.flatMap(g => g.codes))]; }
 let chart = null, DATA = null, legendFns = [];
 const cache = new Map();
 
@@ -210,6 +222,25 @@ function kdj(h, l, c, n=9) {
   }
   return {K, D, J};
 }
+function ema(a, n) {
+  const out = []; const k = 2 / (n + 1); let prev = null;
+  for (let i = 0; i < a.length; i++) { prev = prev == null ? a[i] : a[i] * k + prev * (1 - k); out.push(prev); }
+  return out;
+}
+function rsi(c, n=14) {
+  const out = new Array(c.length).fill(null); let g = 0, l = 0;
+  for (let i = 1; i < c.length; i++) {
+    const d = c[i] - c[i-1], up = Math.max(d, 0), dn = Math.max(-d, 0);
+    if (i <= n) { g += up / n; l += dn / n; if (i < n) continue; }
+    else { g = (g * (n - 1) + up) / n; l = (l * (n - 1) + dn) / n; }
+    out[i] = l === 0 ? 100 : 100 - 100 / (1 + g / l);
+  }
+  return out;
+}
+function macd(c, f=12, s=26, sig=9) {
+  const ef = ema(c, f), es = ema(c, s), dif = c.map((_, i) => ef[i] - es[i]), dea = ema(dif, sig);
+  return {dif, dea, hist: dif.map((v, i) => (v - dea[i]) * 2)};
+}
 const crossUp = (a, b, i) => i > 0 && a[i-1] != null && b[i-1] != null && a[i] != null && b[i] != null && a[i-1] <= b[i-1] && a[i] > b[i];
 const crossDn = (a, b, i) => i > 0 && a[i-1] != null && b[i-1] != null && a[i] != null && b[i] != null && a[i-1] >= b[i-1] && a[i] < b[i];
 
@@ -219,10 +250,11 @@ function mapDaily(bars, days, vals) {
   if (!days.length) return out;
   let j = -1;
   for (let i = 0; i < bars.length; i++) {
-    const end = cfg.period === 'W' ? (i + 1 < bars.length ? bars[i+1].day : '9999') : bars[i].day;
-    const strict = cfg.period === 'W';
+    const agg = cfg.period === 'W' || cfg.period === 'M';
+    const end = agg ? (i + 1 < bars.length ? bars[i+1].day : '9999') : bars[i].day;
+    const strict = agg;
     while (j + 1 < days.length && (strict ? days[j+1] < end : days[j+1] <= end)) j++;
-    if (j >= 0 && (cfg.period === 'W' || days[j] === bars[i].day)) out[i] = vals[j];
+    if (j >= 0 && (agg || days[j] === bars[i].day)) out[i] = vals[j];
   }
   return out;
 }
@@ -249,7 +281,7 @@ function build() {
     grid: {vertLines: {color: Theme.css('--grid')}, horzLines: {color: Theme.css('--grid')}},
     crosshair: {mode: LC.CrosshairMode.Normal, vertLine: {color: Theme.css('--text-dim'), labelBackgroundColor: Theme.css('--accent')}, horzLine: {color: Theme.css('--text-dim'), labelBackgroundColor: Theme.css('--accent')}},
     rightPriceScale: {borderColor: Theme.css('--line')},
-    timeScale: {borderColor: Theme.css('--line'), timeVisible: cfg.period === '60', secondsVisible: false, rightOffset: 4},
+    timeScale: {borderColor: Theme.css('--line'), timeVisible: INTRADAY.includes(cfg.period), secondsVisible: false, rightOffset: 4},
     handleScroll: {mouseWheel: cfg.wheel === 'zoom', pressedMouseMove: true, horzTouchDrag: true, vertTouchDrag: false},
     handleScale: {mouseWheel: cfg.wheel === 'zoom', pinch: true, axisPressedMouseMove: true},
     localization: {locale: 'zh-TW', priceFormatter: p => Math.abs(p) >= 1000 ? p.toFixed(0) : p.toFixed(2)},
@@ -298,6 +330,20 @@ function build() {
       chart.addSeries(LC.LineSeries, line(KDJ_C[0]), p).setData(toSeries(bars, v5));
       chart.addSeries(LC.LineSeries, line(KDJ_C[1]), p).setData(toSeries(bars, v20));
       addLegend(p, i => `<span class="n">成交量(張)</span><span>${fmt(V[i], 0)}</span><span style="color:${KDJ_C[0]}">MA5 ${fmt(v5[i], 0)}</span><span style="color:${KDJ_C[1]}">MA20 ${fmt(v20[i], 0)}</span>`);
+    } else if (key === 'rsi') {
+      const r = rsi(C);
+      const rs = chart.addSeries(LC.LineSeries, line(KDJ_C[2], 1.5), p);
+      rs.setData(toSeries(bars, r));
+      rs.createPriceLine({price: 70, color: alpha(UP, .35), lineStyle: LC.LineStyle.Dashed, axisLabelVisible: false});
+      rs.createPriceLine({price: 30, color: alpha(DN, .35), lineStyle: LC.LineStyle.Dashed, axisLabelVisible: false});
+      addLegend(p, i => `<span class="n">RSI(14)</span><span style="color:${KDJ_C[2]}">${fmt(r[i])}</span>`);
+    } else if (key === 'macd') {
+      const m = macd(C);
+      chart.addSeries(LC.HistogramSeries, {priceLineVisible: false, lastValueVisible: false}, p)
+        .setData(bars.map((b, i) => ({time: b.time, value: m.hist[i], color: m.hist[i] >= 0 ? alpha(UP, .55) : alpha(DN, .55)})));
+      chart.addSeries(LC.LineSeries, line(KDJ_C[1], 1.5), p).setData(toSeries(bars, m.dif));
+      chart.addSeries(LC.LineSeries, line(KDJ_C[0], 1.5), p).setData(toSeries(bars, m.dea));
+      addLegend(p, i => `<span class="n">MACD(12,26,9)</span><span style="color:${KDJ_C[1]}">DIF ${fmt(m.dif[i])}</span><span style="color:${KDJ_C[0]}">DEA ${fmt(m.dea[i])}</span><span class="${m.hist[i] >= 0 ? 'up' : 'dn'}">OSC ${fmt(m.hist[i])}</span>`);
     } else if (key === 'kdj') {
       kd = kd || kdj(H, L, C);
       chart.addSeries(LC.LineSeries, line(KDJ_C[0], 1.5), p).setData(toSeries(bars, kd.K));
@@ -312,13 +358,13 @@ function build() {
       const h = mapDaily(bars, inst.days, hold), m = mapDaily(bars, inst.days, maDaily), net = mapDaily(bars, inst.days, inst.net[key]);
       const color = HOLD_COLOR[key];
       chart.addSeries(LC.HistogramSeries, {priceScaleId: 'net' + key, priceLineVisible: false, lastValueVisible: false}, p)
-        .setData(bars.map((b, i) => net[i] == null || cfg.period === 'W' ? {time: b.time} : {time: b.time, value: net[i], color: net[i] >= 0 ? alpha(UP, .22) : alpha(DN, .22)}));
+        .setData(bars.map((b, i) => net[i] == null || !['D', ...INTRADAY].includes(cfg.period) ? {time: b.time} : {time: b.time, value: net[i], color: net[i] >= 0 ? alpha(UP, .22) : alpha(DN, .22)}));
       chart.priceScale('net' + key, p).applyOptions({scaleMargins: {top: 0.55, bottom: 0}, visible: false});
       chart.addSeries(LC.LineSeries, line(color, 2, {lastValueVisible: true, priceFormat: {type: 'volume'}}), p).setData(toSeries(bars, h));
       chart.addSeries(LC.LineSeries, line(Theme.css('--text-mid'), 1, {lineStyle: LC.LineStyle.Dashed, priceFormat: {type: 'volume'}}), p).setData(toSeries(bars, m));
       const nm = key === 'foreign' && !inst.foreign_anchor ? label + '(累計買賣超)' : label;
       addLegend(p, i => `<span class="n">${nm}(張)</span><span style="color:${color}">${fmt(h[i], 0)}</span><span>MA${cfg.holdN} ${fmt(m[i], 0)}</span>` +
-        (net[i] != null && cfg.period !== 'W' ? `<span class="${net[i] >= 0 ? 'up' : 'dn'}">當日 ${net[i] >= 0 ? '+' : ''}${fmt(net[i], 0)}</span>` : ''));
+        (net[i] != null && ['D', ...INTRADAY].includes(cfg.period) ? `<span class="${net[i] >= 0 ? 'up' : 'dn'}">當日 ${net[i] >= 0 ? '+' : ''}${fmt(net[i], 0)}</span>` : ''));
       // 盤後選股訊號：持股穿越均線且 KD 同日交叉（日線）
       if (cfg.signals && cfg.period === 'D') {
         kd = kd || kdj(H, L, C);
@@ -389,7 +435,7 @@ let loadSeq = 0;
 async function load() {
   const seq = ++loadSeq;
   $('#loading').textContent = '載入中…'; $('#loading').style.display = 'flex';
-  history.replaceState(null, '', '/tw/board/chart?code=' + encodeURIComponent(code));
+  if (!EMBED) history.replaceState(null, '', '/tw/board/chart?code=' + encodeURIComponent(code));
   renderNav();
   loadQuote();
   try {
@@ -436,7 +482,8 @@ async function loadQuote() {
 function navIndex() { return nav ? nav.list.findIndex(x => x[0] === code) : -1; }
 function renderNav() {
   if (!nav || navIndex() < 0) {
-    nav = {label: '自選股', list: WATCH_NAMES.length ? WATCH_NAMES : WATCH.map(c => [c, c])};
+    const g = WGROUPS.find(g => g.codes.includes(code)) || WGROUPS.find(g => g.codes.length) || {name: '自選股', codes: []};
+    nav = {label: g.name, list: g.codes.map(c => [c, WNAMES[c] || c])};
     if (navIndex() < 0) nav.list.unshift([code, code]);
   }
   const ix = navIndex();
@@ -475,6 +522,7 @@ $('#box').addEventListener('wheel', e => {
 
 document.addEventListener('keydown', e => {
   if (e.target.tagName === 'INPUT') return;
+  if (EMBED && !['+', '=', '-'].includes(e.key)) return;   // 嵌入時不換股、不離開頁面
   if (e.key === 'ArrowDown' || e.key === 'PageDown') { e.preventDefault(); go(1); }
   else if (e.key === 'ArrowUp' || e.key === 'PageUp') { e.preventDefault(); go(-1); }
   else if (e.key === 'Escape') location.href = '/tw/board';
@@ -487,7 +535,9 @@ document.addEventListener('keydown', e => {
 
 $('#star').onclick = async () => {
   const on = WATCH.includes(code);
-  WATCH = await api('/api/tw/board/watchlist', {method: on ? 'DELETE' : 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({code})});
+  // 從清單頁的某個群組進來，就加到那個群組；否則加到第一個群組
+  const group = WGROUPS.some(g => g.name === nav?.label) ? nav.label : undefined;
+  setWatch(await api('/api/tw/board/watchlist', {method: on ? 'DELETE' : 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({code, group})}));
   renderNav();
 };
 
@@ -521,7 +571,7 @@ window.addEventListener('themechange', () => { themeColors(); renderTools(); if 
 
 (async () => {
   renderTools();
-  try { WATCH = await api('/api/tw/board/watchlist'); WATCH_NAMES = await api('/api/tw/board/watchlist?names=1'); } catch (e) {}
+  try { setWatch(await api('/api/tw/board/watchlist')); } catch (e) {}
   load();
 })();
 </script>

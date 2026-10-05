@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>使用者管理</title>
+<link rel="stylesheet" href="/static/css/style.css?v=4">
+{% include "_head.html" %}
+</head>
+<body>
+{% include "_appbar.html" %}
+<main class="form-page">
+  <h1>使用者管理</h1>
+  <p class="sub">只有管理員能看到這一頁。新增帳號、重設密碼、調整權限；重設密碼或調整權限後，該帳號需要重新登入。</p>
+  <div id="msg"></div>
+  <section class="fcard">
+    <h2>所有帳號</h2>
+    <table class="utable"><thead><tr><th>帳號</th><th>權限</th><th></th></tr></thead><tbody id="ulist"></tbody></table>
+  </section>
+  <form class="fcard" id="addForm" autocomplete="off">
+    <h2>新增帳號</h2>
+    <div class="frow"><label for="nu">帳號</label><input class="finput" id="nu" required maxlength="32" placeholder="英數字、底線、句點"></div>
+    <div class="frow"><label for="np">初始密碼</label><input class="finput" id="np" type="password" autocomplete="new-password" required minlength="8" placeholder="至少 8 碼，需含英文與數字"></div>
+    <div class="frow"><label for="nr">權限</label><select class="finput" id="nr"><option value="user">使用者</option><option value="admin">管理員</option></select></div>
+    <div class="frow"><span></span><div><button class="fbtn" type="submit">新增</button></div></div>
+  </form>
+</main>
+<script>
+const $ = s => document.querySelector(s);
+const ME = {{ user.name|tojson }};
+const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+function say(text, ok) { $('#msg').innerHTML = `<div class="fmsg ${ok ? 'ok' : 'err'}">${esc(text)}</div>`; }
+async function call(body) {
+  const r = await fetch('/api/admin/users', {method: body ? 'POST' : 'GET', headers: {'Content-Type': 'application/json'}, body: body ? JSON.stringify(body) : undefined});
+  const j = await r.json();
+  if (!r.ok) throw new Error(j.error || r.statusText);
+  return j;
+}
+function draw(list) {
+  $('#ulist').innerHTML = list.map(u => `<tr><td><b>${esc(u.username)}</b>${u.username === ME ? ' <span style="color:var(--text-dim);font-size:.78rem">（你）</span>' : ''}</td>
+    <td><span class="role ${u.role}">${u.role === 'admin' ? '管理員' : '使用者'}</span></td>
+    <td class="acts">
+      <button class="fbtn ghost sm" data-act="reset" data-u="${esc(u.username)}">重設密碼</button>
+      <button class="fbtn ghost sm" data-act="role" data-u="${esc(u.username)}" data-role="${u.role === 'admin' ? 'user' : 'admin'}">${u.role === 'admin' ? '改為使用者' : '設為管理員'}</button>
+      ${u.username === ME ? '' : `<button class="fbtn danger sm" data-act="delete" data-u="${esc(u.username)}">刪除</button>`}
+    </td></tr>`).join('');
+}
+$('#ulist').addEventListener('click', async e => {
+  const b = e.target.closest('[data-act]'); if (!b) return;
+  const username = b.dataset.u, action = b.dataset.act, body = {action, username};
+  if (action === 'reset') { const p = prompt(`輸入 ${username} 的新密碼（至少 8 碼，含英文與數字）`); if (!p) return; body.password = p; }
+  if (action === 'role') body.role = b.dataset.role;
+  if (action === 'delete' && !confirm(`確定刪除帳號 ${username}？`)) return;
+  try { draw(await call(body)); say({reset: '密碼已重設', role: '權限已更新', delete: '帳號已刪除'}[action] + `：${username}`, true); }
+  catch (err) { say(err.message, false); }
+});
+$('#addForm').onsubmit = async e => {
+  e.preventDefault();
+  try {
+    draw(await call({action: 'add', username: $('#nu').value.trim(), password: $('#np').value, role: $('#nr').value}));
+    say(`已新增帳號 ${$('#nu').value.trim()}`, true); e.target.reset();
+  } catch (err) { say(err.message, false); }
+};
+call().then(draw).catch(err => say(err.message, false));
+</script>
+</body>
+</html>
