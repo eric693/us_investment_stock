@@ -4,107 +4,122 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>技術分析</title>
-<link rel="stylesheet" href="/static/css/style.css">
+<link rel="stylesheet" href="/static/css/style.css?v=3">
+{% include "_head.html" %}
 <script src="https://unpkg.com/lightweight-charts@5.0.9/dist/lightweight-charts.standalone.production.js"></script>
 <style>
-html,body{height:100%;}
-body{display:flex;flex-direction:column;overflow:hidden;}
-.bd-nav{display:flex;align-items:center;gap:12px;flex-wrap:wrap;background:rgba(6,10,16,.96);border-bottom:1px solid var(--card-bd);padding:8px 16px;}
-.bd-nav .brand{font-size:.95rem;font-weight:900;letter-spacing:1px;color:#fff;padding:4px 10px;background:linear-gradient(135deg,#1a6fd4,#0e4a9a);border-radius:6px;}
-.bd-nav .brand span{color:var(--gold);}
-.nav-link{padding:4px 10px;border-radius:6px;color:var(--text-mid);font-size:.8rem;font-weight:600;text-decoration:none;}
-.nav-link:hover{color:var(--text);background:#0d1828;text-decoration:none;}
-.nav-link.active{color:var(--green);background:rgba(0,214,143,.08);}
+html, body { height: 100%; }
+body { display: flex; flex-direction: column; overflow: hidden; }
+.main { flex: 1; display: flex; min-height: 0; gap: 14px; padding: 14px; }
+.chart-col { flex: 1; display: flex; flex-direction: column; min-width: 0; gap: 12px; }
+.card2 { background: var(--card-bg); border: 1px solid var(--card-bd); border-radius: 18px; box-shadow: var(--shadow); }
 
-.main{flex:1;display:flex;min-height:0;}
-.chart-col{flex:1;display:flex;flex-direction:column;min-width:0;}
-.side{width:230px;border-left:1px solid var(--card-bd);display:flex;flex-direction:column;background:var(--bg2);}
-.side-head{padding:8px 10px;font-size:.78rem;color:var(--text-mid);border-bottom:1px solid var(--card-bd);display:flex;justify-content:space-between;gap:6px;}
-.side-list{flex:1;overflow-y:auto;}
-.side-item{display:flex;justify-content:space-between;padding:5px 10px;font-size:.8rem;cursor:pointer;border-left:3px solid transparent;font-variant-numeric:tabular-nums;}
-.side-item:hover{background:#0d1828;}
-.side-item.cur{background:rgba(61,142,248,.12);border-left-color:var(--blue);}
-.side-item .c{color:var(--gold);margin-right:6px;}
-@media(max-width:900px){.side{display:none;}}
+/* 報價列 */
+.head { display: flex; align-items: center; gap: 18px; flex-wrap: wrap; padding: 14px 18px; }
+.star { width: 38px; height: 38px; border-radius: 12px; display: grid; place-items: center; cursor: pointer; color: var(--text-dim);
+        background: var(--overlay-1); border: 1px solid var(--line); transition: all .15s; }
+.star:hover { color: var(--gold); border-color: var(--card-bd2); }
+.star.on { color: var(--gold); background: rgba(245,196,81,.12); border-color: rgba(245,196,81,.35); }
+.star svg { width: 18px; height: 18px; }
+.ident .code { font-family: 'JetBrains Mono', monospace; font-size: .78rem; font-weight: 600; color: var(--gold); letter-spacing: .04em; }
+.ident .name { font-family: 'Space Grotesk', 'Noto Sans TC', sans-serif; font-size: 1.45rem; font-weight: 700; letter-spacing: -.02em; line-height: 1.15; }
+.ident .meta { font-size: .72rem; color: var(--text-dim); margin-left: 6px; font-weight: 500; }
+.px { font-family: 'JetBrains Mono', monospace; font-size: 2.1rem; font-weight: 700; letter-spacing: -.04em; line-height: 1; }
+.chg { display: inline-flex; flex-direction: column; gap: 3px; font-family: 'JetBrains Mono', monospace; font-weight: 600; font-size: .86rem; }
+.chg .pill { padding: 3px 9px; border-radius: 8px; text-align: center; }
+.chg.up .pill { background: rgba(255,77,106,.13); } .chg.dn .pill { background: rgba(18,209,142,.13); }
+.ohlc { display: grid; grid-template-columns: repeat(3, auto); gap: 2px 18px; font-size: .74rem; color: var(--text-dim); }
+.ohlc b { font-family: 'JetBrains Mono', monospace; font-weight: 600; color: var(--text); margin-left: 6px; }
+.rtflag { display: inline-flex; align-items: center; gap: 6px; font-size: .72rem; font-weight: 700; color: var(--red); letter-spacing: .06em; }
+.rtflag i { width: 7px; height: 7px; border-radius: 50%; background: var(--red); animation: ping 1.8s infinite; }
+.up { color: var(--red); } .dn { color: var(--green); }
+.navbtns { margin-left: auto; display: flex; gap: 8px; align-items: center; }
+.pos { font-family: 'JetBrains Mono', monospace; font-size: .78rem; color: var(--text-dim); padding: 0 6px; }
+.nbtn { height: 38px; padding: 0 14px; display: inline-flex; align-items: center; gap: 6px; border-radius: 11px; border: 1px solid var(--card-bd2);
+        background: var(--surface-1); color: var(--text); font-size: .82rem; font-weight: 600; cursor: pointer; transition: all .15s; }
+.nbtn:hover:not(:disabled) { border-color: var(--accent); color: var(--accent); }
+.nbtn:disabled { opacity: .35; cursor: default; }
+.nbtn svg { width: 15px; height: 15px; }
 
-.head{display:flex;align-items:center;gap:14px;flex-wrap:wrap;padding:8px 14px;border-bottom:1px solid var(--card-bd);}
-.title{font-size:1.15rem;font-weight:800;}
-.title .c{color:var(--gold);margin-right:6px;}
-.title .m{font-size:.72rem;color:var(--text-dim);font-weight:600;margin-left:6px;}
-.px{font-size:1.3rem;font-weight:800;font-variant-numeric:tabular-nums;}
-.chg{font-size:.9rem;font-weight:700;font-variant-numeric:tabular-nums;}
-.ohlc{font-size:.78rem;color:var(--text-mid);font-variant-numeric:tabular-nums;display:flex;gap:10px;flex-wrap:wrap;}
-.up{color:#ff4d4f;} .dn{color:#00c26e;}
-.navbtns{margin-left:auto;display:flex;gap:6px;align-items:center;font-size:.78rem;color:var(--text-dim);}
-.btn{padding:4px 11px;border-radius:6px;border:1px solid var(--card-bd2);background:#0a1320;color:var(--text-mid);font-size:.8rem;font-weight:700;cursor:pointer;}
-.btn:hover{color:var(--text);border-color:var(--blue);}
-.btn.on{background:var(--accent);border-color:var(--accent);color:#fff;}
-.star{font-size:1.1rem;cursor:pointer;color:var(--text-dim);}
-.star.on{color:var(--gold);}
+/* 工具列 */
+.tools { display: flex; align-items: center; gap: 8px 18px; flex-wrap: wrap; padding: 10px 16px; font-size: .78rem; color: var(--text-mid); }
+.grp { display: flex; align-items: center; gap: 5px; flex-wrap: wrap; }
+.grp > b { font-size: .66rem; font-weight: 700; letter-spacing: .14em; text-transform: uppercase; color: var(--text-dim); margin-right: 4px; }
+.seg { display: inline-flex; padding: 3px; border-radius: 10px; background: var(--surface-1); border: 1px solid var(--card-bd); }
+.seg button { border: none; background: none; color: var(--text-mid); padding: 5px 12px; border-radius: 7px; font-size: .78rem; font-weight: 600; cursor: pointer; transition: all .15s; }
+.seg button.on { background: var(--accent-grad); color: #fff; box-shadow: var(--glow); }
+.tg { display: inline-flex; align-items: center; gap: 5px; padding: 4px 9px; border-radius: 8px; border: 1px solid var(--card-bd); cursor: pointer; user-select: none;
+      color: var(--text-dim); transition: all .15s; font-size: .76rem; font-weight: 600; }
+.tg:hover { color: var(--text); }
+.tg.on { color: var(--text); background: var(--overlay-2); border-color: var(--card-bd2); }
+.tg i { display: inline-block; width: 9px; height: 3px; border-radius: 3px; opacity: .35; }
+.tg.on i { opacity: 1; }
+.inp { width: 52px; height: 28px; padding: 0 8px; border-radius: 8px; border: 1px solid var(--card-bd); background: var(--surface-1); color: var(--text);
+       font-family: 'JetBrains Mono', monospace; font-size: .8rem; }
 
-.tools{display:flex;align-items:center;gap:6px 14px;flex-wrap:wrap;padding:6px 14px;border-bottom:1px solid var(--card-bd);font-size:.78rem;color:var(--text-mid);}
-.grp{display:flex;align-items:center;gap:4px;flex-wrap:wrap;}
-.grp>b{color:var(--text-dim);font-weight:700;margin-right:2px;}
-.tg{padding:2px 8px;border-radius:5px;border:1px solid var(--card-bd2);cursor:pointer;user-select:none;opacity:.45;}
-.tg.on{opacity:1;}
-.tg i{display:inline-block;width:8px;height:3px;vertical-align:middle;margin-right:4px;border-radius:2px;}
-.inp{padding:2px 6px;border-radius:5px;border:1px solid var(--card-bd2);background:#0a1320;color:var(--text);font-size:.78rem;width:46px;}
+/* 圖表 */
+.chart-box { flex: 1; position: relative; min-height: 0; overflow: hidden; }
+#chart { position: absolute; inset: 6px 4px 4px 4px; }
+.legend { position: absolute; left: 14px; z-index: 3; font-size: .72rem; pointer-events: none; font-family: 'JetBrains Mono', monospace;
+          display: flex; gap: 12px; flex-wrap: wrap; max-width: calc(100% - 100px); }
+.legend .n { color: var(--text-dim); font-family: 'Inter', 'Noto Sans TC', sans-serif; font-weight: 600; }
+.loading { position: absolute; inset: 0; display: flex; flex-direction: column; gap: 14px; align-items: center; justify-content: center; color: var(--text-dim);
+           z-index: 5; background: var(--scrim); backdrop-filter: blur(3px); font-size: .88rem; }
+.loading::before { content: ''; width: 34px; height: 34px; border-radius: 50%; border: 3px solid var(--card-bd2); border-top-color: var(--accent); animation: spin .8s linear infinite; }
+.foot { font-size: .72rem; color: var(--text-dim); padding: 0 6px; display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+kbd { font-family: 'JetBrains Mono', monospace; border: 1px solid var(--card-bd2); border-radius: 5px; padding: 0 5px; font-size: .68rem; }
 
-.chart-box{flex:1;position:relative;min-height:0;}
-#chart{position:absolute;inset:0;}
-.legend{position:absolute;left:8px;z-index:3;font-size:.74rem;pointer-events:none;font-variant-numeric:tabular-nums;display:flex;gap:10px;flex-wrap:wrap;max-width:calc(100% - 90px);text-shadow:0 0 3px #000;}
-.legend .n{color:var(--text-dim);}
-.loading{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:var(--text-dim);z-index:5;background:rgba(6,10,16,.55);font-size:.9rem;}
-.foot{font-size:.72rem;color:var(--text-dim);padding:4px 14px;border-top:1px solid var(--card-bd);}
-kbd{border:1px solid var(--card-bd2);border-radius:3px;padding:0 4px;font-size:.7rem;}
+/* 側邊清單 */
+.side { width: 250px; display: flex; flex-direction: column; overflow: hidden; }
+.side-head { padding: 14px 16px 10px; display: flex; justify-content: space-between; align-items: baseline; border-bottom: 1px solid var(--line); }
+.side-head b { font-size: .86rem; }
+.side-head span { font-family: 'JetBrains Mono', monospace; font-size: .72rem; color: var(--text-dim); }
+.side-head a { font-size: .76rem; }
+.side-list { flex: 1; overflow-y: auto; padding: 6px; }
+.side-item { display: flex; align-items: center; gap: 10px; padding: 7px 10px; font-size: .84rem; cursor: pointer; border-radius: 10px; transition: background .12s; }
+.side-item:hover { background: var(--overlay-1); }
+.side-item.cur { background: rgba(109,93,252,.14); box-shadow: inset 3px 0 0 var(--accent); }
+.side-item .c { font-family: 'JetBrains Mono', monospace; font-size: .76rem; color: var(--gold); width: 48px; flex-shrink: 0; }
+.side-item .n { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+@media (max-width: 1000px) { .side { display: none; } .main { padding: 8px; } .ohlc { display: none; } }
 </style>
 </head>
 <body>
-<nav class="bd-nav">
-  <div class="brand">Stock<span>Lens</span></div>
-  <a class="nav-link" href="/tw">台股分析</a>
-  <a class="nav-link active" href="/tw/board">台股看盤</a>
-  <a class="nav-link" href="/screener">策略選股</a>
-  <a class="nav-link" href="/logout" style="margin-left:auto">登出</a>
-</nav>
+{% include "_appbar.html" %}
 
 <div class="main">
   <div class="chart-col">
-    <div class="head">
-      <span class="star" id="star" title="加入 / 移除自選股">☆</span>
-      <div class="title" id="title">-</div>
+    <div class="head card2">
+      <span class="star" id="star" title="加入 / 移除自選股"></span>
+      <div class="ident" id="title"><div class="code">-</div><div class="name">載入中</div></div>
       <div class="px" id="px">-</div>
       <div class="chg" id="chg"></div>
       <div class="ohlc" id="ohlc"></div>
       <div class="navbtns">
-        <span id="pos"></span>
-        <button class="btn" id="prev" title="上一檔（↑ / PageUp / 滾輪上）">▲ 上一檔</button>
-        <button class="btn" id="next" title="下一檔（↓ / PageDown / 滾輪下）">▼ 下一檔</button>
+        <span class="pos" id="pos"></span>
+        <button class="nbtn" id="prev" title="上一檔（↑ / PageUp / 滾輪上）"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M6 15l6-6 6 6"/></svg>上一檔</button>
+        <button class="nbtn" id="next" title="下一檔（↓ / PageDown / 滾輪下）"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>下一檔</button>
       </div>
     </div>
-    <div class="tools">
-      <div class="grp"><b>週期</b>
-        <button class="btn" data-period="60">60分</button><button class="btn" data-period="D">日</button><button class="btn" data-period="W">週</button>
-      </div>
-      <div class="grp" id="maToggles"><b>均線</b></div>
+    <div class="tools card2">
+      <div class="grp"><b>週期</b><span class="seg"><button data-period="60">60分</button><button data-period="D">日</button><button data-period="W">週</button></span></div>
+      <div class="grp" id="maToggles"></div>
       <div class="grp" id="mainToggles"></div>
-      <div class="grp" id="paneToggles"><b>副圖</b></div>
+      <div class="grp" id="paneToggles"></div>
       <div class="grp"><b>持股均線</b><input class="inp" id="holdN" type="number" min="2" max="60" title="法人持股均線天數（3 或 5，可自訂）"><span>日</span></div>
-      <div class="grp"><b>滾輪</b>
-        <button class="btn" data-wheel="switch" title="在圖上滾動滑鼠滾輪切換上一檔 / 下一檔">換股</button><button class="btn" data-wheel="zoom" title="在圖上滾動滑鼠滾輪縮放 K 線">縮放</button>
-      </div>
+      <div class="grp"><b>滾輪</b><span class="seg"><button data-wheel="switch" title="在圖上滾動滑鼠滾輪切換上一檔 / 下一檔">換股</button><button data-wheel="zoom" title="在圖上滾動滑鼠滾輪縮放 K 線">縮放</button></span></div>
     </div>
-    <div class="chart-box" id="box">
+    <div class="chart-box card2" id="box">
       <div id="chart"></div>
       <div class="loading" id="loading">載入中…</div>
     </div>
     <div class="foot">
-      <kbd>↑</kbd><kbd>↓</kbd> / <kbd>PgUp</kbd><kbd>PgDn</kbd> / 滑鼠滾輪：切換個股・拖曳平移・<kbd>+</kbd><kbd>-</kbd> 縮放・<kbd>Esc</kbd> 回清單。
+      <kbd>↑</kbd><kbd>↓</kbd><kbd>PgUp</kbd><kbd>PgDn</kbd> 或滑鼠滾輪切換個股・拖曳平移・<kbd>+</kbd><kbd>-</kbd> 縮放・<kbd>Esc</kbd> 回清單・
       法人持股：投信／自營商為累計買賣超(張)，外資以實際持股張數為基準。<span id="srcNote"></span>
     </div>
   </div>
-  <aside class="side">
-    <div class="side-head"><span id="listLabel">清單</span><a href="/tw/board">回清單</a></div>
+  <aside class="side card2">
+    <div class="side-head"><div><b id="listLabel">清單</b> <span id="listCount"></span></div><a href="/tw/board">回清單</a></div>
     <div class="side-list" id="sideList"></div>
   </aside>
 </div>
@@ -116,13 +131,33 @@ const ls = {get(k,d){try{const v=localStorage.getItem(k);return v==null?d:JSON.p
             set(k,v){try{localStorage.setItem(k,JSON.stringify(v))}catch(e){}}};
 const ss = {get(k,d){try{const v=sessionStorage.getItem(k);return v==null?d:JSON.parse(v)}catch(e){return d}}};
 
-const UP = '#ff4d4f', DN = '#00c26e';
-const MAS = [[5,'#f0b429'],[10,'#3d8ef8'],[20,'#e040fb'],[60,'#00d68f'],[120,'#ff8a3d'],[240,'#9aa8b8']];
+// 顏色跟著主題（亮色 / 暗色）
+let UP, DN;
+const alpha = (c, a) => {
+  const m = c.match(/^#([0-9a-f]{6})$/i);
+  if (!m) return c;
+  const n = parseInt(m[1], 16);
+  return `rgba(${n >> 16},${(n >> 8) & 255},${n & 255},${a})`;
+};
+// 亮色背景用較深的線色，暗色背景用較亮的線色
+const PALETTE = {
+  dark:  {ma: ['#f0b429','#5b9bff','#e879f9','#2ee6a6','#ff8a3d','#94a3b8'], hold: ['#f0b429','#5b9bff','#e879f9','#2ee6a6'], kdj: ['#f0b429','#5b9bff','#e879f9']},
+  light: {ma: ['#c98a00','#2563eb','#c026d3','#059669','#ea580c','#64748b'], hold: ['#c98a00','#2563eb','#c026d3','#059669'], kdj: ['#c98a00','#2563eb','#c026d3']},
+};
+function themeColors() {
+  UP = Theme.css('--red'); DN = Theme.css('--green');
+  const pal = PALETTE[Theme.mode()] || PALETTE.dark;
+  MAS = [5, 10, 20, 60, 120, 240].map((n, i) => [n, pal.ma[i]]);
+  HOLD_COLOR = {trust: pal.hold[0], foreign: pal.hold[1], dealer: pal.hold[2], total: pal.hold[3]};
+  KDJ_C = pal.kdj;
+}
+themeColors();
+var MAS;
 const PANES = [
   ['vol','成交量'], ['kdj','KDJ'],
   ['trust','投信持股'], ['foreign','外資持股'], ['dealer','自營商持股'], ['total','法人持股'],
 ];
-const HOLD_COLOR = {trust:'#f0b429', foreign:'#3d8ef8', dealer:'#e040fb', total:'#00d68f'};
+var HOLD_COLOR, KDJ_C;
 
 const cfg = Object.assign({period:'D', ma:[5,10,20,60,120,240], boll:true, signals:true,
   panes:['vol','kdj','trust','foreign'], holdN:5, wheel:'switch', bars:120}, ls.get('twChartCfg', {}));
@@ -130,7 +165,7 @@ const saveCfg = () => ls.set('twChartCfg', cfg);
 
 let code = new URLSearchParams(location.search).get('code') || '2330';
 let nav = ss.get('twNavList', null);
-let WATCH = [];
+let WATCH = [], WATCH_NAMES = [];
 let chart = null, DATA = null, legendFns = [];
 const cache = new Map();
 
@@ -208,12 +243,13 @@ function build() {
   if (!bars.length) { $('#loading').textContent = '查無 K 線資料'; $('#loading').style.display = 'flex'; return; }
   chart = LC.createChart(box, {
     autoSize: true,
-    layout: {background: {color: '#060a10'}, textColor: '#7a9ab8', fontSize: 11, attributionLogo: false,
-             panes: {separatorColor: '#1c2e48', separatorHoverColor: 'rgba(61,142,248,.25)'}},
-    grid: {vertLines: {color: 'rgba(28,46,72,.35)'}, horzLines: {color: 'rgba(28,46,72,.35)'}},
-    crosshair: {mode: LC.CrosshairMode.Normal},
-    rightPriceScale: {borderColor: '#1c2e48'},
-    timeScale: {borderColor: '#1c2e48', timeVisible: cfg.period === '60', secondsVisible: false, rightOffset: 4},
+    layout: {background: {color: Theme.css('--card-bg')}, textColor: Theme.css('--text-mid'), fontSize: 11, attributionLogo: false,
+             fontFamily: "'JetBrains Mono', ui-monospace, monospace",
+             panes: {separatorColor: Theme.css('--line'), separatorHoverColor: 'rgba(109,93,252,.3)'}},
+    grid: {vertLines: {color: Theme.css('--grid')}, horzLines: {color: Theme.css('--grid')}},
+    crosshair: {mode: LC.CrosshairMode.Normal, vertLine: {color: Theme.css('--text-dim'), labelBackgroundColor: Theme.css('--accent')}, horzLine: {color: Theme.css('--text-dim'), labelBackgroundColor: Theme.css('--accent')}},
+    rightPriceScale: {borderColor: Theme.css('--line')},
+    timeScale: {borderColor: Theme.css('--line'), timeVisible: cfg.period === '60', secondsVisible: false, rightOffset: 4},
     handleScroll: {mouseWheel: cfg.wheel === 'zoom', pressedMouseMove: true, horzTouchDrag: true, vertTouchDrag: false},
     handleScale: {mouseWheel: cfg.wheel === 'zoom', pinch: true, axisPressedMouseMove: true},
     localization: {locale: 'zh-TW', priceFormatter: p => Math.abs(p) >= 1000 ? p.toFixed(0) : p.toFixed(2)},
@@ -234,9 +270,9 @@ function build() {
   if (cfg.boll) {
     bb = boll(C);
     const o = {lineStyle: LC.LineStyle.Dashed};
-    chart.addSeries(LC.LineSeries, line('#8fa3bf', 1, o)).setData(toSeries(bars, bb.up));
-    chart.addSeries(LC.LineSeries, line('#8fa3bf', 1, {lineStyle: LC.LineStyle.Dotted})).setData(toSeries(bars, bb.mid));
-    chart.addSeries(LC.LineSeries, line('#8fa3bf', 1, o)).setData(toSeries(bars, bb.dn));
+    chart.addSeries(LC.LineSeries, line(Theme.css('--text-dim'), 1, o)).setData(toSeries(bars, bb.up));
+    chart.addSeries(LC.LineSeries, line(Theme.css('--text-dim'), 1, {lineStyle: LC.LineStyle.Dotted})).setData(toSeries(bars, bb.mid));
+    chart.addSeries(LC.LineSeries, line(Theme.css('--text-dim'), 1, o)).setData(toSeries(bars, bb.dn));
   }
   addLegend(0, i => {
     const b = bars[i], prev = i > 0 ? bars[i-1].close : b.open, cc = b.close >= prev ? 'up' : 'dn';
@@ -244,7 +280,7 @@ function build() {
       `<span>開 <b class="${cc}">${fmt(b.open)}</b></span><span>高 <b class="${cc}">${fmt(b.high)}</b></span>` +
       `<span>低 <b class="${cc}">${fmt(b.low)}</b></span><span>收 <b class="${cc}">${fmt(b.close)}</b></span>` +
       MAS.filter(([n]) => maVals[n]).map(([n, c]) => `<span style="color:${c}">MA${n} ${fmt(maVals[n][i])}</span>`).join('') +
-      (bb ? `<span style="color:#8fa3bf">BOLL ${fmt(bb.up[i])} / ${fmt(bb.mid[i])} / ${fmt(bb.dn[i])}</span>` : '');
+      (bb ? `<span style="color:var(--text-mid)">BOLL ${fmt(bb.up[i])} / ${fmt(bb.mid[i])} / ${fmt(bb.dn[i])}</span>` : '');
   });
 
   // 副圖
@@ -257,29 +293,29 @@ function build() {
     const p = paneIdx;
     if (key === 'vol') {
       const vs = chart.addSeries(LC.HistogramSeries, {priceFormat: {type: 'volume'}, priceLineVisible: false, lastValueVisible: true}, p);
-      vs.setData(bars.map((b, i) => ({time: b.time, value: b.volume, color: (b.close >= (i ? bars[i-1].close : b.open)) ? 'rgba(255,77,79,.6)' : 'rgba(0,194,110,.6)'})));
+      vs.setData(bars.map((b, i) => ({time: b.time, value: b.volume, color: (b.close >= (i ? bars[i-1].close : b.open)) ? alpha(UP, .55) : alpha(DN, .55)})));
       const v5 = sma(V, 5), v20 = sma(V, 20);
-      chart.addSeries(LC.LineSeries, line('#f0b429'), p).setData(toSeries(bars, v5));
-      chart.addSeries(LC.LineSeries, line('#3d8ef8'), p).setData(toSeries(bars, v20));
-      addLegend(p, i => `<span class="n">成交量(張)</span><span>${fmt(V[i], 0)}</span><span style="color:#f0b429">MA5 ${fmt(v5[i], 0)}</span><span style="color:#3d8ef8">MA20 ${fmt(v20[i], 0)}</span>`);
+      chart.addSeries(LC.LineSeries, line(KDJ_C[0]), p).setData(toSeries(bars, v5));
+      chart.addSeries(LC.LineSeries, line(KDJ_C[1]), p).setData(toSeries(bars, v20));
+      addLegend(p, i => `<span class="n">成交量(張)</span><span>${fmt(V[i], 0)}</span><span style="color:${KDJ_C[0]}">MA5 ${fmt(v5[i], 0)}</span><span style="color:${KDJ_C[1]}">MA20 ${fmt(v20[i], 0)}</span>`);
     } else if (key === 'kdj') {
       kd = kd || kdj(H, L, C);
-      chart.addSeries(LC.LineSeries, line('#f0b429', 1.5), p).setData(toSeries(bars, kd.K));
-      chart.addSeries(LC.LineSeries, line('#3d8ef8', 1.5), p).setData(toSeries(bars, kd.D));
-      const js = chart.addSeries(LC.LineSeries, line('#e040fb'), p);
+      chart.addSeries(LC.LineSeries, line(KDJ_C[0], 1.5), p).setData(toSeries(bars, kd.K));
+      chart.addSeries(LC.LineSeries, line(KDJ_C[1], 1.5), p).setData(toSeries(bars, kd.D));
+      const js = chart.addSeries(LC.LineSeries, line(KDJ_C[2]), p);
       js.setData(toSeries(bars, kd.J));
-      js.createPriceLine({price: 80, color: 'rgba(255,77,79,.35)', lineStyle: LC.LineStyle.Dashed, axisLabelVisible: false});
-      js.createPriceLine({price: 20, color: 'rgba(0,194,110,.35)', lineStyle: LC.LineStyle.Dashed, axisLabelVisible: false});
-      addLegend(p, i => `<span class="n">KDJ(9,3,3)</span><span style="color:#f0b429">K ${fmt(kd.K[i])}</span><span style="color:#3d8ef8">D ${fmt(kd.D[i])}</span><span style="color:#e040fb">J ${fmt(kd.J[i])}</span>`);
+      js.createPriceLine({price: 80, color: alpha(UP, .35), lineStyle: LC.LineStyle.Dashed, axisLabelVisible: false});
+      js.createPriceLine({price: 20, color: alpha(DN, .35), lineStyle: LC.LineStyle.Dashed, axisLabelVisible: false});
+      addLegend(p, i => `<span class="n">KDJ(9,3,3)</span><span style="color:${KDJ_C[0]}">K ${fmt(kd.K[i])}</span><span style="color:${KDJ_C[1]}">D ${fmt(kd.D[i])}</span><span style="color:${KDJ_C[2]}">J ${fmt(kd.J[i])}</span>`);
     } else {
       const hold = inst.hold[key], maDaily = sma(hold, cfg.holdN);
       const h = mapDaily(bars, inst.days, hold), m = mapDaily(bars, inst.days, maDaily), net = mapDaily(bars, inst.days, inst.net[key]);
       const color = HOLD_COLOR[key];
       chart.addSeries(LC.HistogramSeries, {priceScaleId: 'net' + key, priceLineVisible: false, lastValueVisible: false}, p)
-        .setData(bars.map((b, i) => net[i] == null || cfg.period === 'W' ? {time: b.time} : {time: b.time, value: net[i], color: net[i] >= 0 ? 'rgba(255,77,79,.22)' : 'rgba(0,194,110,.22)'}));
+        .setData(bars.map((b, i) => net[i] == null || cfg.period === 'W' ? {time: b.time} : {time: b.time, value: net[i], color: net[i] >= 0 ? alpha(UP, .22) : alpha(DN, .22)}));
       chart.priceScale('net' + key, p).applyOptions({scaleMargins: {top: 0.55, bottom: 0}, visible: false});
       chart.addSeries(LC.LineSeries, line(color, 2, {lastValueVisible: true, priceFormat: {type: 'volume'}}), p).setData(toSeries(bars, h));
-      chart.addSeries(LC.LineSeries, line('#c8d8ec', 1, {lineStyle: LC.LineStyle.Dashed, priceFormat: {type: 'volume'}}), p).setData(toSeries(bars, m));
+      chart.addSeries(LC.LineSeries, line(Theme.css('--text-mid'), 1, {lineStyle: LC.LineStyle.Dashed, priceFormat: {type: 'volume'}}), p).setData(toSeries(bars, m));
       const nm = key === 'foreign' && !inst.foreign_anchor ? label + '(累計買賣超)' : label;
       addLegend(p, i => `<span class="n">${nm}(張)</span><span style="color:${color}">${fmt(h[i], 0)}</span><span>MA${cfg.holdN} ${fmt(m[i], 0)}</span>` +
         (net[i] != null && cfg.period !== 'W' ? `<span class="${net[i] >= 0 ? 'up' : 'dn'}">當日 ${net[i] >= 0 ? '+' : ''}${fmt(net[i], 0)}</span>` : ''));
@@ -381,15 +417,18 @@ async function loadQuote() {
     const q = await api('/api/tw/board/quote/' + encodeURIComponent(c));
     if (c !== code) return;
     const cc = q.chg > 0 ? 'up' : q.chg < 0 ? 'dn' : '';
-    $('#title').innerHTML = `<span class="c">${esc(q.code)}</span>${esc(q.name)}<span class="m">${q.market === 'TSE' ? '上市' : '上櫃'}・${esc(q.industry || '')}</span>`;
+    $('#title').innerHTML = `<div class="code">${esc(q.code)}<span class="meta">${q.market === 'TSE' ? '上市' : '上櫃'}・${esc(q.industry || '')}</span></div><div class="name">${esc(q.name)}</div>`;
+    const ent = nav && nav.list.find(x => x[0] === q.code);
+    if (ent && ent[1] === ent[0]) { ent[1] = q.name; $('#sideList').dataset.key = ''; renderNav(); }
     $('#px').className = 'px ' + cc; $('#px').textContent = fmt(q.price);
     $('#chg').className = 'chg ' + cc;
-    $('#chg').textContent = q.chg == null ? '' : `${q.chg > 0 ? '▲' : q.chg < 0 ? '▼' : ''}${fmt(Math.abs(q.chg))} (${q.chg_pct > 0 ? '+' : ''}${fmt(q.chg_pct)}%)`;
-    $('#ohlc').innerHTML = `<span>開 ${fmt(q.open)}</span><span>高 ${fmt(q.high)}</span><span>低 ${fmt(q.low)}</span><span>昨收 ${fmt(q.prev)}</span><span>量 ${fmt(q.volume, 0)} 張</span>` +
-      `<span>${q.realtime ? '<b class="up">● 即時</b> ' + esc(q.time || '') : esc(q.date || '')}</span>`;
+    $('#chg').innerHTML = q.chg == null ? '' : `<span class="pill">${q.chg > 0 ? '▲' : q.chg < 0 ? '▼' : ''}${fmt(Math.abs(q.chg))}</span><span class="pill">${q.chg_pct > 0 ? '+' : ''}${fmt(q.chg_pct)}%</span>`;
+    $('#ohlc').innerHTML = `<span>開<b>${fmt(q.open)}</b></span><span>高<b>${fmt(q.high)}</b></span><span>低<b>${fmt(q.low)}</b></span>` +
+      `<span>昨收<b>${fmt(q.prev)}</b></span><span>量<b>${fmt(q.volume, 0)}</b></span>` +
+      `<span>${q.realtime ? '<span class="rtflag"><i></i>LIVE ' + esc(q.time || '') + '</span>' : '<b style="margin:0;color:var(--text-dim)">' + esc(q.date || '') + '</b>'}</span>`;
     if (q.realtime) quoteTimer = setTimeout(loadQuote, 20000);
   } catch (e) {
-    $('#title').textContent = code;
+    $('#title').innerHTML = `<div class="code">${esc(code)}</div><div class="name">-</div>`;
   }
 }
 
@@ -397,19 +436,19 @@ async function loadQuote() {
 function navIndex() { return nav ? nav.list.findIndex(x => x[0] === code) : -1; }
 function renderNav() {
   if (!nav || navIndex() < 0) {
-    nav = {label: '自選股', list: WATCH.map(c => [c, c])};
+    nav = {label: '自選股', list: WATCH_NAMES.length ? WATCH_NAMES : WATCH.map(c => [c, c])};
     if (navIndex() < 0) nav.list.unshift([code, code]);
   }
   const ix = navIndex();
   $('#pos').textContent = `${ix + 1} / ${nav.list.length}`;
-  $('#listLabel').textContent = `${nav.label}（${nav.list.length}）`;
+  $('#listLabel').textContent = nav.label; $('#listCount').textContent = nav.list.length;
   $('#prev').disabled = ix <= 0; $('#next').disabled = ix >= nav.list.length - 1;
   const wset = new Set(WATCH);
-  $('#star').textContent = wset.has(code) ? '★' : '☆'; $('#star').classList.toggle('on', wset.has(code));
+  $('#star').innerHTML = `<svg viewBox="0 0 24 24" fill="${wset.has(code) ? 'currentColor' : 'none'}" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M12 3l2.8 5.7 6.2.9-4.5 4.4 1 6.2L12 17.3 6.5 20.2l1-6.2L3 9.6l6.2-.9z"/></svg>`; $('#star').classList.toggle('on', wset.has(code));
   const sl = $('#sideList');
   if (sl.dataset.key !== nav.label + nav.list.length) {
     sl.dataset.key = nav.label + nav.list.length;
-    sl.innerHTML = nav.list.map(([c, n]) => `<div class="side-item" data-c="${esc(c)}"><span><span class="c">${esc(c)}</span>${esc(n)}</span></div>`).join('');
+    sl.innerHTML = nav.list.map(([c, n]) => `<div class="side-item" data-c="${esc(c)}"><span class="c">${esc(c)}</span><span class="n">${esc(n)}</span></div>`).join('');
   }
   sl.querySelectorAll('.side-item.cur').forEach(e => e.classList.remove('cur'));
   const cur = sl.querySelector(`[data-c="${CSS.escape(code)}"]`);
@@ -457,7 +496,7 @@ function renderTools() {
   document.querySelectorAll('[data-period]').forEach(b => b.classList.toggle('on', b.dataset.period === cfg.period));
   document.querySelectorAll('[data-wheel]').forEach(b => b.classList.toggle('on', b.dataset.wheel === cfg.wheel));
   $('#maToggles').innerHTML = '<b>均線</b>' + MAS.map(([n, c]) => `<span class="tg${cfg.ma.includes(n) ? ' on' : ''}" data-ma="${n}"><i style="background:${c}"></i>MA${n}</span>`).join('');
-  $('#mainToggles').innerHTML = `<span class="tg${cfg.boll ? ' on' : ''}" data-flag="boll"><i style="background:#8fa3bf"></i>布林</span>` +
+  $('#mainToggles').innerHTML = `<span class="tg${cfg.boll ? ' on' : ''}" data-flag="boll"><i style="background:var(--text-dim)"></i>布林</span>` +
     `<span class="tg${cfg.signals ? ' on' : ''}" data-flag="signals" title="在日 K 上標示：法人持股穿越均線且 KD 同日交叉">選股訊號</span>`;
   $('#paneToggles').innerHTML = '<b>副圖</b>' + PANES.map(([k, l]) => `<span class="tg${cfg.panes.includes(k) ? ' on' : ''}" data-pane="${k}">${HOLD_COLOR[k] ? `<i style="background:${HOLD_COLOR[k]}"></i>` : ''}${l}</span>`).join('');
   $('#holdN').value = cfg.holdN;
@@ -478,9 +517,11 @@ $('#holdN').onchange = e => {
   if (DATA) { cfg._keepRange = true; build(); }
 };
 
+window.addEventListener('themechange', () => { themeColors(); renderTools(); if (DATA) { cfg._keepRange = true; build(); } });
+
 (async () => {
   renderTools();
-  try { WATCH = await api('/api/tw/board/watchlist'); } catch (e) {}
+  try { WATCH = await api('/api/tw/board/watchlist'); WATCH_NAMES = await api('/api/tw/board/watchlist?names=1'); } catch (e) {}
   load();
 })();
 </script>

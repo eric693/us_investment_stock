@@ -6,11 +6,12 @@
 <title>台股投資分析儀表板</title>
 <script src="https://cdn.plot.ly/plotly-2.26.0.min.js"></script>
 <script src="https://s3.tradingview.com/tv.js"></script>
-<link rel="stylesheet" href="/static/css/style.css">
+<link rel="stylesheet" href="/static/css/style.css?v=3">
+{% include "_head.html" %}
 <style>
 /* ── ETF Panel ─────────────────────────────────────────────────── */
 .etf-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(160px,1fr)); gap:10px; }
-.etf-stat { background:#060c18; border:1px solid var(--card-bd); border-radius:7px; padding:10px 14px; display:flex; flex-direction:column; gap:4px; }
+.etf-stat { background:var(--surface-1); border:1px solid var(--card-bd); border-radius:7px; padding:10px 14px; display:flex; flex-direction:column; gap:4px; }
 .etf-label { font-size:0.72rem; color:var(--text-dim); }
 .etf-value { font-size:0.96rem; font-weight:700; color:var(--text); }
 .etf-badge { display:inline-block; padding:2px 10px; border-radius:12px; font-size:0.7rem; font-weight:800; letter-spacing:0.4px; margin-bottom:8px; }
@@ -24,37 +25,37 @@
 .etf-tab-panel.active { display:block; }
 /* ETF overview top row */
 .etf-top-row { display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-bottom:14px; }
-.etf-nav-box { background:#060c18; border:1px solid var(--card-bd); border-radius:8px; padding:12px 16px; }
+.etf-nav-box { background:var(--surface-1); border:1px solid var(--card-bd); border-radius:8px; padding:12px 16px; }
 .etf-nav-title { font-size:0.7rem; color:var(--text-dim); margin-bottom:6px; font-weight:700; letter-spacing:.5px; }
 .etf-nav-val { font-size:1.3rem; font-weight:800; color:var(--text); }
 .etf-nav-sub { font-size:0.72rem; color:var(--text-dim); margin-top:3px; }
 .etf-pd-badge { display:inline-block; padding:2px 8px; border-radius:5px; font-size:0.72rem; font-weight:800; margin-left:6px; }
 .etf-pd-pos { background:rgba(232,70,70,.12); color:#e84646; }
 .etf-pd-neg { background:rgba(0,214,143,.12); color:#00d68f; }
-.etf-pd-neu { background:rgba(100,130,160,.1); color:#8aaabf; }
+.etf-pd-neu { background:rgba(100,130,160,.1); color:var(--text-mid); }
 /* Dividend history */
 .div-freq-badge { display:inline-block; padding:3px 12px; border-radius:12px; font-size:0.75rem; font-weight:800; margin-bottom:10px; }
 .div-freq-monthly { background:rgba(0,214,143,.12); color:#00d68f; border:1px solid rgba(0,214,143,.2); }
 .div-freq-quarterly { background:rgba(61,142,248,.12); color:#3d8ef8; border:1px solid rgba(61,142,248,.2); }
 .div-freq-semi { background:rgba(240,180,41,.12); color:#f0b429; border:1px solid rgba(240,180,41,.2); }
 .div-freq-annual { background:rgba(160,100,240,.12); color:#a064f0; border:1px solid rgba(160,100,240,.2); }
-.div-freq-unknown { background:rgba(100,130,160,.1); color:#8aaabf; }
+.div-freq-unknown { background:rgba(100,130,160,.1); color:var(--text-mid); }
 .div-history-table { width:100%; border-collapse:collapse; font-size:0.8rem; }
 .div-history-table th { color:var(--text-dim); font-weight:600; font-size:0.7rem; padding:4px 8px; text-align:left; border-bottom:1px solid var(--card-bd); }
-.div-history-table td { padding:5px 8px; border-bottom:1px solid rgba(255,255,255,.04); }
+.div-history-table td { padding:5px 8px; border-bottom:1px solid var(--overlay-1); }
 .div-bar-cell { width:120px; }
 .div-bar { height:5px; border-radius:3px; background:var(--accent); opacity:.8; }
 .div-no-data { color:var(--text-dim); font-size:0.82rem; padding:16px 0; text-align:center; }
 /* Holdings */
-.holding-row { display:flex; align-items:center; gap:8px; padding:5px 0; border-bottom:1px solid rgba(255,255,255,.04); }
+.holding-row { display:flex; align-items:center; gap:8px; padding:5px 0; border-bottom:1px solid var(--overlay-1); }
 .holding-rank { width:18px; font-size:0.68rem; color:var(--text-dim); flex-shrink:0; }
 .holding-name { flex:1; font-size:0.78rem; color:var(--text-mid); min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 .holding-pct-bar { width:80px; flex-shrink:0; }
-.holding-pct-track { height:4px; background:rgba(255,255,255,.06); border-radius:2px; }
+.holding-pct-track { height:4px; background:var(--overlay-2); border-radius:2px; }
 .holding-pct-fill  { height:4px; background:var(--accent); border-radius:2px; }
 .holding-pct-val { font-size:0.76rem; font-weight:700; color:var(--accent); min-width:38px; text-align:right; flex-shrink:0; }
 /* ETF strategy box */
-.etf-strategy-box { background:#060c18; border:1px solid var(--card-bd); border-radius:8px; padding:14px 16px; margin-top:12px; }
+.etf-strategy-box { background:var(--surface-1); border:1px solid var(--card-bd); border-radius:8px; padding:14px 16px; margin-top:12px; }
 .etf-strategy-title { font-size:0.72rem; color:var(--text-dim); font-weight:700; letter-spacing:.5px; margin-bottom:8px; }
 .etf-strategy-text { font-size:0.82rem; color:var(--text-mid); line-height:1.7; }
 /* Auto-refresh indicator */
@@ -72,7 +73,7 @@
 .mode-btn:hover:not(.active) { border-color:var(--text-mid); color:var(--text-mid); }
 .profile-select-wrap { display:flex; gap:8px; align-items:center; animation:fadeIn .25s; }
 @keyframes fadeIn { from{opacity:0;transform:translateY(-4px)} to{opacity:1;transform:translateY(0)} }
-.profile-btn { display:flex; align-items:center; gap:6px; padding:7px 18px; font-size:0.82rem; font-weight:800; border-radius:8px; border:2px solid transparent; cursor:pointer; transition:all .2s; background:rgba(255,255,255,.04); color:var(--text-dim); }
+.profile-btn { display:flex; align-items:center; gap:6px; padding:7px 18px; font-size:0.82rem; font-weight:800; border-radius:8px; border:2px solid transparent; cursor:pointer; transition:all .2s; background:var(--overlay-1); color:var(--text-dim); }
 .profile-btn.aggressive { border-color:rgba(232,70,70,.25); }
 .profile-btn.aggressive.active { background:rgba(232,70,70,.15); color:#e84646; border-color:#e84646; box-shadow:0 0 12px rgba(232,70,70,.2); }
 .profile-btn.steady     { border-color:rgba(61,142,248,.25); }
@@ -84,7 +85,7 @@
 .scan-btn.scanning { animation:pulse 1s infinite; }
 @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.6} }
 /* Signal card */
-.signal-card { border-radius:10px; padding:18px 20px; border:1px solid var(--card-bd); background:#060c18; margin-top:4px; }
+.signal-card { border-radius:10px; padding:18px 20px; border:1px solid var(--card-bd); background:var(--surface-1); margin-top:4px; }
 .signal-card.sig-buy    { border-color:rgba(0,214,143,.3); background:rgba(0,214,143,.04); }
 .signal-card.sig-watch  { border-color:rgba(240,180,41,.3); background:rgba(240,180,41,.04); }
 .signal-card.sig-wait   { border-color:rgba(100,130,160,.2); }
@@ -99,13 +100,13 @@
 .sig-conf-badge { padding:2px 10px; border-radius:10px; font-size:0.7rem; font-weight:800; }
 .sig-conf-hi  { background:rgba(0,214,143,.15); color:#00d68f; }
 .sig-conf-mid { background:rgba(240,180,41,.15); color:#f0b429; }
-.sig-conf-lo  { background:rgba(100,130,160,.1);  color:#8aaabf; }
-.sig-conf-na  { background:rgba(100,130,160,.1);  color:#8aaabf; }
-.sig-tf-badge { padding:2px 8px; border-radius:5px; font-size:0.7rem; background:rgba(255,255,255,.06); color:var(--text-dim); }
+.sig-conf-lo  { background:rgba(100,130,160,.1);  color:var(--text-mid); }
+.sig-conf-na  { background:rgba(100,130,160,.1);  color:var(--text-mid); }
+.sig-tf-badge { padding:2px 8px; border-radius:5px; font-size:0.7rem; background:var(--overlay-2); color:var(--text-dim); }
 .sig-time { font-size:0.7rem; color:var(--text-dim); margin-left:auto; }
-.sig-reason { font-size:0.84rem; color:var(--text-mid); line-height:1.7; margin-bottom:12px; padding:10px 14px; background:rgba(255,255,255,.03); border-radius:7px; border-left:3px solid rgba(61,142,248,.4); }
+.sig-reason { font-size:0.84rem; color:var(--text-mid); line-height:1.7; margin-bottom:12px; padding:10px 14px; background:var(--overlay-1); border-radius:7px; border-left:3px solid rgba(61,142,248,.4); }
 .sig-details-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(140px,1fr)); gap:8px; margin-bottom:12px; }
-.sig-detail-item { background:rgba(255,255,255,.04); border-radius:6px; padding:7px 10px; }
+.sig-detail-item { background:var(--overlay-1); border-radius:6px; padding:7px 10px; }
 .sig-detail-label { font-size:0.67rem; color:var(--text-dim); margin-bottom:3px; }
 .sig-detail-val { font-size:0.84rem; font-weight:700; color:var(--text); }
 .sig-stop { display:flex; align-items:center; gap:8px; padding:8px 14px; background:rgba(232,70,70,.06); border:1px solid rgba(232,70,70,.15); border-radius:7px; font-size:0.78rem; color:var(--text-mid); margin-bottom:10px; }
@@ -113,15 +114,15 @@
 .sig-actions { display:flex; gap:8px; flex-wrap:wrap; }
 .sig-line-btn { padding:6px 16px; font-size:0.76rem; font-weight:700; background:rgba(0,214,143,.1); border:1px solid rgba(0,214,143,.3); border-radius:6px; color:#00d68f; cursor:pointer; transition:all .15s; }
 .sig-line-btn:hover { background:rgba(0,214,143,.2); }
-.sig-auto-badge { padding:5px 12px; font-size:0.72rem; color:var(--text-dim); background:rgba(255,255,255,.04); border-radius:6px; display:flex; align-items:center; gap:5px; }
+.sig-auto-badge { padding:5px 12px; font-size:0.72rem; color:var(--text-dim); background:var(--overlay-1); border-radius:6px; display:flex; align-items:center; gap:5px; }
 /* Position tracking */
-.pos-input { width:100px; padding:5px 8px; background:#0c1220; border:1px solid var(--border); border-radius:5px; color:var(--text); font-size:0.78rem; }
+.pos-input { width:100px; padding:5px 8px; background:var(--surface-1); border:1px solid var(--border); border-radius:5px; color:var(--text); font-size:0.78rem; }
 .pos-input:focus { outline:none; border-color:var(--accent); }
 .pos-save-btn { padding:5px 12px; background:rgba(88,166,255,.15); border:1px solid rgba(88,166,255,.3); color:var(--accent); border-radius:5px; font-size:0.75rem; cursor:pointer; white-space:nowrap; }
 .pos-save-btn:hover { background:rgba(88,166,255,.25); }
-.pnl-strip { display:flex; border:1px solid rgba(255,255,255,.08); border-radius:8px; overflow:hidden; margin:10px 0 6px; }
+.pnl-strip { display:flex; border:1px solid var(--overlay-2); border-radius:8px; overflow:hidden; margin:10px 0 6px; }
 .pnl-cell { flex:1; padding:8px 6px; text-align:center; }
-.pnl-cell:not(:last-child) { border-right:1px solid rgba(255,255,255,.06); }
+.pnl-cell:not(:last-child) { border-right:1px solid var(--overlay-2); }
 .pnl-cell-label { font-size:0.62rem; color:var(--text-dim); margin-bottom:3px; letter-spacing:.3px; }
 .pnl-cell-val { font-size:0.78rem; font-weight:700; color:var(--text); }
 .pnl-pos { color:var(--green) !important; }
@@ -129,10 +130,10 @@
 .pos-context { font-size:0.76rem; padding:7px 12px; background:rgba(88,166,255,.07); border-radius:6px; color:var(--text-mid); margin-bottom:8px; line-height:1.5; }
 
 /* LINE settings */
-.line-settings-box { background:#060c18; border:1px solid var(--card-bd); border-radius:8px; padding:12px 14px; }
+.line-settings-box { background:var(--surface-1); border:1px solid var(--card-bd); border-radius:8px; padding:12px 14px; }
 .line-settings-title { font-size:0.72rem; color:var(--text-dim); font-weight:700; margin-bottom:8px; letter-spacing:.4px; }
 .line-token-row { display:flex; gap:8px; align-items:center; }
-.line-token-input { flex:1; padding:6px 10px; background:#0c1220; border:1px solid var(--border); border-radius:5px; color:var(--text); font-size:0.78rem; }
+.line-token-input { flex:1; padding:6px 10px; background:var(--surface-1); border:1px solid var(--border); border-radius:5px; color:var(--text); font-size:0.78rem; }
 .line-token-input:focus { outline:none; border-color:var(--accent); }
 .line-save-btn { padding:6px 14px; background:var(--accent); border:none; border-radius:5px; color:#fff; font-size:0.76rem; font-weight:700; cursor:pointer; white-space:nowrap; }
 .line-save-btn:hover { filter:brightness(1.15); }
@@ -144,10 +145,10 @@
 .tv-sym { font-size:0.78rem; color:var(--accent); font-weight:700; background:rgba(61,142,248,.1); padding:3px 10px; border-radius:5px; }
 .tv-tf-tabs { display:flex; gap:2px; margin-left:auto; }
 .tv-tf-btn { padding:4px 10px; font-size:0.74rem; font-weight:700; color:var(--text-dim); background:transparent; border:1px solid transparent; border-radius:5px; cursor:pointer; transition:all .15s; }
-.tv-tf-btn.active, .tv-tf-btn:hover { color:var(--text); background:rgba(255,255,255,.07); border-color:var(--border); }
+.tv-tf-btn.active, .tv-tf-btn:hover { color:var(--text); background:var(--overlay-2); border-color:var(--border); }
 .tv-tf-btn.active { color:var(--accent); border-color:rgba(61,142,248,.3); }
 .tv-indicator-row { padding:8px 16px; background:var(--card-bg); border-bottom:1px solid var(--card-bd); display:flex; gap:8px; flex-wrap:wrap; align-items:center; }
-.tv-ind-badge { padding:3px 10px; font-size:0.7rem; font-weight:700; color:var(--text-dim); background:rgba(255,255,255,.04); border:1px solid var(--border); border-radius:5px; cursor:pointer; transition:all .15s; }
+.tv-ind-badge { padding:3px 10px; font-size:0.7rem; font-weight:700; color:var(--text-dim); background:var(--overlay-1); border:1px solid var(--border); border-radius:5px; cursor:pointer; transition:all .15s; }
 .tv-ind-badge.active { color:var(--accent); background:rgba(61,142,248,.1); border-color:rgba(61,142,248,.3); }
 .tv-ind-badge:hover { color:var(--text); border-color:var(--text-dim); }
 .tv-ind-label { font-size:0.7rem; color:var(--text-dim); margin-right:4px; }
@@ -165,7 +166,7 @@
 .ma-cfg-item { display:flex; align-items:center; gap:8px; }
 .ma-cfg-dot { width:10px; height:10px; border-radius:50%; flex-shrink:0; }
 .ma-cfg-item label { font-size:0.75rem; color:var(--text-mid); min-width:28px; }
-.ma-cfg-item input { width:60px; padding:3px 6px; background:#060c18; border:1px solid var(--border); border-radius:5px; color:var(--text); font-size:0.8rem; text-align:center; }
+.ma-cfg-item input { width:60px; padding:3px 6px; background:var(--surface-1); border:1px solid var(--border); border-radius:5px; color:var(--text); font-size:0.8rem; text-align:center; }
 .ma-cfg-item input:focus { outline:none; border-color:var(--accent); }
 .ma-cfg-actions { display:flex; gap:6px; margin-top:12px; }
 .ma-cfg-apply { flex:1; padding:5px; background:var(--accent); border:none; border-radius:5px; color:#fff; font-size:0.75rem; font-weight:700; cursor:pointer; }
@@ -184,7 +185,7 @@
 .wc-skeleton .wc-name, .wc-skeleton .wc-desc { opacity:.5; }
 /* ── Broker Chips ──────────────────────────────────────────── */
 .bc-agg-row { display:flex; flex-wrap:wrap; gap:8px; margin-bottom:14px; }
-.bc-agg-pill { display:flex; flex-direction:column; gap:3px; background:#060c18; border:1px solid var(--border); border-radius:8px; padding:8px 16px; flex:1; min-width:80px; }
+.bc-agg-pill { display:flex; flex-direction:column; gap:3px; background:var(--surface-1); border:1px solid var(--border); border-radius:8px; padding:8px 16px; flex:1; min-width:80px; }
 .bc-agg-pill.total { border-color:rgba(61,142,248,.3); }
 .bc-agg-label { font-size:0.68rem; color:var(--text-dim); font-weight:600; letter-spacing:.3px; }
 .bc-agg-val { font-size:0.9rem; font-weight:800; }
@@ -193,7 +194,7 @@
 .bc-table-wrap { overflow-x:auto; margin-bottom:14px; }
 .bc-table { width:100%; border-collapse:collapse; font-size:0.78rem; }
 .bc-table th { color:var(--text-dim); font-size:0.68rem; font-weight:700; text-align:left; padding:4px 8px; border-bottom:1px solid var(--border); white-space:nowrap; }
-.bc-table td { padding:6px 8px; border-bottom:1px solid #0e1828; vertical-align:middle; }
+.bc-table td { padding:6px 8px; border-bottom:1px solid var(--surface-2); vertical-align:middle; }
 .bc-td-date { color:var(--text-dim); white-space:nowrap; font-size:0.75rem; min-width:44px; }
 .bc-bar-wrap { display:flex; align-items:center; gap:6px; }
 .bc-bar { height:5px; border-radius:3px; min-width:2px; flex-shrink:0; }
@@ -209,12 +210,12 @@
 .bc-link { font-size:0.72rem; padding:4px 12px; border-radius:6px; text-decoration:none; border:1px solid var(--border); color:var(--text-dim); transition:all .15s; }
 .bc-link:hover { border-color:var(--accent); color:var(--accent); }
 .bc-no-data { font-size:0.82rem; color:var(--text-dim); padding:16px 0; text-align:center; line-height:1.7; }
-.bc-tip { font-size:0.72rem; color:var(--text-dim); margin-top:0; line-height:1.6; background:#060c18; border:1px solid var(--border); border-radius:7px; padding:10px 14px; }
+.bc-tip { font-size:0.72rem; color:var(--text-dim); margin-top:0; line-height:1.6; background:var(--surface-1); border:1px solid var(--border); border-radius:7px; padding:10px 14px; }
 .bc-tip strong { color:var(--text-mid); }
 .bc-header { display:flex; justify-content:space-between; align-items:center; margin-bottom:10px; }
 .bc-date-range { font-size:0.7rem; color:var(--text-dim); }
 /* ── Mobile Bottom Nav ────────────────────────────────────────── */
-.mobile-nav { display:none; position:fixed; bottom:0; left:0; right:0; height:58px; background:#0c1220; border-top:1px solid #1a2a3a; z-index:1000; }
+.mobile-nav { display:none; position:fixed; bottom:0; left:0; right:0; height:58px; background:var(--surface-1); border-top:1px solid var(--card-bd); z-index:1000; }
 .mnav-btn { flex:1; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:2px; background:none; border:none; color:var(--text-dim); font-size:0.62rem; cursor:pointer; padding:4px 0; transition:color .15s; }
 .mnav-btn.active { color:var(--accent); }
 .mnav-icon { font-size:0.85rem; font-weight:700; }
@@ -229,12 +230,8 @@
 <body>
 
 <!-- Navigation -->
+{% include "_appbar.html" %}
 <nav class="topnav">
-  <div class="brand">TW<span>STOCK</span></div>
-  <a class="market-switch" href="/">美股</a>
-  <a class="market-switch" href="/tw/board" style="background:rgba(0,214,143,.1);color:var(--green);border-color:rgba(0,214,143,.3);">台股看盤</a>
-  <a class="market-switch" href="/portfolio" style="background:rgba(159,106,235,.15);color:#9f6aeb;border-color:rgba(159,106,235,.3);">投資組合</a>
-  <a class="market-switch" href="/screener" style="background:rgba(240,180,41,.1);color:var(--gold);border-color:rgba(240,180,41,.25);">策略選股</a>
   <div class="search-wrap">
     <input id="tickerInput" type="text" placeholder="輸入股票代碼 (2330, 0050, 2454...)" autocomplete="off" spellcheck="false">
     <button onclick="searchStock()">查詢</button>
@@ -450,7 +447,7 @@
         <button class="scan-btn" id="scanBtn" onclick="manualScan()">立即掃描</button>
       </div>
       <!-- Row 3: Profile desc -->
-      <div id="profileDesc" class="hidden" style="font-size:0.78rem;color:var(--text-dim);padding:6px 14px;background:rgba(255,255,255,.03);border-radius:6px;line-height:1.6"></div>
+      <div id="profileDesc" class="hidden" style="font-size:0.78rem;color:var(--text-dim);padding:6px 14px;background:var(--overlay-1);border-radius:6px;line-height:1.6"></div>
       <!-- Row 4: Signal Card -->
       <div id="signalCard" class="hidden"></div>
       <!-- Row 5: LINE Settings -->
@@ -1625,10 +1622,10 @@ function _buildTVWidget() {
     symbol:          _tvSymbol,
     interval:        _tvInterval,
     timezone:        'Asia/Taipei',
-    theme:           'dark',
+    theme:           (window.Theme ? Theme.mode() : 'dark'),
     style:           '1',
     locale:          'zh_TW',
-    toolbar_bg:      '#0c1220',
+    toolbar_bg:      Theme.resolve('var(--surface-1)'),
     enable_publishing: false,
     withdateranges:  true,
     hide_side_toolbar: false,
@@ -1636,19 +1633,19 @@ function _buildTVWidget() {
     save_image:      false,
     container_id:    'tvChartContainer',
     studies:         [..._tvStudies],
-    overrides: {
-      'paneProperties.background':         '#0c1220',
+    overrides: Theme.resolveDeep({
+      'paneProperties.background':         'var(--surface-1)',
       'paneProperties.backgroundType':     'solid',
-      'paneProperties.vertGridProperties.color': '#121e30',
-      'paneProperties.horzGridProperties.color': '#121e30',
-      'scalesProperties.textColor':        '#6888a0',
+      'paneProperties.vertGridProperties.color': 'var(--card-bd)',
+      'paneProperties.horzGridProperties.color': 'var(--card-bd)',
+      'scalesProperties.textColor':        'var(--text-mid)',
       'mainSeriesProperties.candleStyle.upColor':          '#e84646',
       'mainSeriesProperties.candleStyle.downColor':        '#00d68f',
       'mainSeriesProperties.candleStyle.borderUpColor':    '#e84646',
       'mainSeriesProperties.candleStyle.borderDownColor':  '#00d68f',
       'mainSeriesProperties.candleStyle.wickUpColor':      '#e84646',
       'mainSeriesProperties.candleStyle.wickDownColor':    '#00d68f',
-    },
+    }),
   });
 }
 
@@ -1693,7 +1690,7 @@ function renderETF(d) {
     <div style="margin-bottom:12px;display:flex;align-items:center;flex-wrap:wrap;gap:8px">
       <span class="etf-badge etf-type">ETF</span>
       ${e.fundFamily ? `<span style="font-size:0.78rem;color:var(--text-dim)">${e.fundFamily}</span>` : ''}
-      ${e.category   ? `<span style="font-size:0.78rem;color:var(--text-mid);background:rgba(255,255,255,.05);padding:2px 8px;border-radius:5px">${e.category}</span>` : ''}
+      ${e.category   ? `<span style="font-size:0.78rem;color:var(--text-mid);background:var(--overlay-1);padding:2px 8px;border-radius:5px">${e.category}</span>` : ''}
     </div>
     <div id="etfNavRow" style="margin-bottom:14px"><div class="etf-nav-title">淨值資訊</div><div style="color:var(--text-dim);font-size:0.78rem">載入中...</div></div>
     <div class="etf-grid">
@@ -2016,16 +2013,16 @@ function renderIndicatorBar(d) {
 
 // ── Intraday 1D Chart ───────────────────────────────────────────────
 async function renderIntraday(ticker) {
-  const BG = '#0c1220', GRID = '#121e30';
+  const BG = 'var(--surface-1)', GRID = 'var(--card-bd)';
   Plotly.newPlot('priceChart', [], {paper_bgcolor:BG,plot_bgcolor:BG,margin:{l:60,r:8,t:24,b:4},
-    annotations:[{xref:'paper',yref:'paper',x:.5,y:.5,text:'盤中資料載入中...',showarrow:false,font:{color:'#6888a0',size:13}}]},
+    annotations:[{xref:'paper',yref:'paper',x:.5,y:.5,text:'盤中資料載入中...',showarrow:false,font:{color:'var(--text-mid)',size:13}}]},
     {responsive:true,displayModeBar:false});
   try {
     const r = await fetch('/api/tw/intraday/' + encodeURIComponent(ticker));
     const d = await r.json();
     if (d.error) {
       Plotly.newPlot('priceChart', [], {paper_bgcolor:BG,plot_bgcolor:BG,margin:{l:60,r:8,t:24,b:4},
-        annotations:[{xref:'paper',yref:'paper',x:.5,y:.5,text:d.error,showarrow:false,font:{color:'#6888a0',size:12}}]},
+        annotations:[{xref:'paper',yref:'paper',x:.5,y:.5,text:d.error,showarrow:false,font:{color:'var(--text-mid)',size:12}}]},
         {responsive:true,displayModeBar:false});
       return;
     }
@@ -2051,28 +2048,28 @@ async function renderIntraday(ticker) {
       {type:'scatter',mode:'lines',x:dates,y:ma5, name:'MA5',  line:{color:'#ffa000',width:1.2},connectgaps:false},
       {type:'scatter',mode:'lines',x:dates,y:ma20,name:'MA20', line:{color:'#d94fff',width:1.2},connectgaps:false},
     ], {
-      paper_bgcolor:BG,plot_bgcolor:BG,font:{color:'#6888a0',size:11},showlegend:true,
-      legend:{orientation:'h',x:0,y:1.06,bgcolor:'rgba(0,0,0,0)',font:{size:10,color:'#8aaabf'}},
+      paper_bgcolor:BG,plot_bgcolor:BG,font:{color:'var(--text-mid)',size:11},showlegend:true,
+      legend:{orientation:'h',x:0,y:1.06,bgcolor:'rgba(0,0,0,0)',font:{size:10,color:'var(--text-mid)'}},
       margin:{l:60,r:8,t:24,b:4},
-      yaxis:{gridcolor:GRID,zerolinecolor:GRID,tickfont:{color:'#6888a0'},side:'left',autorange:true},
+      yaxis:{gridcolor:GRID,zerolinecolor:GRID,tickfont:{color:'var(--text-mid)'},side:'left',autorange:true},
       xaxis:{rangeslider:{visible:false},gridcolor:GRID,showticklabels:false},
       hovermode:'x unified',
     },{responsive:true,displayModeBar:false});
     Plotly.newPlot('volumeChart', [
       {type:'bar',x:dates,y:o.volume,name:'成交量',marker:{color:volColors},showlegend:false},
     ], {
-      paper_bgcolor:BG,plot_bgcolor:BG,font:{color:'#6888a0',size:9},
+      paper_bgcolor:BG,plot_bgcolor:BG,font:{color:'var(--text-mid)',size:9},
       margin:{l:60,r:8,t:2,b:22},
-      yaxis:{gridcolor:GRID,tickfont:{color:'#6888a0',size:9},tickformat:'.2s'},
-      xaxis:{rangeslider:{visible:false},gridcolor:GRID,tickfont:{color:'#6888a0'}},
+      yaxis:{gridcolor:GRID,tickfont:{color:'var(--text-mid)',size:9},tickformat:'.2s'},
+      xaxis:{rangeslider:{visible:false},gridcolor:GRID,tickfont:{color:'var(--text-mid)'}},
       hovermode:'x unified',
     },{responsive:true,displayModeBar:false});
     // Clear MACD/RSI in 1D mode — not meaningful for 5min bars without recalculation
     Plotly.newPlot('macdChart',[],{paper_bgcolor:BG,plot_bgcolor:BG,margin:{l:60,r:8,t:8,b:22},
-      annotations:[{xref:'paper',yref:'paper',x:.5,y:.5,text:'MACD 在日線以上週期更有意義',showarrow:false,font:{color:'#6888a0',size:11}}]},
+      annotations:[{xref:'paper',yref:'paper',x:.5,y:.5,text:'MACD 在日線以上週期更有意義',showarrow:false,font:{color:'var(--text-mid)',size:11}}]},
       {responsive:true,displayModeBar:false});
     Plotly.newPlot('rsiChart',[],{paper_bgcolor:BG,plot_bgcolor:BG,margin:{l:60,r:8,t:4,b:28},
-      annotations:[{xref:'paper',yref:'paper',x:.5,y:.5,text:'切換至 1M+ 查看 RSI',showarrow:false,font:{color:'#6888a0',size:11}}]},
+      annotations:[{xref:'paper',yref:'paper',x:.5,y:.5,text:'切換至 1M+ 查看 RSI',showarrow:false,font:{color:'var(--text-mid)',size:11}}]},
       {responsive:true,displayModeBar:false});
     const last = o.close.filter(v=>v).at(-1), first = o.close.filter(v=>v)[0];
     setHTML('macdBar', `<span style="color:var(--text-dim);font-size:0.75rem">1D 5分鐘線 · VWAP 加權均價 · 共 ${dates.length} 根K棒</span>` +
@@ -2096,7 +2093,7 @@ function renderCharts(d) {
   );
 
   const dates = d.dates;
-  const BG = '#0c1220', GRID = '#121e30';
+  const BG = 'var(--surface-1)', GRID = 'var(--card-bd)';
   const volColors = d.ohlcv.close.map((c, i) =>
     i === 0 ? 'rgba(100,130,160,0.4)' :
     c >= d.ohlcv.close[i-1] ? 'rgba(232,70,70,0.5)' : 'rgba(0,214,143,0.5)'
@@ -2121,11 +2118,11 @@ function renderCharts(d) {
     { type:'scatter', mode:'lines', x:dates, y:ma2arr, name:`MA${maSettings.m2}`, line:{color:'#d94fff',width:1.5}, connectgaps:false },
     { type:'scatter', mode:'lines', x:dates, y:ma3arr, name:`MA${maSettings.m3}`, line:{color:'#36c6ff',width:1.5}, connectgaps:false },
   ], {
-    paper_bgcolor:BG, plot_bgcolor:BG, font:{color:'#6888a0',size:11},
+    paper_bgcolor:BG, plot_bgcolor:BG, font:{color:'var(--text-mid)',size:11},
     showlegend:true,
-    legend:{orientation:'h',x:0,y:1.06,bgcolor:'rgba(0,0,0,0)',font:{size:10,color:'#8aaabf'}},
+    legend:{orientation:'h',x:0,y:1.06,bgcolor:'rgba(0,0,0,0)',font:{size:10,color:'var(--text-mid)'}},
     margin:{l:60,r:8,t:24,b:4},
-    yaxis:{gridcolor:GRID,zerolinecolor:GRID,tickfont:{color:'#6888a0'},side:'left',autorange:true},
+    yaxis:{gridcolor:GRID,zerolinecolor:GRID,tickfont:{color:'var(--text-mid)'},side:'left',autorange:true},
     xaxis:{rangeslider:{visible:false},gridcolor:GRID,showticklabels:false},
     hovermode:'x unified',
   }, {responsive:true,displayModeBar:false});
@@ -2133,10 +2130,10 @@ function renderCharts(d) {
   Plotly.newPlot('volumeChart', [
     {type:'bar', x:dates, y:d.ohlcv.volume, name:'成交量', marker:{color:volColors}, showlegend:false},
   ], {
-    paper_bgcolor:BG, plot_bgcolor:BG, font:{color:'#6888a0',size:9},
+    paper_bgcolor:BG, plot_bgcolor:BG, font:{color:'var(--text-mid)',size:9},
     margin:{l:60,r:8,t:2,b:22},
-    yaxis:{gridcolor:GRID,tickfont:{color:'#6888a0',size:9},side:'left',tickformat:'.2s'},
-    xaxis:{rangeslider:{visible:false},gridcolor:GRID,tickfont:{color:'#6888a0'}},
+    yaxis:{gridcolor:GRID,tickfont:{color:'var(--text-mid)',size:9},side:'left',tickformat:'.2s'},
+    xaxis:{rangeslider:{visible:false},gridcolor:GRID,tickfont:{color:'var(--text-mid)'}},
     hovermode:'x unified',
   }, {responsive:true,displayModeBar:false});
 
@@ -2153,12 +2150,12 @@ function renderCharts(d) {
     {type:'scatter', mode:'lines', x:dates, y:d.macd.dif, name:'DIF', line:{color:'#3d8ef8',width:1.5}, connectgaps:false},
     {type:'scatter', mode:'lines', x:dates, y:d.macd.dea, name:'DEA', line:{color:'#e8a020',width:1.5}, connectgaps:false},
   ], {
-    paper_bgcolor:BG, plot_bgcolor:BG, font:{color:'#6888a0',size:10},
+    paper_bgcolor:BG, plot_bgcolor:BG, font:{color:'var(--text-mid)',size:10},
     showlegend:true,
-    legend:{orientation:'h',x:0,y:1.18,bgcolor:'rgba(0,0,0,0)',font:{size:10,color:'#8aaabf'}},
+    legend:{orientation:'h',x:0,y:1.18,bgcolor:'rgba(0,0,0,0)',font:{size:10,color:'var(--text-mid)'}},
     margin:{l:60,r:8,t:8,b:22},
-    yaxis:{gridcolor:GRID,zerolinecolor:'#1e3050',tickfont:{color:'#6888a0'},side:'left'},
-    xaxis:{rangeslider:{visible:false},gridcolor:GRID,tickfont:{color:'#6888a0'}},
+    yaxis:{gridcolor:GRID,zerolinecolor:'var(--card-bd2)',tickfont:{color:'var(--text-mid)'},side:'left'},
+    xaxis:{rangeslider:{visible:false},gridcolor:GRID,tickfont:{color:'var(--text-mid)'}},
     hovermode:'x unified',
   }, {responsive:true,displayModeBar:false});
 
@@ -2167,11 +2164,11 @@ function renderCharts(d) {
     {type:'scatter', mode:'lines', x:dates, y:Array(dates.length).fill(70), line:{color:'rgba(232,70,70,0.5)',width:1,dash:'dash'}, showlegend:false, hoverinfo:'skip'},
     {type:'scatter', mode:'lines', x:dates, y:Array(dates.length).fill(30), line:{color:'rgba(0,214,143,0.5)',width:1,dash:'dash'}, showlegend:false, hoverinfo:'skip'},
   ], {
-    paper_bgcolor:BG, plot_bgcolor:BG, font:{color:'#6888a0',size:10},
-    showlegend:true, legend:{x:0,y:1.18,bgcolor:'rgba(0,0,0,0)',font:{size:10,color:'#8aaabf'}},
+    paper_bgcolor:BG, plot_bgcolor:BG, font:{color:'var(--text-mid)',size:10},
+    showlegend:true, legend:{x:0,y:1.18,bgcolor:'rgba(0,0,0,0)',font:{size:10,color:'var(--text-mid)'}},
     margin:{l:60,r:8,t:4,b:28},
-    yaxis:{gridcolor:GRID,tickfont:{color:'#6888a0'},range:[0,100],tickvals:[0,30,50,70,100],side:'left'},
-    xaxis:{rangeslider:{visible:false},gridcolor:GRID,tickfont:{color:'#6888a0'}},
+    yaxis:{gridcolor:GRID,tickfont:{color:'var(--text-mid)'},range:[0,100],tickvals:[0,30,50,70,100],side:'left'},
+    xaxis:{rangeslider:{visible:false},gridcolor:GRID,tickfont:{color:'var(--text-mid)'}},
     hovermode:'x unified',
     shapes:[
       {type:'line',xref:'paper',x0:0,x1:1,yref:'y',y0:70,y1:70,line:{color:'rgba(232,70,70,0.25)',width:1}},
@@ -2687,18 +2684,18 @@ function renderCompareChart() {
   const norm1=c1.map(v=>v!=null?+((v/b1-1)*100).toFixed(2):null);
   const norm2=c2.map(v=>v!=null?+((v/b2-1)*100).toFixed(2):null);
   const d2dates=compareData.dates.slice(-Math.min(n,compareData.dates.length));
-  const BG='#0c1220', GRID='#121e30';
+  const BG='var(--surface-1)', GRID='var(--card-bd)';
   const d1name = displayTW(currentData.ticker);
   const d2name = displayTW(compareData.ticker);
   Plotly.newPlot('compareChart',[
     {type:'scatter',mode:'lines',x:dates,y:norm1,name:d1name,line:{color:'#3d8ef8',width:2},connectgaps:false},
     {type:'scatter',mode:'lines',x:d2dates,y:norm2,name:d2name,line:{color:'#f0b429',width:2},connectgaps:false},
   ], {
-    paper_bgcolor:BG, plot_bgcolor:BG, font:{color:'#6888a0',size:11}, showlegend:true,
-    legend:{orientation:'h',x:0,y:1.12,bgcolor:'rgba(0,0,0,0)',font:{size:11,color:'#8aaabf'}},
+    paper_bgcolor:BG, plot_bgcolor:BG, font:{color:'var(--text-mid)',size:11}, showlegend:true,
+    legend:{orientation:'h',x:0,y:1.12,bgcolor:'rgba(0,0,0,0)',font:{size:11,color:'var(--text-mid)'}},
     margin:{l:60,r:8,t:28,b:30},
-    yaxis:{gridcolor:GRID,tickfont:{color:'#6888a0'},tickformat:'+.1f',ticksuffix:'%',side:'left',zeroline:true,zerolinecolor:'#1e3050'},
-    xaxis:{gridcolor:GRID,tickfont:{color:'#6888a0'},rangeslider:{visible:false}},
+    yaxis:{gridcolor:GRID,tickfont:{color:'var(--text-mid)'},tickformat:'+.1f',ticksuffix:'%',side:'left',zeroline:true,zerolinecolor:'var(--card-bd2)'},
+    xaxis:{gridcolor:GRID,tickfont:{color:'var(--text-mid)'},rangeslider:{visible:false}},
     hovermode:'x unified',
   }, {responsive:true,displayModeBar:false});
 }
@@ -2774,7 +2771,7 @@ async function loadMargin(ticker) {
 
 function renderMargin(d) {
   const days = d.days;
-  const BG = '#0c1220', GRID = '#121e30';
+  const BG = 'var(--surface-1)', GRID = 'var(--card-bd)';
   const dates = days.map(x => x.date);
   const chartDiv = document.createElement('div');
   chartDiv.id = 'marginChart';
@@ -2787,10 +2784,10 @@ function renderMargin(d) {
     { type:'bar', name:'融資餘額(張)', x:dates, y:marginBals, marker:{color:'rgba(232,70,70,0.75)'}, yaxis:'y' },
     { type:'bar', name:'融券餘額(張)', x:dates, y:shortBals,  marker:{color:'rgba(0,214,143,0.75)'}, yaxis:'y2' },
   ], {
-    paper_bgcolor:BG, plot_bgcolor:BG, font:{color:'#6888a0', size:11}, barmode:'overlay',
-    legend:{orientation:'h', x:0, y:1.15, bgcolor:'rgba(0,0,0,0)', font:{size:11,color:'#8aaabf'}},
+    paper_bgcolor:BG, plot_bgcolor:BG, font:{color:'var(--text-mid)', size:11}, barmode:'overlay',
+    legend:{orientation:'h', x:0, y:1.15, bgcolor:'rgba(0,0,0,0)', font:{size:11,color:'var(--text-mid)'}},
     margin:{t:30, b:36, l:60, r:60},
-    xaxis:{gridcolor:GRID, tickfont:{color:'#8aaabf'}},
+    xaxis:{gridcolor:GRID, tickfont:{color:'var(--text-mid)'}},
     yaxis:{gridcolor:GRID, tickfont:{color:'#e84646',size:10}, side:'left', title:{text:'融資', font:{color:'#e84646',size:10}}},
     yaxis2:{gridcolor:'rgba(0,0,0,0)', tickfont:{color:'#00d68f',size:10}, side:'right', overlaying:'y', title:{text:'融券', font:{color:'#00d68f',size:10}}},
     hovermode:'x unified',
@@ -2799,7 +2796,7 @@ function renderMargin(d) {
   const chg = (arr, i) => i === 0 ? '' : (() => { const dv = arr[i]-arr[i-1]; const s = dv>=0?'+':''; const c = dv>0?'color:#e84646':dv<0?'color:#00d68f':''; return `<span style="${c}">${s}${fmtN(dv)}</span>`; })();
   const rows = days.map((day, i) => `
     <tr>
-      <td style="color:#8aaabf">${day.date}</td>
+      <td style="color:var(--text-mid)">${day.date}</td>
       <td style="text-align:right">${fmtN(day.marginBal)}</td>
       <td style="text-align:right;font-size:0.75rem">${chg(marginBals,i)}</td>
       <td style="text-align:right">${fmtN(day.shortBal)}</td>
@@ -2808,7 +2805,7 @@ function renderMargin(d) {
   const tableDiv = document.createElement('div');
   tableDiv.innerHTML = `
     <table style="width:100%;border-collapse:collapse;font-size:0.78rem;margin-top:6px">
-      <thead><tr style="color:#4a6070;border-bottom:1px solid #1a2a3a">
+      <thead><tr style="color:var(--text-dim);border-bottom:1px solid var(--card-bd)">
         <th style="text-align:left;padding:3px 2px">日期</th>
         <th style="text-align:right;padding:3px 4px" colspan="2">融資餘額(張)</th>
         <th style="text-align:right;padding:3px 4px" colspan="2">融券餘額(張)</th>
@@ -2838,14 +2835,14 @@ async function loadInstitutional(ticker) {
 
 function renderInstitutionalChart(d) {
   const days = d.days;
-  const BG = '#0c1220', GRID = '#121e30';
+  const BG = 'var(--surface-1)', GRID = 'var(--card-bd)';
   const fmtV = v => {
     const sign = v >= 0 ? '+' : '';
     if (Math.abs(v) >= 10000) return sign + (v/10000).toFixed(1) + '萬';
     if (Math.abs(v) >= 1000)  return sign + (v/1000).toFixed(1) + 'K';
     return sign + v.toLocaleString();
   };
-  const col = v => v > 0 ? '#e84646' : v < 0 ? '#00d68f' : '#6888a0';
+  const col = v => v > 0 ? '#e84646' : v < 0 ? '#00d68f' : 'var(--text-mid)';
   const chartDiv = document.createElement('div');
   chartDiv.id = 'instChart';
   chartDiv.style.cssText = 'width:100%;height:280px';
@@ -2857,16 +2854,16 @@ function renderInstitutionalChart(d) {
     { type:'bar', name:'投信', x:dates, y:days.map(x=>x.trust),   marker:{color: days.map(x=>x.trust>=0?'rgba(255,160,0,0.85)':'rgba(0,180,200,0.85)')} },
     { type:'bar', name:'自營商', x:dates, y:days.map(x=>x.dealer),marker:{color: days.map(x=>x.dealer>=0?'rgba(150,100,232,0.85)':'rgba(100,150,232,0.85)')} },
   ], {
-    paper_bgcolor:BG, plot_bgcolor:BG, font:{color:'#6888a0', size:11}, barmode:'group',
-    legend:{orientation:'h', x:0, y:1.15, bgcolor:'rgba(0,0,0,0)', font:{size:11,color:'#8aaabf'}},
+    paper_bgcolor:BG, plot_bgcolor:BG, font:{color:'var(--text-mid)', size:11}, barmode:'group',
+    legend:{orientation:'h', x:0, y:1.15, bgcolor:'rgba(0,0,0,0)', font:{size:11,color:'var(--text-mid)'}},
     margin:{t:40, b:36, l:65, r:12},
-    xaxis:{gridcolor:GRID, tickfont:{color:'#8aaabf'}},
-    yaxis:{gridcolor:GRID, tickfont:{color:'#8aaabf'}, zeroline:true, zerolinecolor:'#3a4a60', zerolinewidth:1.5},
+    xaxis:{gridcolor:GRID, tickfont:{color:'var(--text-mid)'}},
+    yaxis:{gridcolor:GRID, tickfont:{color:'var(--text-mid)'}, zeroline:true, zerolinecolor:'#3a4a60', zerolinewidth:1.5},
     hovermode:'x unified',
   }, {responsive:true, displayModeBar:false});
   const rows = days.map(day => `
     <tr>
-      <td style="color:#8aaabf">${day.date}</td>
+      <td style="color:var(--text-mid)">${day.date}</td>
       <td style="color:${col(day.foreign)};text-align:right">${fmtV(day.foreign)}</td>
       <td style="color:${col(day.trust)};text-align:right">${fmtV(day.trust)}</td>
       <td style="color:${col(day.dealer)};text-align:right">${fmtV(day.dealer)}</td>
@@ -2876,7 +2873,7 @@ function renderInstitutionalChart(d) {
   const tableDiv = document.createElement('div');
   tableDiv.innerHTML = `
     <table style="width:100%;border-collapse:collapse;font-size:0.78rem;margin-top:8px">
-      <thead><tr style="color:#4a6070;border-bottom:1px solid #1a2a3a">
+      <thead><tr style="color:var(--text-dim);border-bottom:1px solid var(--card-bd)">
         <th style="text-align:left;padding:4px 2px">日期</th>
         <th style="text-align:right;padding:4px 4px">外資</th>
         <th style="text-align:right;padding:4px 4px">投信</th>
@@ -2884,7 +2881,7 @@ function renderInstitutionalChart(d) {
         <th style="text-align:right;padding:4px 4px">合計</th>
       </tr></thead>
       <tbody>${rows}</tbody>
-      <tfoot><tr style="border-top:1px solid #1a2a3a;color:#6888a0">
+      <tfoot><tr style="border-top:1px solid var(--card-bd);color:var(--text-mid)">
         <td style="padding:4px 2px">5日合計</td>
         <td colspan="3"></td>
         <td style="text-align:right;font-weight:700;color:${col(total5)}">${fmtV(total5)}</td>
@@ -2908,7 +2905,7 @@ async function loadTickStats(ticker) {
 
 function renderTickStats(d) {
   const bars = d.bars, stats = d.stats;
-  const BG = '#0c1220', GRID = '#121e30';
+  const BG = 'var(--surface-1)', GRID = 'var(--card-bd)';
   const times  = bars.map(b => b.time);
   const vBig   = bars.map(b => b.cat==='big'   ? b.volume : 0);
   const vMid   = bars.map(b => b.cat==='mid'   ? b.volume : 0);
@@ -2918,11 +2915,11 @@ function renderTickStats(d) {
     { type:'bar', name:'中單(10~99張)',x:times, y:vMid,   marker:{color:'#ffa000'} },
     { type:'bar', name:'小單(<10張)',  x:times, y:vSmall, marker:{color:'#36c6ff'} },
   ], {
-    paper_bgcolor:BG, plot_bgcolor:BG, font:{color:'#6888a0', size:11}, barmode:'stack',
-    legend:{orientation:'h', x:0, y:1.12, bgcolor:'rgba(0,0,0,0)', font:{size:11,color:'#8aaabf'}},
+    paper_bgcolor:BG, plot_bgcolor:BG, font:{color:'var(--text-mid)', size:11}, barmode:'stack',
+    legend:{orientation:'h', x:0, y:1.12, bgcolor:'rgba(0,0,0,0)', font:{size:11,color:'var(--text-mid)'}},
     margin:{t:30, b:40, l:55, r:10},
-    xaxis:{gridcolor:GRID, tickfont:{color:'#8aaabf'}, nticks:12},
-    yaxis:{gridcolor:GRID, tickfont:{color:'#8aaabf'}},
+    xaxis:{gridcolor:GRID, tickfont:{color:'var(--text-mid)'}, nticks:12},
+    yaxis:{gridcolor:GRID, tickfont:{color:'var(--text-mid)'}},
     height:230,
   }, {responsive:true, displayModeBar:false});
   const total_vol = stats.big.volume + stats.mid.volume + stats.small.volume || 1;
@@ -2951,16 +2948,16 @@ async function loadPeers(ticker) {
     }
     const rows = d.peers.map(p => {
       const up20 = p.ret20d >= 0, up1 = p.ret1d >= 0, self = p.isSelf;
-      const click = self ? '' : `onclick="loadStock('${p.ticker}')" style="cursor:pointer" onmouseover="this.style.background='#141e30'" onmouseout="this.style.background=''"`;
-      return `<div ${click} style="display:flex;align-items:center;gap:8px;padding:6px 4px;border-bottom:1px solid #1a2a3a;${self?'background:rgba(51,153,255,0.08);border-radius:6px':''}">
+      const click = self ? '' : `onclick="loadStock('${p.ticker}')" style="cursor:pointer" onmouseover="this.style.background='var(--surface-2)'" onmouseout="this.style.background=''"`;
+      return `<div ${click} style="display:flex;align-items:center;gap:8px;padding:6px 4px;border-bottom:1px solid var(--card-bd);${self?'background:rgba(51,153,255,0.08);border-radius:6px':''}">
         <div style="width:40px;font-weight:700;color:${self?'var(--accent)':'var(--text)'}">${p.ticker}</div>
-        <div style="flex:1;font-size:0.8rem;color:${self?'#fff':'var(--text-dim)'}">${p.name}${self?' *':''}</div>
+        <div style="flex:1;font-size:0.8rem;color:${self?'var(--text)':'var(--text-dim)'}">${p.name}${self?' *':''}</div>
         <div style="width:52px;text-align:right;font-size:0.76rem;font-weight:600;color:${up1?'var(--red)':'var(--green)'}">${up1?'+':''}${p.ret1d}%</div>
         <div style="width:60px;text-align:right;font-size:0.76rem;font-weight:600;color:${up20?'var(--red)':'var(--green)'}">${up20?'+':''}${p.ret20d}%</div>
       </div>`;
     }).join('');
     setHTML('peersPanel', `
-      <div style="display:flex;padding:4px 4px 2px;font-size:0.68rem;color:#4a6070;border-bottom:1px solid #1a2a3a">
+      <div style="display:flex;padding:4px 4px 2px;font-size:0.68rem;color:var(--text-dim);border-bottom:1px solid var(--card-bd)">
         <div style="width:40px"></div><div style="flex:1">名稱</div>
         <div style="width:52px;text-align:right">今日</div>
         <div style="width:60px;text-align:right">近20日</div>
@@ -3092,5 +3089,6 @@ async function loadNews(ticker) {
 }
 </script>
 
+<script>window.addEventListener('themechange', () => { if (typeof _buildTVWidget === 'function' && document.getElementById('tvChartContainer')?.childElementCount) _buildTVWidget(); });</script>
 </body>
 </html>

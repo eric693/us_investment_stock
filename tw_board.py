@@ -869,6 +869,10 @@ def api_watchlist():
     with _watch_lock:
         codes = _load_watch()
         if request.method == 'GET':
+            if request.args.get('names'):
+                with _db() as con:
+                    names = dict(con.execute('SELECT code, name FROM stocks'))
+                return jsonify([[c, names.get(c, c)] for c in codes])
             return jsonify(codes)
         body = request.get_json(silent=True) or {}
         code = str(body.get('code', '')).strip()

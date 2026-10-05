@@ -6,7 +6,8 @@
 <title>美股投資分析儀表板</title>
 <script src="https://cdn.plot.ly/plotly-2.26.0.min.js"></script>
 <script src="https://s3.tradingview.com/tv.js"></script>
-<link rel="stylesheet" href="/static/css/style.css">
+<link rel="stylesheet" href="/static/css/style.css?v=3">
+{% include "_head.html" %}
 <style>
 .tv-card { padding:0; overflow:hidden; border-radius:10px; }
 .tv-toolbar { display:flex; align-items:center; gap:10px; padding:12px 16px; background:var(--card-bg); border-bottom:1px solid var(--card-bd); flex-wrap:wrap; }
@@ -14,10 +15,10 @@
 .tv-sym { font-size:0.78rem; color:var(--accent); font-weight:700; background:rgba(61,142,248,.1); padding:3px 10px; border-radius:5px; }
 .tv-tf-tabs { display:flex; gap:2px; margin-left:auto; }
 .tv-tf-btn { padding:4px 10px; font-size:0.74rem; font-weight:700; color:var(--text-dim); background:transparent; border:1px solid transparent; border-radius:5px; cursor:pointer; transition:all .15s; }
-.tv-tf-btn.active, .tv-tf-btn:hover { color:var(--text); background:rgba(255,255,255,.07); border-color:var(--border); }
+.tv-tf-btn.active, .tv-tf-btn:hover { color:var(--text); background:var(--overlay-2); border-color:var(--border); }
 .tv-tf-btn.active { color:var(--accent); border-color:rgba(61,142,248,.3); }
 .tv-indicator-row { padding:8px 16px; background:var(--card-bg); border-bottom:1px solid var(--card-bd); display:flex; gap:8px; flex-wrap:wrap; align-items:center; }
-.tv-ind-badge { padding:3px 10px; font-size:0.7rem; font-weight:700; color:var(--text-dim); background:rgba(255,255,255,.04); border:1px solid var(--border); border-radius:5px; cursor:pointer; transition:all .15s; }
+.tv-ind-badge { padding:3px 10px; font-size:0.7rem; font-weight:700; color:var(--text-dim); background:var(--overlay-1); border:1px solid var(--border); border-radius:5px; cursor:pointer; transition:all .15s; }
 .tv-ind-badge.active { color:var(--accent); background:rgba(61,142,248,.1); border-color:rgba(61,142,248,.3); }
 .tv-ind-badge:hover { color:var(--text); border-color:var(--text-dim); }
 .tv-ind-label { font-size:0.7rem; color:var(--text-dim); margin-right:4px; }
@@ -38,12 +39,8 @@
 <body>
 
 <!-- Navigation -->
+{% include "_appbar.html" %}
 <nav class="topnav">
-  <div class="brand">US<span>STOCK</span></div>
-  <a class="market-switch" href="/tw">台股</a>
-  <a class="market-switch" href="/tw/board" style="background:rgba(0,214,143,.1);color:var(--green);border-color:rgba(0,214,143,.3);">台股看盤</a>
-  <a class="market-switch" href="/portfolio" style="background:rgba(159,106,235,.15);color:#9f6aeb;border-color:rgba(159,106,235,.3);">投資組合</a>
-  <a class="market-switch" href="/screener" style="background:rgba(240,180,41,.1);color:var(--gold);border-color:rgba(240,180,41,.25);">策略選股</a>
   <button class="mon-nav-btn" onclick="toggleMonitorPanel()" title="智能即時監控">
     監控
     <span id="monitorBadge" class="mon-badge hidden">0</span>
@@ -756,10 +753,10 @@ function _buildTVWidget() {
     symbol:          _tvSymbol,
     interval:        _tvInterval,
     timezone:        'Asia/Taipei',
-    theme:           'dark',
+    theme:           (window.Theme ? Theme.mode() : 'dark'),
     style:           '1',
     locale:          'zh_TW',
-    toolbar_bg:      '#0c1220',
+    toolbar_bg:      Theme.resolve('var(--surface-1)'),
     enable_publishing: false,
     withdateranges:  true,
     hide_side_toolbar: false,
@@ -767,19 +764,19 @@ function _buildTVWidget() {
     save_image:      false,
     container_id:    'tvChartContainer',
     studies:         [..._tvStudies],
-    overrides: {
-      'paneProperties.background':         '#0c1220',
+    overrides: Theme.resolveDeep({
+      'paneProperties.background':         'var(--surface-1)',
       'paneProperties.backgroundType':     'solid',
-      'paneProperties.vertGridProperties.color': '#121e30',
-      'paneProperties.horzGridProperties.color': '#121e30',
-      'scalesProperties.textColor':        '#6888a0',
+      'paneProperties.vertGridProperties.color': 'var(--card-bd)',
+      'paneProperties.horzGridProperties.color': 'var(--card-bd)',
+      'scalesProperties.textColor':        'var(--text-mid)',
       'mainSeriesProperties.candleStyle.upColor':          '#e84646',
       'mainSeriesProperties.candleStyle.downColor':        '#00d68f',
       'mainSeriesProperties.candleStyle.borderUpColor':    '#e84646',
       'mainSeriesProperties.candleStyle.borderDownColor':  '#00d68f',
       'mainSeriesProperties.candleStyle.wickUpColor':      '#e84646',
       'mainSeriesProperties.candleStyle.wickDownColor':    '#00d68f',
-    },
+    }),
   });
 }
 
@@ -998,7 +995,7 @@ function renderCharts(d) {
   );
 
   const dates = d.dates;
-  const BG = '#0c1220', GRID = '#121e30';
+  const BG = 'var(--surface-1)', GRID = 'var(--card-bd)';
 
   const volColors = d.ohlcv.close.map((c, i) =>
     i === 0 ? 'rgba(100,130,160,0.4)' :
@@ -1024,11 +1021,11 @@ function renderCharts(d) {
     { type:'scatter', mode:'lines', x:dates, y:d.ma.ma60, name:'MA60', line:{color:'#36c6ff',width:1.5}, connectgaps:false },
   ], {
     paper_bgcolor:BG, plot_bgcolor:BG,
-    font:{color:'#6888a0',size:11},
+    font:{color:'var(--text-mid)',size:11},
     showlegend:true,
-    legend:{orientation:'h',x:0,y:1.06,bgcolor:'rgba(0,0,0,0)',font:{size:10,color:'#8aaabf'}},
+    legend:{orientation:'h',x:0,y:1.06,bgcolor:'rgba(0,0,0,0)',font:{size:10,color:'var(--text-mid)'}},
     margin:{l:60,r:8,t:24,b:4},
-    yaxis:{gridcolor:GRID,zerolinecolor:GRID,tickfont:{color:'#6888a0'},side:'left',autorange:true},
+    yaxis:{gridcolor:GRID,zerolinecolor:GRID,tickfont:{color:'var(--text-mid)'},side:'left',autorange:true},
     xaxis:{rangeslider:{visible:false},gridcolor:GRID,showticklabels:false},
     hovermode:'x unified',
   }, {responsive:true,displayModeBar:false});
@@ -1039,10 +1036,10 @@ function renderCharts(d) {
      marker:{color:volColors}, showlegend:false},
   ], {
     paper_bgcolor:BG, plot_bgcolor:BG,
-    font:{color:'#6888a0',size:9},
+    font:{color:'var(--text-mid)',size:9},
     margin:{l:60,r:8,t:2,b:22},
-    yaxis:{gridcolor:GRID,tickfont:{color:'#6888a0',size:9},side:'left',tickformat:'.2s'},
-    xaxis:{rangeslider:{visible:false},gridcolor:GRID,tickfont:{color:'#6888a0'}},
+    yaxis:{gridcolor:GRID,tickfont:{color:'var(--text-mid)',size:9},side:'left',tickformat:'.2s'},
+    xaxis:{rangeslider:{visible:false},gridcolor:GRID,tickfont:{color:'var(--text-mid)'}},
     hovermode:'x unified',
   }, {responsive:true,displayModeBar:false});
 
@@ -1062,12 +1059,12 @@ function renderCharts(d) {
     {type:'scatter', mode:'lines', x:dates, y:d.macd.dea, name:'DEA', line:{color:'#e8a020',width:1.5}, connectgaps:false},
   ], {
     paper_bgcolor:BG, plot_bgcolor:BG,
-    font:{color:'#6888a0',size:10},
+    font:{color:'var(--text-mid)',size:10},
     showlegend:true,
-    legend:{orientation:'h',x:0,y:1.18,bgcolor:'rgba(0,0,0,0)',font:{size:10,color:'#8aaabf'}},
+    legend:{orientation:'h',x:0,y:1.18,bgcolor:'rgba(0,0,0,0)',font:{size:10,color:'var(--text-mid)'}},
     margin:{l:60,r:8,t:8,b:22},
-    yaxis:{gridcolor:GRID,zerolinecolor:'#1e3050',tickfont:{color:'#6888a0'},side:'left'},
-    xaxis:{rangeslider:{visible:false},gridcolor:GRID,tickfont:{color:'#6888a0'}},
+    yaxis:{gridcolor:GRID,zerolinecolor:'var(--card-bd2)',tickfont:{color:'var(--text-mid)'},side:'left'},
+    xaxis:{rangeslider:{visible:false},gridcolor:GRID,tickfont:{color:'var(--text-mid)'}},
     hovermode:'x unified',
   }, {responsive:true,displayModeBar:false});
 
@@ -1081,12 +1078,12 @@ function renderCharts(d) {
      line:{color:'rgba(0,214,143,0.5)',width:1,dash:'dash'}, showlegend:false, hoverinfo:'skip'},
   ], {
     paper_bgcolor:BG, plot_bgcolor:BG,
-    font:{color:'#6888a0',size:10},
+    font:{color:'var(--text-mid)',size:10},
     showlegend:true,
-    legend:{x:0,y:1.18,bgcolor:'rgba(0,0,0,0)',font:{size:10,color:'#8aaabf'}},
+    legend:{x:0,y:1.18,bgcolor:'rgba(0,0,0,0)',font:{size:10,color:'var(--text-mid)'}},
     margin:{l:60,r:8,t:4,b:28},
-    yaxis:{gridcolor:GRID,tickfont:{color:'#6888a0'},range:[0,100],tickvals:[0,30,50,70,100],side:'left'},
-    xaxis:{rangeslider:{visible:false},gridcolor:GRID,tickfont:{color:'#6888a0'}},
+    yaxis:{gridcolor:GRID,tickfont:{color:'var(--text-mid)'},range:[0,100],tickvals:[0,30,50,70,100],side:'left'},
+    xaxis:{rangeslider:{visible:false},gridcolor:GRID,tickfont:{color:'var(--text-mid)'}},
     hovermode:'x unified',
     shapes:[
       {type:'line',xref:'paper',x0:0,x1:1,yref:'y',y0:70,y1:70,line:{color:'rgba(232,70,70,0.25)',width:1}},
@@ -1801,7 +1798,7 @@ function renderCompareChart() {
   const norm1 = c1.map(v => v != null ? +((v/b1-1)*100).toFixed(2) : null);
   const norm2 = c2.map(v => v != null ? +((v/b2-1)*100).toFixed(2) : null);
   const d2dates = compareData.dates.slice(-Math.min(n, compareData.dates.length));
-  const BG='#0c1220', GRID='#121e30';
+  const BG='var(--surface-1)', GRID='var(--card-bd)';
   Plotly.newPlot('compareChart', [
     {type:'scatter',mode:'lines',x:dates,y:norm1,name:currentData.ticker,
      line:{color:'#3d8ef8',width:2},connectgaps:false},
@@ -1809,12 +1806,12 @@ function renderCompareChart() {
      line:{color:'#f0b429',width:2},connectgaps:false},
   ], {
     paper_bgcolor:BG, plot_bgcolor:BG,
-    font:{color:'#6888a0',size:11}, showlegend:true,
-    legend:{orientation:'h',x:0,y:1.12,bgcolor:'rgba(0,0,0,0)',font:{size:11,color:'#8aaabf'}},
+    font:{color:'var(--text-mid)',size:11}, showlegend:true,
+    legend:{orientation:'h',x:0,y:1.12,bgcolor:'rgba(0,0,0,0)',font:{size:11,color:'var(--text-mid)'}},
     margin:{l:60,r:8,t:28,b:30},
-    yaxis:{gridcolor:GRID,tickfont:{color:'#6888a0'},tickformat:'+.1f',ticksuffix:'%',
-           side:'left',zeroline:true,zerolinecolor:'#1e3050'},
-    xaxis:{gridcolor:GRID,tickfont:{color:'#6888a0'},rangeslider:{visible:false}},
+    yaxis:{gridcolor:GRID,tickfont:{color:'var(--text-mid)'},tickformat:'+.1f',ticksuffix:'%',
+           side:'left',zeroline:true,zerolinecolor:'var(--card-bd2)'},
+    xaxis:{gridcolor:GRID,tickfont:{color:'var(--text-mid)'},rangeslider:{visible:false}},
     hovermode:'x unified',
   }, {responsive:true,displayModeBar:false});
 }
@@ -2083,5 +2080,6 @@ async function loadNews(ticker) {
 }
 </script>
 
+<script>window.addEventListener('themechange', () => { if (typeof _buildTVWidget === 'function' && document.getElementById('tvChartContainer')?.childElementCount) _buildTVWidget(); });</script>
 </body>
 </html>

@@ -5,14 +5,15 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>投資組合管理</title>
 <script src="https://cdn.plot.ly/plotly-2.26.0.min.js"></script>
-<link rel="stylesheet" href="/static/css/style.css">
+<link rel="stylesheet" href="/static/css/style.css?v=3">
+{% include "_head.html" %}
 <style>
 /* ── Portfolio-specific styles ─────────────────────────── */
-.pf-nav { position:sticky;top:0;z-index:200;display:flex;align-items:center;gap:16px;flex-wrap:wrap;background:rgba(6,10,16,.96);border-bottom:1px solid var(--card-bd);padding:10px 22px;backdrop-filter:blur(12px); }
+.pf-nav { position:sticky;top:0;z-index:200;display:flex;align-items:center;gap:16px;flex-wrap:wrap;background:var(--nav-bg);border-bottom:1px solid var(--card-bd);padding:10px 22px;backdrop-filter:blur(12px); }
 .pf-nav .brand { font-size:1rem;font-weight:900;letter-spacing:1px;color:#fff;padding:5px 12px;background:linear-gradient(135deg,#1a6fd4,#0e4a9a);border-radius:6px; }
 .pf-nav .brand span { color:var(--gold); }
 .nav-link { padding:6px 14px;border-radius:6px;color:var(--text-mid);font-size:0.85rem;font-weight:600;border:1px solid transparent;transition:all .15s;cursor:pointer;text-decoration:none; }
-.nav-link:hover { color:var(--text);border-color:var(--card-bd2);background:#0d1828; }
+.nav-link:hover { color:var(--text);border-color:var(--card-bd2);background:var(--surface-2); }
 .nav-link.active { color:var(--blue);border-color:rgba(61,142,248,.4);background:rgba(61,142,248,.08); }
 
 .pf-body { max-width:1400px;margin:0 auto;padding:20px 18px; }
@@ -37,13 +38,13 @@
 .btn-sm { padding:4px 10px;font-size:0.76rem; }
 .btn-danger { background:rgba(232,70,70,.15);color:var(--red);border:1px solid rgba(232,70,70,.3); }
 .btn-danger:hover { background:rgba(232,70,70,.25); }
-.btn-ghost { background:rgba(255,255,255,.05);color:var(--text-mid);border:1px solid var(--card-bd); }
-.btn-ghost:hover { background:rgba(255,255,255,.09);color:var(--text); }
+.btn-ghost { background:var(--overlay-1);color:var(--text-mid);border:1px solid var(--card-bd); }
+.btn-ghost:hover { background:var(--overlay-2);color:var(--text); }
 .btn-green { background:rgba(0,214,143,.12);color:var(--green);border:1px solid rgba(0,214,143,.25); }
 .btn-green:hover { background:rgba(0,214,143,.2); }
 
 /* Input */
-.inp { padding:7px 12px;border-radius:7px;border:1px solid var(--card-bd2);background:#0a1320;color:var(--text);font-size:0.88rem;outline:none;transition:border-color .2s; }
+.inp { padding:7px 12px;border-radius:7px;border:1px solid var(--card-bd2);background:var(--surface-1);color:var(--text);font-size:0.88rem;outline:none;transition:border-color .2s; }
 .inp:focus { border-color:var(--accent); }
 .inp::placeholder { color:var(--text-dim); }
 .inp-sm { padding:5px 10px;font-size:0.82rem; }
@@ -53,18 +54,18 @@
 .group-tabs { display:flex;gap:6px;flex-wrap:wrap; }
 .gtab { padding:5px 14px;border-radius:20px;font-size:0.8rem;font-weight:700;cursor:pointer;border:1px solid var(--card-bd);background:transparent;color:var(--text-mid);transition:all .15s; }
 .gtab.active { background:rgba(61,142,248,.12);color:var(--blue);border-color:rgba(61,142,248,.4); }
-.gtab:hover:not(.active) { background:#0d1828;color:var(--text); }
+.gtab:hover:not(.active) { background:var(--surface-2);color:var(--text); }
 .gtab-all { border-color:rgba(0,214,143,.3);color:var(--green); }
 .gtab-all.active { background:rgba(0,214,143,.1); }
 
 .group-grid { display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:14px; }
-.group-card { background:#0d1828;border:1px solid var(--card-bd);border-radius:10px;padding:14px; }
+.group-card { background:var(--surface-2);border:1px solid var(--card-bd);border-radius:10px;padding:14px; }
 .group-card-head { display:flex;align-items:center;justify-content:space-between;margin-bottom:10px; }
 .group-card-name { font-size:0.88rem;font-weight:800;color:var(--text); }
 .group-count { font-size:0.72rem;color:var(--text-dim);margin-left:6px; }
 .group-add-row { display:flex;gap:6px;margin-bottom:10px; }
 .group-tickers { display:flex;flex-direction:column;gap:5px; }
-.gticker-row { display:flex;align-items:center;justify-content:space-between;padding:6px 8px;background:#060a10;border-radius:6px; }
+.gticker-row { display:flex;align-items:center;justify-content:space-between;padding:6px 8px;background:var(--surface-1);border-radius:6px; }
 .gticker-sym { font-size:0.82rem;font-weight:700;color:var(--blue); }
 .gticker-name { font-size:0.72rem;color:var(--text-dim);flex:1;margin:0 8px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap; }
 .gticker-pct { font-size:0.8rem;font-weight:700; }
@@ -73,7 +74,7 @@
 /* ── PORTFOLIO section ─────────────────────────── */
 .port-toolbar { display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:18px; }
 .port-summary { display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:12px;margin-bottom:20px; }
-.sum-card { background:#0d1828;border:1px solid var(--card-bd);border-radius:10px;padding:14px; }
+.sum-card { background:var(--surface-2);border:1px solid var(--card-bd);border-radius:10px;padding:14px; }
 .sum-label { font-size:0.72rem;color:var(--text-dim);margin-bottom:4px; }
 .sum-val { font-size:1.15rem;font-weight:800;color:var(--text); }
 .sum-val.green { color:var(--green); }
@@ -81,12 +82,12 @@
 
 .port-table-wrap { overflow-x:auto;margin-bottom:24px; }
 .port-table { width:100%;border-collapse:collapse;font-size:0.82rem; }
-.port-table th { padding:8px 10px;background:#0d1828;color:var(--text-dim);font-weight:700;font-size:0.74rem;text-transform:uppercase;letter-spacing:.4px;border-bottom:1px solid var(--card-bd);white-space:nowrap;text-align:right; }
+.port-table th { padding:8px 10px;background:var(--surface-2);color:var(--text-dim);font-weight:700;font-size:0.74rem;text-transform:uppercase;letter-spacing:.4px;border-bottom:1px solid var(--card-bd);white-space:nowrap;text-align:right; }
 .port-table th:first-child { text-align:left; }
-.port-table td { padding:9px 10px;border-bottom:1px solid rgba(21,32,48,.6);color:var(--text);text-align:right;vertical-align:middle; }
+.port-table td { padding:9px 10px;border-bottom:1px solid var(--line);color:var(--text);text-align:right;vertical-align:middle; }
 .port-table td:first-child { text-align:left; }
 .port-table tr:hover td { background:rgba(61,142,248,.04); }
-.port-table tr.total-row td { background:#0d1828;font-weight:800;color:var(--text);border-top:1px solid var(--card-bd2); }
+.port-table tr.total-row td { background:var(--surface-2);font-weight:800;color:var(--text);border-top:1px solid var(--card-bd2); }
 .port-sym { font-weight:800;color:var(--blue);cursor:pointer; }
 .port-sym:hover { text-decoration:underline; }
 .port-name { font-size:0.72rem;color:var(--text-dim); }
@@ -104,10 +105,10 @@
 .cmp-table { width:100%;border-collapse:collapse;font-size:0.82rem; }
 .cmp-table th { padding:10px 12px;text-align:center;border-bottom:2px solid var(--card-bd2);color:var(--text-dim);font-size:0.74rem;font-weight:700;white-space:nowrap; }
 .cmp-table th.row-label { text-align:left;color:var(--text-mid); }
-.cmp-table td { padding:9px 12px;text-align:center;border-bottom:1px solid rgba(21,32,48,.6);color:var(--text);white-space:nowrap; }
+.cmp-table td { padding:9px 12px;text-align:center;border-bottom:1px solid var(--line);color:var(--text);white-space:nowrap; }
 .cmp-table td.row-label { text-align:left;color:var(--text-dim);font-size:0.78rem;font-weight:600; }
 .cmp-table tr:hover td { background:rgba(61,142,248,.04); }
-.cmp-table th.ticker-head { background:#0d1828;color:var(--text);font-size:0.88rem; }
+.cmp-table th.ticker-head { background:var(--surface-2);color:var(--text);font-size:0.88rem; }
 .cmp-best { color:var(--green);font-weight:800; }
 .cmp-worst { color:var(--red); }
 .cmp-sig { display:inline-block;padding:3px 9px;border-radius:12px;font-size:0.75rem;font-weight:700; }
@@ -120,7 +121,7 @@
 .cmp-ticker-head { font-weight:900;color:var(--text);font-size:0.9rem; }
 .cmp-subname { font-size:0.7rem;color:var(--text-dim);font-weight:400; }
 .cmp-loading { text-align:center;padding:40px;color:var(--text-dim);font-size:0.9rem; }
-.cmp-section-divider td { background:rgba(21,32,48,.5);font-size:0.72rem;font-weight:800;color:var(--text-dim);letter-spacing:.5px;text-transform:uppercase;padding:5px 12px; }
+.cmp-section-divider td { background:var(--line);font-size:0.72rem;font-weight:800;color:var(--text-dim);letter-spacing:.5px;text-transform:uppercase;padding:5px 12px; }
 
 /* Modal */
 .modal-overlay { display:none;position:fixed;inset:0;background:rgba(0,0,0,.65);z-index:500;justify-content:center;align-items:flex-start;padding-top:80px; }
@@ -134,7 +135,7 @@
 .form-grid { display:grid;grid-template-columns:1fr 1fr;gap:10px; }
 
 /* Toast */
-.toast { position:fixed;bottom:24px;right:24px;background:#0f1e30;border:1px solid var(--card-bd2);border-radius:9px;padding:12px 18px;font-size:0.84rem;color:var(--text);z-index:1000;opacity:0;transform:translateY(10px);transition:all .3s;pointer-events:none;max-width:300px; }
+.toast { position:fixed;bottom:24px;right:24px;background:var(--surface-2);border:1px solid var(--card-bd2);border-radius:9px;padding:12px 18px;font-size:0.84rem;color:var(--text);z-index:1000;opacity:0;transform:translateY(10px);transition:all .3s;pointer-events:none;max-width:300px; }
 .toast.show { opacity:1;transform:translateY(0); }
 .toast.green { border-color:rgba(0,214,143,.4);color:var(--green); }
 .toast.red { border-color:rgba(232,70,70,.4);color:var(--red); }
@@ -143,14 +144,7 @@
 <body>
 
 <!-- Nav -->
-<nav class="pf-nav">
-  <div class="brand">US<span>STOCK</span></div>
-  <a class="nav-link" href="/">美股分析</a>
-  <a class="nav-link" href="/tw">台股分析</a>
-  <a class="nav-link" href="/tw/board">台股看盤</a>
-  <a class="nav-link active" href="/portfolio">投資組合</a>
-  <a class="nav-link" href="/screener">策略選股</a>
-</nav>
+{% include "_appbar.html" %}
 
 <div class="pf-body">
   <!-- Page Title -->
@@ -755,7 +749,7 @@ function renderCharts(holdings) {
   }], {
     paper_bgcolor: 'transparent', plot_bgcolor: 'transparent',
     margin: {t:10,b:10,l:10,r:10},
-    legend: { font: { color: '#7a9ab8', size: 11 } },
+    legend: { font: { color: 'var(--text-mid)', size: 11 } },
     showlegend: true,
   }, { displayModeBar: false, responsive: true });
 
@@ -770,8 +764,8 @@ function renderCharts(holdings) {
   }], {
     paper_bgcolor: 'transparent', plot_bgcolor: 'transparent',
     margin: {t:10,b:40,l:40,r:10},
-    xaxis: { color: '#7a9ab8', gridcolor: '#152030' },
-    yaxis: { color: '#7a9ab8', gridcolor: '#152030', ticksuffix: '%' },
+    xaxis: { color: 'var(--text-mid)', gridcolor: 'var(--card-bd)' },
+    yaxis: { color: 'var(--text-mid)', gridcolor: 'var(--card-bd)', ticksuffix: '%' },
     bargap: 0.35,
   }, { displayModeBar: false, responsive: true });
 }

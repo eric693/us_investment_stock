@@ -1,105 +1,124 @@
 <!DOCTYPE html>
 <html lang="zh-Hant">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>StockLens — 登入</title>
-  <style>
-    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-    body {
-      min-height: 100vh;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      background: #07111f;
-      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-    }
-    .card {
-      background: #0d1e30;
-      border: 1px solid #1a2e44;
-      border-radius: 16px;
-      padding: 44px 40px;
-      width: 100%;
-      max-width: 380px;
-      box-shadow: 0 20px 60px rgba(0,0,0,0.5);
-    }
-    .logo {
-      text-align: center;
-      margin-bottom: 32px;
-    }
-    .logo-title {
-      font-size: 1.6rem;
-      font-weight: 800;
-      color: #e8f4ff;
-      letter-spacing: -0.5px;
-    }
-    .logo-accent { color: #3b9eff; }
-    .logo-sub {
-      font-size: 0.78rem;
-      color: #4a6580;
-      margin-top: 4px;
-      letter-spacing: 0.5px;
-    }
-    label {
-      display: block;
-      font-size: 0.78rem;
-      color: #4a6580;
-      font-weight: 700;
-      letter-spacing: 0.8px;
-      text-transform: uppercase;
-      margin-bottom: 8px;
-    }
-    input[type="password"], input[type="text"] {
-      width: 100%;
-      padding: 12px 16px;
-      background: #0a1624;
-      border: 1px solid #1a2e44;
-      border-radius: 8px;
-      color: #e8f4ff;
-      font-size: 1rem;
-      outline: none;
-      transition: border-color 0.2s;
-    }
-    input[type="password"]:focus, input[type="text"]:focus {
-      border-color: #3b9eff;
-    }
-    .error {
-      margin-top: 10px;
-      font-size: 0.8rem;
-      color: #f04a4a;
-    }
-    button {
-      margin-top: 20px;
-      width: 100%;
-      padding: 13px;
-      background: #3b9eff;
-      color: #fff;
-      font-size: 0.95rem;
-      font-weight: 700;
-      border: none;
-      border-radius: 8px;
-      cursor: pointer;
-      transition: background 0.2s;
-    }
-    button:hover { background: #2a8af0; }
-  </style>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>StockLens 登入</title>
+<link rel="stylesheet" href="/static/css/style.css?v=3">
+{% include "_head.html" %}
+<style>
+body { min-height: 100vh; display: grid; grid-template-columns: 1.15fr 1fr; }
+
+/* 左：主視覺 */
+.hero { position: relative; overflow: hidden; padding: 48px 56px; display: flex; flex-direction: column; justify-content: space-between;
+        border-right: 1px solid var(--line); }
+.blob { position: absolute; border-radius: 50%; filter: blur(70px); opacity: .55; animation: drift 18s ease-in-out infinite alternate; }
+.blob.a { width: 520px; height: 520px; left: -140px; top: -120px; background: radial-gradient(circle, #6d5dfc, transparent 65%); }
+.blob.b { width: 460px; height: 460px; right: -160px; bottom: -80px; background: radial-gradient(circle, #22d3ee, transparent 65%); animation-delay: -6s; }
+.blob.c { width: 300px; height: 300px; left: 40%; top: 45%; background: radial-gradient(circle, #ff4d6a, transparent 65%); opacity: .25; animation-delay: -11s; }
+:root[data-theme="light"] .blob { opacity: .28; }
+@keyframes drift { to { transform: translate(60px, 40px) scale(1.12); } }
+.hero > :not(.blob) { position: relative; }
+.lg-brand { display: flex; align-items: center; gap: 12px; }
+.lg-brand .logo { width: 40px; height: 40px; border-radius: 12px; display: grid; place-items: center; background: var(--accent-grad); box-shadow: var(--glow); }
+.lg-brand .logo svg { width: 22px; height: 22px; }
+.lg-brand b { font-family: 'Space Grotesk', sans-serif; font-size: 1.35rem; letter-spacing: -.02em; }
+.headline { font-family: 'Space Grotesk', 'Noto Sans TC', sans-serif; font-weight: 700; font-size: clamp(2.4rem, 4.2vw, 3.9rem);
+            line-height: 1.05; letter-spacing: -.035em; max-width: 12ch; }
+.headline em { font-style: normal; background: var(--accent-grad); -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent; }
+.lede { margin-top: 18px; color: var(--text-mid); max-width: 44ch; font-size: 1rem; line-height: 1.7; }
+.spark { margin-top: 36px; width: min(520px, 100%); height: 150px; }
+.spark .ln { stroke-dasharray: 900; stroke-dashoffset: 900; animation: draw 2.4s .3s ease-out forwards; }
+@keyframes draw { to { stroke-dashoffset: 0; } }
+.ticks { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 26px; }
+.tick { padding: 7px 12px; border-radius: 10px; background: var(--overlay-1); border: 1px solid var(--line); font-size: .78rem; color: var(--text-mid); backdrop-filter: blur(8px); }
+.tick b { color: var(--text); margin-right: 6px; }
+.foot { color: var(--text-dim); font-size: .75rem; }
+@media (max-width: 900px) { body { grid-template-columns: 1fr; } .hero { display: none; } }
+
+/* 右：表單 */
+.panel { display: flex; align-items: center; justify-content: center; padding: 40px 24px; position: relative; }
+.top-right { position: absolute; top: 18px; right: 18px; }
+.form { width: 100%; max-width: 380px; }
+.form h1 { font-family: 'Space Grotesk', 'Noto Sans TC', sans-serif; font-size: 1.7rem; letter-spacing: -.02em; }
+.form p.sub { color: var(--text-mid); font-size: .9rem; margin: 6px 0 30px; }
+.field { margin-bottom: 16px; }
+.field label { display: block; font-size: .76rem; font-weight: 600; color: var(--text-mid); margin-bottom: 7px; letter-spacing: .02em; }
+.input { display: flex; align-items: center; gap: 10px; padding: 0 14px; height: 48px; border-radius: 13px;
+         background: var(--card-bg); border: 1px solid var(--card-bd2); transition: border-color .15s, box-shadow .15s; }
+.input:focus-within { border-color: var(--accent); box-shadow: 0 0 0 4px rgba(109,93,252,.16); }
+.input svg { width: 17px; height: 17px; color: var(--text-dim); flex-shrink: 0; }
+.input input { flex: 1; border: none !important; background: none; color: var(--text); font-size: .98rem; height: 100%; box-shadow: none !important; }
+.input input:focus { outline: none; }
+.reveal { background: none; border: none; color: var(--text-dim); cursor: pointer; font-size: .75rem; font-weight: 600; }
+.reveal:hover { color: var(--text); }
+.error { display: flex; gap: 8px; align-items: center; margin: 4px 0 14px; padding: 10px 12px; border-radius: 11px;
+         background: var(--red-soft); border: 1px solid var(--red-line); color: var(--red); font-size: .84rem; }
+.submit { width: 100%; height: 50px; margin-top: 8px; border: none; border-radius: 13px; cursor: pointer;
+          background: var(--accent-grad); background-size: 160% 100%; color: #fff; font-size: 1rem; font-weight: 700; letter-spacing: .04em;
+          box-shadow: var(--glow); transition: background-position .4s, transform .1s; }
+.submit:hover { background-position: 100% 0; }
+.submit:active { transform: scale(.99); }
+.note { margin-top: 22px; font-size: .76rem; color: var(--text-dim); text-align: center; line-height: 1.6; }
+</style>
 </head>
 <body>
-  <div class="card">
-    <div class="logo">
-      <div class="logo-title">Stock<span class="logo-accent">Lens</span></div>
-      <div class="logo-sub">美股 · 台股智能分析平台</div>
-    </div>
-    <form method="POST">
-      <label for="username">帳號</label>
-      <input type="text" id="username" name="username" placeholder="請輸入帳號" autocomplete="username" autofocus required>
-      <label for="password" style="margin-top:16px">密碼</label>
-      <input type="password" id="password" name="password" placeholder="請輸入密碼" autocomplete="current-password" required>
-      {% if error %}
-        <div class="error">{{ error }}</div>
-      {% endif %}
-      <button type="submit">登入</button>
-    </form>
+<section class="hero">
+  <div class="blob a"></div><div class="blob b"></div><div class="blob c"></div>
+  <div class="lg-brand">
+    <span class="logo"><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M3 17l6-6 4 4 8-9"/><path d="M15 6h6v6"/></svg></span>
+    <b>StockLens</b>
   </div>
+  <div>
+    <h2 class="headline">看懂籌碼，<br><em>早一步</em>出手。</h2>
+    <p class="lede">全市場上市櫃即時行情、三大法人持股動向、KD 交叉訊號，一個畫面掌握。盤後選股、盤中即時選股，滾輪一轉，一檔一檔看下去。</p>
+    <svg class="spark" viewBox="0 0 520 150" fill="none">
+      <defs>
+        <linearGradient id="sg" x1="0" x2="1"><stop offset="0" stop-color="#6d5dfc"/><stop offset=".5" stop-color="#8b5cf6"/><stop offset="1" stop-color="#22d3ee"/></linearGradient>
+        <linearGradient id="sf" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#6d5dfc" stop-opacity=".28"/><stop offset="1" stop-color="#6d5dfc" stop-opacity="0"/></linearGradient>
+      </defs>
+      <path d="M0 120 L40 108 L80 114 L120 92 L160 98 L200 72 L240 80 L280 58 L320 66 L360 40 L400 50 L440 26 L480 32 L520 12 L520 150 L0 150 Z" fill="url(#sf)"/>
+      <path class="ln" d="M0 120 L40 108 L80 114 L120 92 L160 98 L200 72 L240 80 L280 58 L320 66 L360 40 L400 50 L440 26 L480 32 L520 12" stroke="url(#sg)" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+      <circle cx="520" cy="12" r="5" fill="#22d3ee"/>
+    </svg>
+    <div class="ticks">
+      <span class="tick"><b>投信</b>持股 × KD 金叉</span>
+      <span class="tick"><b>外資</b>持股 × KD 死叉</span>
+      <span class="tick"><b>KDJ</b>盤中即時選股</span>
+    </div>
+  </div>
+  <div class="foot">© StockLens · 資料來源：臺灣證券交易所、櫃買中心</div>
+</section>
+
+<section class="panel">
+  <button class="icon-btn theme-toggle top-right" data-theme-toggle title="切換亮色 / 暗色" aria-label="切換亮色 / 暗色">
+    <svg class="moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg>
+    <svg class="sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="4.5"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>
+  </button>
+  <form class="form" method="POST">
+    <h1>歡迎回來</h1>
+    <p class="sub">請使用你的帳號登入</p>
+    <div class="field">
+      <label for="username">帳號</label>
+      <div class="input">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="8" r="4"/><path d="M4 21c1.5-4 4.5-6 8-6s6.5 2 8 6"/></svg>
+        <input type="text" id="username" name="username" placeholder="帳號" autocomplete="username" autofocus required>
+      </div>
+    </div>
+    <div class="field">
+      <label for="password">密碼</label>
+      <div class="input">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="4" y="11" width="16" height="10" rx="2.5"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg>
+        <input type="password" id="password" name="password" placeholder="密碼" autocomplete="current-password" required>
+        <button type="button" class="reveal" onclick="const i=document.getElementById('password');i.type=i.type==='password'?'text':'password';this.textContent=i.type==='password'?'顯示':'隱藏'">顯示</button>
+      </div>
+    </div>
+    {% if error %}
+    <div class="error"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v6M12 17h.01"/></svg>{{ error }}</div>
+    {% endif %}
+    <button class="submit" type="submit">登入</button>
+    <p class="note">僅限授權帳號使用・需要帳號請聯絡管理員</p>
+  </form>
+</section>
 </body>
 </html>
