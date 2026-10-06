@@ -1259,3 +1259,11 @@ input[type=checkbox] { accent-color: var(--accent); }
 .utable td.acts { display: flex; gap: 6px; justify-content: flex-end; flex-wrap: wrap; }
 .role { font-size: .7rem; font-weight: 700; padding: 2px 9px; border-radius: 999px; background: var(--overlay-2); color: var(--text-mid); }
 .role.admin { background: rgba(109,93,252,.12); color: var(--accent); }
+
+/* App bar 加權指數 */
+a.mkt-chip { text-decoration: none !important; transition: border-color .15s; }
+a.mkt-chip:hover { border-color: var(--accent); }
+.mkt-chip .idx-q { font-style: normal; font-weight: 700; color: var(--text); padding-left: 8px; border-left: 1px solid var(--line); }
+.mkt-chip .idx-q:empty { display: none; }
+.mkt-chip .idx-q.up { color: var(--red); } .mkt-chip .idx-q.dn { color: var(--green); }
+@media (max-width: 860px) { .mkt-chip b { display: none; } }

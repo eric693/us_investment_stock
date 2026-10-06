@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>台股看盤</title>
-<link rel="stylesheet" href="/static/css/style.css?v=4">
+<link rel="stylesheet" href="/static/css/style.css?v=5">
 {% include "_head.html" %}
 <style>
 .wrap { max-width: 1680px; margin: 0 auto; padding: 22px 22px 40px; }
@@ -20,6 +20,26 @@
 .sync b { color: var(--text-mid); font-weight: 600; }
 .sync .bar { width: 160px; height: 4px; border-radius: 4px; background: var(--overlay-2); overflow: hidden; margin-left: auto; margin-top: 4px; }
 .sync .bar i { display: block; height: 100%; background: var(--accent-grad); }
+
+/* ── 大盤指數 ── */
+.idx-row { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-bottom: 14px; }
+@media (max-width: 900px) { .idx-row { grid-template-columns: 1fr; } }
+.idx-card { position: relative; display: grid; grid-template-columns: 1fr 200px; gap: 14px; align-items: center; cursor: pointer;
+            background: var(--card-bg); border: 1px solid var(--card-bd); border-radius: 18px; padding: 16px 20px; box-shadow: var(--shadow);
+            transition: border-color .15s, transform .15s; }
+.idx-card:hover { border-color: var(--accent); transform: translateY(-1px); }
+.idx-name { font-size: .78rem; font-weight: 700; color: var(--text-mid); display: flex; gap: 8px; align-items: center; }
+.idx-name .live { color: var(--red); font-size: .66rem; letter-spacing: .08em; }
+.idx-val { font-family: 'JetBrains Mono', monospace; font-size: 1.9rem; font-weight: 700; letter-spacing: -.03em; line-height: 1.15; margin: 4px 0; }
+.idx-chg { font-family: 'JetBrains Mono', monospace; font-size: .86rem; font-weight: 600; }
+.idx-inst { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 8px; font-size: .74rem; color: var(--text-dim); }
+.idx-inst b { font-family: 'JetBrains Mono', monospace; font-weight: 600; margin-left: 3px; }
+.spark { width: 100%; height: 70px; }
+@media (max-width: 520px) { .idx-card { grid-template-columns: 1fr; } }
+.idx-tag { display: inline-block; font-size: .66rem; font-weight: 700; padding: 2px 7px; border-radius: 6px; background: var(--accent-grad); color: #fff; }
+tr.idx-tr td { background: rgba(109,93,252,.05); }
+.clear-btn { margin-top: 12px; height: 34px; padding: 0 16px; border-radius: 10px; border: 1px solid var(--card-bd2); background: var(--surface-1); color: var(--text); cursor: pointer; font-weight: 600; }
+.clear-btn:hover { border-color: var(--accent); color: var(--accent); }
 
 /* ── 市場脈動 ── */
 .pulse { display: grid; grid-template-columns: 1.35fr 1fr 1fr 1fr; gap: 14px; margin-bottom: 18px; }
@@ -201,6 +221,9 @@ table.q tbody tr:hover td:first-child { box-shadow: inset 3px 0 0 var(--accent);
     <div class="sync" id="syncBox"></div>
   </div>
 
+  <!-- 大盤指數 -->
+  <section class="idx-row" id="idxRow"></section>
+
   <!-- 市場脈動 -->
   <section class="pulse">
     <div class="tile">
@@ -231,7 +254,7 @@ table.q tbody tr:hover td:first-child { box-shadow: inset 3px 0 0 var(--accent);
     </div>
     <div class="filters">
       <label class="search"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg>
-        <input id="search" placeholder="搜尋代碼或名稱"><kbd>/</kbd></label>
+        <input id="search" type="search" name="stock-filter" placeholder="搜尋代碼或名稱" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" readonly onfocus="this.removeAttribute('readonly')" data-lpignore="true" data-1p-ignore><kbd>/</kbd></label>
       <select class="sel" id="fMarket"><option value="">全部市場</option><option value="TSE">上市</option><option value="OTC">上櫃</option></select>
       <select class="sel" id="fInd"><option value="">全部產業</option></select>
       <label class="chip-toggle" id="etfWrap"><input type="checkbox" id="fEtf"><span class="sw"></span>含 ETF</label>
@@ -243,14 +266,13 @@ table.q tbody tr:hover td:first-child { box-shadow: inset 3px 0 0 var(--accent);
 
   <!-- 盤後選股 -->
   <section class="panel hidden" id="afterPanel">
-    <div class="panel-head"><h3>法人持股 × KD 交叉</h3><span>法人買賣超於盤後公布・多個條件之間為「或」</span></div>
+    <div class="panel-head"><h3>法人持股穿越均線</h3><span>法人買賣超於盤後公布・多個條件之間為「或」</span></div>
     <div class="rules" id="afterRules"></div>
     <div class="params">
       <div class="param">持股均線
         <span class="seg" id="maSeg"><button data-v="3">3 日</button><button data-v="5" class="on">5 日</button></span>
         <input class="num-in" id="maN" type="number" min="2" max="60" value="5" title="自訂天數"></div>
       <div class="param" title="1 = 兩個交叉同一天；3 = 最近 3 日內都發生過且目前仍維持">訊號容許天數 <input class="num-in" id="within" type="number" min="1" max="10" value="1"></div>
-      <div class="param">KD 週期 <input class="num-in" id="kdN" type="number" min="3" max="30" value="9"></div>
       <div class="param">最低量(張) <input class="num-in" id="minVol" type="number" min="0" value="0"></div>
       <div class="param">資料日期 <input class="date-in" id="asof" type="date" title="留空 = 最新交易日"></div>
       <label class="chip-toggle"><input type="checkbox" id="afterEtf"><span class="sw"></span>含 ETF</label>
@@ -259,7 +281,7 @@ table.q tbody tr:hover td:first-child { box-shadow: inset 3px 0 0 var(--accent);
     </div>
     <div class="param" style="margin-top:10px">回測比較的持股均線 <input class="txt-in" id="btMa" value="3,5,10" style="flex:0;min-width:110px" title="用逗號分隔，最多 4 個"></div>
     <div class="bt hidden" id="btBox"></div>
-    <div class="hint">金叉：法人持股線由下往上穿越其 N 日均線，且 K 由下往上穿越 D；死叉反之。投信／自營商沒有公開的逐日持股，持股線以「累計買賣超(張)」表示（交叉判斷不受影響）；外資以證交所／櫃買中心公布的實際持股張數為基準。</div>
+    <div class="hint">金叉：法人持股線由下往上穿越其 N 日均線；死叉：由上往下跌破。結果表中的 K、D 僅供參考，不列入條件。投信／自營商沒有公開的逐日持股，持股線以「累計買賣超(張)」表示（交叉判斷不受影響）；外資以證交所／櫃買中心公布的實際持股張數為基準。</div>
   </section>
 
   <!-- 即時選股 -->
@@ -269,7 +291,6 @@ table.q tbody tr:hover td:first-child { box-shadow: inset 3px 0 0 var(--accent);
     <div class="params">
       <div class="param">K 低檔 &lt; <input class="num-in" id="kLow" type="number" value="20"></div>
       <div class="param">K 高檔 &gt; <input class="num-in" id="kHigh" type="number" value="80"></div>
-      <div class="param">均量天數 <input class="num-in" id="volN" type="number" min="2" max="60" value="5"></div>
       <div class="param">KD 週期 <input class="num-in" id="rtKdN" type="number" min="3" max="30" value="9"></div>
       <label class="chip-toggle"><input type="checkbox" id="rtEtf"><span class="sw"></span>含 ETF</label>
       <label class="chip-toggle"><input type="checkbox" id="rtAuto" checked><span class="sw"></span>盤中每 60 秒重跑</label>
@@ -285,8 +306,8 @@ table.q tbody tr:hover td:first-child { box-shadow: inset 3px 0 0 var(--accent);
           <button class="btn2" id="alertSave" style="height:34px">儲存設定</button>
         </div>
         <div class="row">
-          <input class="txt-in" id="lineToken" type="password" placeholder="LINE Channel access token" autocomplete="off">
-          <input class="txt-in" id="lineUser" placeholder="LINE User ID（U 開頭）" autocomplete="off">
+          <input class="txt-in" id="lineToken" type="password" name="line-channel-token" placeholder="LINE Channel access token" autocomplete="new-password" readonly onfocus="this.removeAttribute('readonly')" data-lpignore="true" data-1p-ignore>
+          <input class="txt-in" id="lineUser" name="line-user-id" placeholder="LINE User ID（U 開頭）" autocomplete="off" readonly onfocus="this.removeAttribute('readonly')" data-lpignore="true" data-1p-ignore>
           <button class="btn2" id="lineSave" style="height:34px">儲存 LINE</button>
           <button class="btn2" id="lineTest" style="height:34px">傳送測試</button>
         </div>
@@ -311,6 +332,8 @@ const $ = s => document.querySelector(s);
 const ss = {get(k,d){try{const v=sessionStorage.getItem(k);return v==null?d:JSON.parse(v)}catch(e){return d}},
             set(k,v){try{sessionStorage.setItem(k,JSON.stringify(v))}catch(e){}}};
 const st = Object.assign({tab:'all', sort:'volume', dir:-1, search:'', market:'', ind:'', etf:false}, ss.get('twBoardState', {}));
+const ME = {{ (current_user.name if current_user else '')|tojson }};
+if (ME && st.search.trim().toLowerCase() === ME.toLowerCase()) st.search = '';   // 之前被瀏覽器自動填入的帳號
 let ALL = [], BYCODE = {}, WATCH = [], WGROUPS = [], WNAMES = {}, AFTER = null, RT = null, marketOpen = false, LIST_META = {};
 const PAGE = 200;          // 表格一次畫 200 列，捲到底再補
 let shown = PAGE, ROWS = [], COLS = [];
@@ -377,6 +400,33 @@ function setWatch(p) {
   $('#cntWatch').textContent = WATCH.length || '';
   renderGroups();
 }
+const IDX_ALIAS = {TAIEX: '大盤 加權 指數 taiex 台股', TPEX: '大盤 櫃買 櫃檯 指數 tpex otc'};
+function sparkSvg(vals, up) {
+  if (!vals || vals.length < 2) return '';
+  const mn = Math.min(...vals), mx = Math.max(...vals), w = 200, h = 70, n = vals.length;
+  const pts = vals.map((v, i) => [i / (n - 1) * w, h - 4 - (mx === mn ? .5 : (v - mn) / (mx - mn)) * (h - 8)]);
+  const d = pts.map((p, i) => (i ? 'L' : 'M') + p[0].toFixed(1) + ' ' + p[1].toFixed(1)).join(' ');
+  const c = up ? 'var(--red)' : 'var(--green)', id = 'g' + Math.random().toString(36).slice(2, 7);
+  return `<svg class="spark" viewBox="0 0 ${w} ${h}" preserveAspectRatio="none"><defs><linearGradient id="${id}" x1="0" y1="0" x2="0" y2="1">
+    <stop offset="0" stop-color="${c}" stop-opacity=".28"/><stop offset="1" stop-color="${c}" stop-opacity="0"/></linearGradient></defs>
+    <path d="${d} L${w} ${h} L0 ${h} Z" fill="url(#${id})"/><path d="${d}" fill="none" stroke="${c}" stroke-width="2" vector-effect="non-scaling-stroke"/></svg>`;
+}
+let INDICES = [];
+async function loadIndices() {
+  try { INDICES = await api('/api/tw/board/indices'); } catch (e) { return; }
+  const amt = v => v == null ? '-' : `<b class="${v > 0 ? 'up' : v < 0 ? 'dn' : ''}">${v > 0 ? '+' : ''}${v.toFixed(1)}億</b>`;
+  $('#idxRow').innerHTML = INDICES.map(q => `<div class="idx-card" data-idx="${q.code}">
+    <div><div class="idx-name">${esc(q.name)}${q.realtime ? '<span class="live">● LIVE ' + esc(q.time || '') + '</span>' : `<span class="num" style="color:var(--text-dim);font-weight:500">${esc(q.date || '')}</span>`}</div>
+      <div class="idx-val ${cls(q.chg)}">${fmt(q.price)}</div>
+      <div class="idx-chg ${cls(q.chg)}">${q.chg == null ? '' : (q.chg > 0 ? '▲' : q.chg < 0 ? '▼' : '') + fmt(Math.abs(q.chg)) + '　' + (q.chg_pct > 0 ? '+' : '') + fmt(q.chg_pct) + '%'}${q.volume ? `<span style="color:var(--text-dim);margin-left:12px">成交 ${fmt(q.volume, 0)} 億</span>` : ''}</div>
+      ${q.inst ? `<div class="idx-inst">三大法人 ${esc(q.inst.date.slice(5))}<span>外資${amt(q.inst.foreign)}</span><span>投信${amt(q.inst.trust)}</span><span>自營${amt(q.inst.dealer)}</span></div>` : ''}
+    </div>${sparkSvg(q.spark, (q.spark?.at(-1) ?? 0) >= (q.spark?.[0] ?? 0))}</div>`).join('');
+}
+$('#idxRow').addEventListener('click', e => {
+  const c = e.target.closest('[data-idx]');
+  if (c) openChart(c.dataset.idx, INDICES.map(q => ({code: q.code, name: q.name})), '大盤指數');
+});
+
 async function loadWatch() { setWatch(await api('/api/tw/board/watchlist')); }
 const curGroup = () => WGROUPS.find(g => g.name === st.group) || WGROUPS[0] || {name: '自選股', codes: []};
 
@@ -425,12 +475,13 @@ function currentRows() {
   }
   const q = st.search.trim().toLowerCase();
   rows = rows.filter(r =>
-    (!q || r.code.toLowerCase().includes(q) || (r.name||'').toLowerCase().includes(q)) &&
+    (!q || r.code.toLowerCase().includes(q) || (r.name||'').toLowerCase().includes(q) || (IDX_ALIAS[r.code] || '').includes(q)) &&
     (!st.market || r.market === st.market) &&
     (!st.ind || r.industry === st.ind) &&
-    (st.tab !== 'all' || st.etf || r.kind === 'stock'));
+    (st.tab !== 'all' || st.etf || r.kind === 'stock' || r.kind === 'index'));
   const k = st.sort, dir = st.dir;
   return rows.slice().sort((a, b) => {
+    if ((a.kind === 'index') !== (b.kind === 'index')) return a.kind === 'index' ? -1 : 1;   // 大盤指數固定在最上面
     let x = a[k], y = b[k];
     if (k === 'signals') { x = (x||[]).length; y = (y||[]).length; }
     if (x == null && y == null) return 0;
@@ -441,6 +492,13 @@ function currentRows() {
 }
 
 function render() {
+  try { renderInner(); }
+  catch (e) {
+    console.error(e);
+    $('#tbl tbody').innerHTML = `<tr><td class="empty">畫面更新失敗：${esc(e.message)}<br><button class="clear-btn" onclick="clearFilters()">重新整理清單</button></td></tr>`;
+  }
+}
+function renderInner() {
   ss.set('twBoardState', st);
   document.querySelectorAll('.tab').forEach(t => t.classList.toggle('active', t.dataset.tab === st.tab));
   $('#afterPanel').classList.toggle('hidden', st.tab !== 'after');
@@ -466,8 +524,13 @@ function rowsHtml(from, to, maxVol) {
   maxVol = maxVol || Math.max(1, ...rows.slice(0, 300).map(r => r.volume || 0));
   const wset = new Set(WATCH);
   const more = to < rows.length ? `<tr class="more-row" id="moreRow"><td colspan="${cols.length}">載入更多…（${to} / ${rows.length}）</td></tr>` : '';
-  return rows.slice(from, to).map(r => '<tr>' + cols.map(([k, , c='']) => {
+  return rows.slice(from, to).map(r => `<tr${r.kind === 'index' ? ' class="idx-tr"' : ''}>` + cols.map(([k, , c='']) => {
     const v = r[k];
+    if (r.kind === 'index') {
+      if (k === 'star') return '<td class="l"><span class="idx-tag">大盤</span></td>';
+      if (k === 'volume') return `<td>${v ? fmt(v, 0) + ' 億' : '-'}</td>`;
+      if (k === 'industry') return `<td class="${c}"><span class="ind">大盤指數</span></td>`;
+    }
     switch (k) {
       case 'star': return `<td class="l"><span class="star${wset.has(r.code)?' on':''}" data-star="${esc(r.code)}" title="自選股">${wset.has(r.code)?STAR:STAR_O}</span></td>`;
       case 'code': return `<td class="l"><span class="code" data-go="${esc(r.code)}">${esc(r.code)}</span></td>`;
@@ -495,12 +558,29 @@ $('.tbl-wrap').addEventListener('scroll', e => {
   $('#tbl tbody').insertAdjacentHTML('beforeend', rowsHtml(from, shown));
 });
 
+let LOAD_ERR = '';
+function clearFilters() {
+  st.search = ''; st.market = ''; st.ind = '';
+  $('#search').value = ''; $('#fMarket').value = ''; $('#fInd').value = '';
+  render();
+}
+async function retryLoad() {
+  LOAD_ERR = '';
+  render();
+  try { await loadList(); } catch (e) { LOAD_ERR = e.message || '網路錯誤'; }
+  render();
+}
+
 function emptyText() {
   const icon = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg><br>';
   if (st.tab === 'watch') return icon + '尚無自選股，點清單左側的 ☆ 加入';
   if (st.tab === 'after') return icon + (AFTER ? `${AFTER.date} 沒有符合條件的股票` : '選擇條件後按「開始選股」');
   if (st.tab === 'rt') return icon + (RT ? '目前沒有符合條件的股票' : '選擇條件後按「開始選股」');
-  return icon + (ALL.length ? '沒有符合篩選的股票' : '資料載入中（首次啟動需要下載歷史資料，約數分鐘）');
+  if (LOAD_ERR) return icon + `行情載入失敗：${esc(LOAD_ERR)}<br><button class="clear-btn" onclick="retryLoad()">重新載入</button>`;
+  if (!ALL.length) return icon + '資料載入中…';
+  const active = [st.search && `搜尋「${esc(st.search)}」`, st.market && (st.market === 'TSE' ? '上市' : '上櫃'), st.ind && `產業「${esc(st.ind)}」`].filter(Boolean);
+  return icon + `沒有符合篩選的股票${active.length ? '（' + active.join('、') + '）' : ''}` +
+    (active.length ? '<br><button class="clear-btn" onclick="clearFilters()">清除篩選，顯示全部股票</button>' : '');
 }
 
 function openChart(code, rows, label) {
@@ -537,7 +617,12 @@ document.querySelector('.pulse').addEventListener('click', e => {
 });
 
 document.querySelectorAll('.tab').forEach(t => t.onclick = () => { st.tab = t.dataset.tab; render(); });
-$('#search').oninput = e => { st.search = e.target.value; render(); };
+$('#search').oninput = e => {
+  let auto = false;
+  try { auto = e.target.matches(':autofill') || e.target.matches(':-webkit-autofill'); } catch (_) {}
+  if (auto) { e.target.value = st.search; return; }
+  st.search = e.target.value; render();
+};
 $('#fMarket').onchange = e => { st.market = e.target.value; render(); };
 $('#fInd').onchange = e => { st.ind = e.target.value; render(); };
 $('#fEtf').onchange = e => { st.etf = e.target.checked; render(); };
@@ -550,7 +635,7 @@ const INV = [['trust','投信'], ['foreign','外資'], ['dealer','自營商'], [
 const afterSel = ss.get('twAfterRules', ['trust:buy']);
 $('#afterRules').innerHTML = INV.map(([k, n]) => ['buy','sell'].map(s =>
   `<label class="rule"><input type="checkbox" value="${k}:${s}"${afterSel.includes(k+':'+s)?' checked':''}><span class="box">${CHECK}</span>
-   <span class="side ${s}">${s==='buy'?'BUY':'SELL'}</span>${n}持股${s==='buy'?'金叉':'死叉'}均線 ＋ KD ${s==='buy'?'金叉':'死叉'}</label>`).join('')).join('');
+   <span class="side ${s}">${s==='buy'?'BUY':'SELL'}</span>${n}持股${s==='buy'?'金叉':'死叉'}持股均線</label>`).join('')).join('');
 $('#maSeg').onclick = e => { const b = e.target.closest('button'); if (!b) return; $('#maN').value = b.dataset.v; syncSeg(); };
 $('#maN').oninput = syncSeg;
 function syncSeg() { document.querySelectorAll('#maSeg button').forEach(b => b.classList.toggle('on', b.dataset.v === $('#maN').value)); }
@@ -561,7 +646,7 @@ $('#runAfter').onclick = async () => {
   const btn = $('#runAfter'); btn.disabled = true;
   try {
     AFTER = await api('/api/tw/board/screen/after', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({
-      rules, ma_n: +$('#maN').value, within: +$('#within').value, kd_n: +$('#kdN').value,
+      rules, ma_n: +$('#maN').value, within: +$('#within').value,
       min_volume: +$('#minVol').value, include_etf: $('#afterEtf').checked, asof: $('#asof').value || null})});
     $('#cntAfter').textContent = AFTER.results.length;
     st.sort = 'volume'; st.dir = -1;
@@ -576,7 +661,7 @@ $('#runBt').onclick = async () => {
   const btn = $('#runBt'); btn.disabled = true; btn.lastChild.textContent = '回測中…';
   try {
     const r = await api('/api/tw/board/backtest', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({
-      rules, ma_list, within: +$('#within').value, kd_n: +$('#kdN').value, min_volume: +$('#minVol').value, include_etf: $('#afterEtf').checked})});
+      rules, ma_list, within: +$('#within').value, min_volume: +$('#minVol').value, include_etf: $('#afterEtf').checked})});
     renderBacktest(r);
   } catch (e) { alert(e.message); }
   btn.disabled = false; btn.lastChild.textContent = '歷史回測';
@@ -623,7 +708,7 @@ $('#alertSave').onclick = async () => {
   try {
     await api('/api/tw/board/alerts', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({
       enabled: $('#alertOn').checked, scope: $('#alertScope').value, rules, include_etf: $('#rtEtf').checked,
-      params: {k_low: +$('#kLow').value, k_high: +$('#kHigh').value, vol_n: +$('#volN').value, kd_n: +$('#rtKdN').value}})});
+      params: {k_low: +$('#kLow').value, k_high: +$('#kHigh').value, kd_n: +$('#rtKdN').value}})});
     loadAlerts();
   } catch (e) { alert(e.message); }
 };
@@ -651,7 +736,7 @@ async function runRt(silent) {
   const btn = $('#runRt'); if (!silent) btn.disabled = true;
   try {
     RT = await api('/api/tw/board/screen/realtime', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({
-      rules, k_low: +$('#kLow').value, k_high: +$('#kHigh').value, vol_n: +$('#volN').value, kd_n: +$('#rtKdN').value,
+      rules, k_low: +$('#kLow').value, k_high: +$('#kHigh').value, kd_n: +$('#rtKdN').value,
       include_etf: $('#rtEtf').checked})});
     $('#cntRt').textContent = RT.results.length;
     if (st.tab === 'rt') render();
@@ -664,15 +749,21 @@ $('#runRt').onclick = () => runRt(false);
 
 // 盤中自動更新行情
 async function tick() {
-  try { await loadList(); if (st.tab === 'all' || st.tab === 'watch') render(); } catch (e) {}
-  setTimeout(tick, marketOpen ? 20000 : 300000);
+  try { await loadList(); LOAD_ERR = ''; if (st.tab === 'all' || st.tab === 'watch') render(); }
+  catch (e) { if (!ALL.length) { LOAD_ERR = e.message || '網路錯誤'; render(); } }
+  loadIndices();
+  // 沒拿到資料時 10 秒後重試；盤中 20 秒更新；收盤後 5 分鐘
+  setTimeout(tick, !ALL.length ? 10000 : marketOpen ? 20000 : 300000);
 }
 
 (async () => {
   $('#search').value = st.search; $('#fMarket').value = st.market; $('#fEtf').checked = st.etf;
   render();
-  await Promise.all([loadList().catch(e => console.error(e)), loadWatch(), initRt(), loadStatus()]);
-  loadAlerts();
+  const safe = p => p.catch(e => console.error(e));
+  // 行情一到就先畫表格，不等其他資料（任何一項失敗都不影響清單）
+  const listP = loadList().then(() => { LOAD_ERR = ''; render(); }).catch(e => { LOAD_ERR = e.message || '網路錯誤'; render(); });
+  await Promise.allSettled([listP, safe(loadWatch()), safe(initRt()), safe(loadStatus()), safe(loadIndices())]);
+  safe(loadAlerts());
   render();
   setTimeout(tick, marketOpen ? 20000 : 300000);
   setInterval(loadStatus, 60000);

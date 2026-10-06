@@ -93,7 +93,24 @@
     var clock = el.querySelector('b');
     if (clock) clock.textContent = ('0' + now.getHours()).slice(-2) + ':' + ('0' + now.getMinutes()).slice(-2);
   }
-  document.addEventListener('DOMContentLoaded', function () { marketTick(); setInterval(marketTick, 30000); });
+  // App bar 上的加權指數（盤中 30 秒更新一次，收盤後 5 分鐘）
+  var idxTimer = null;
+  function indexTick() {
+    var el = document.getElementById('mktChip');
+    if (!el) return;
+    fetch('/api/tw/board/indices').then(function (r) { return r.ok ? r.json() : null; }).then(function (list) {
+      var q = list && list.filter(function (x) { return x.code === 'TAIEX'; })[0];
+      var box = el.querySelector('.idx-q');
+      if (!q || q.price == null || !box) return;
+      var c = q.chg > 0 ? 'up' : q.chg < 0 ? 'dn' : '';
+      box.className = 'num idx-q ' + c;
+      box.textContent = '加權 ' + q.price.toLocaleString('zh-TW', { maximumFractionDigits: 2 }) +
+        (q.chg_pct == null ? '' : ' ' + (q.chg > 0 ? '▲' : q.chg < 0 ? '▼' : '') + Math.abs(q.chg_pct).toFixed(2) + '%');
+    }).catch(function () {});
+    clearTimeout(idxTimer);
+    idxTimer = setTimeout(indexTick, el.classList.contains('open') ? 30000 : 300000);
+  }
+  document.addEventListener('DOMContentLoaded', function () { marketTick(); setInterval(marketTick, 30000); indexTick(); });
 
   window.Theme = { mode: mode, set: set, toggle: toggle, css: css, resolve: resolve, resolveDeep: resolveDeep };
 })();

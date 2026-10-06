@@ -72,12 +72,11 @@ def test_after_hours_screen_matches_reference(board):
                 got = {r['code'] for r in res['results']}
                 want = set()
                 for c in codes:
-                    k, d = ref_kd(series(board, c, 'high'), series(board, c, 'low'), series(board, c, 'close'))
                     hold = list(np.cumsum(inst(board, c, col)))
                     ma = ref_ma(hold, ma_n)
                     i = len(hold) - 1
                     cross = up if side == 'buy' else dn
-                    if cross(hold, ma, i) and cross(k, d, i):
+                    if cross(hold, ma, i):                       # 只看持股線穿越均線（不含 KD）
                         want.add(c)
                 assert got == want, (investor, side, ma_n)
 
@@ -88,10 +87,9 @@ def test_backtest_counts_match_reference(board):
     warm = 30
     want = 0
     for c in codes:
-        k, d = ref_kd(series(board, c, 'high'), series(board, c, 'low'), series(board, c, 'close'))
         hold = list(np.cumsum(inst(board, c, 'trust_net')))
         ma = ref_ma(hold, 5)
-        want += sum(1 for i in range(warm, len(hold)) if up(hold, ma, i) and up(k, d, i))
+        want += sum(1 for i in range(warm, len(hold)) if up(hold, ma, i))
     assert res['results'][0]['signals'] == want
     assert res['results'][0]['stats'][5]['n'] <= want
 
@@ -122,3 +120,22 @@ def test_watchlist_migrates_old_format(board):
         json.dump(['2330', '2317'], f)
     data = board._load_watch()
     assert data == {'groups': [{'name': board.DEFAULT_GROUP, 'codes': ['2330', '2317']}]}
+
+
+def test_realtime_volume_vs_yesterday(board):
+    """即時選股：KD 交叉 + K 門檻 + 今日量 > 昨日量（與逐筆參考實作比對）。"""
+    dates, codes = make_market(board, n_days=60, n_codes=80, seed=3)
+    params = {'k_low': 50, 'k_high': 50}
+    res = board.screen_realtime(['kdj_buy', 'kdj_sell'], params)
+    got = {(r['code'], s['rule']) for r in res['results'] for s in r['signals']}
+    want = set()
+    for c in codes:
+        k, d = ref_kd(series(board, c, 'high'), series(board, c, 'low'), series(board, c, 'close'))
+        v = series(board, c, 'volume')
+        i = len(v) - 1
+        if v[i] > v[i - 1]:
+            if up(k, d, i) and k[i] < 50:
+                want.add((c, 'kdj_buy'))
+            if dn(k, d, i) and k[i] > 50:
+                want.add((c, 'kdj_sell'))
+    assert want and got == want

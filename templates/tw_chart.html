@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>技術分析</title>
-<link rel="stylesheet" href="/static/css/style.css?v=4">
+<link rel="stylesheet" href="/static/css/style.css?v=5">
 {% include "_head.html" %}
 <script src="https://unpkg.com/lightweight-charts@5.0.9/dist/lightweight-charts.standalone.production.js"></script>
 <style>
@@ -175,6 +175,8 @@ if (QS.get('period') && ['1','15','60','D','W','M'].includes(QS.get('period'))) 
 const saveCfg = () => ls.set(CFG_KEY, cfg);
 
 let code = QS.get('code') || '2330';
+const INDEX_CODES = ['TAIEX', 'TPEX'];
+const IS_INDEX = () => INDEX_CODES.includes(code);
 let nav = ss.get('twNavList', null);
 let WATCH = [], WGROUPS = [], WNAMES = {};
 function setWatch(p) { WGROUPS = p.groups || []; WNAMES = p.names || {}; WATCH = [...new Set(WGROUPS.flatMap(g => g.codes))]; }
@@ -329,7 +331,7 @@ function build() {
       const v5 = sma(V, 5), v20 = sma(V, 20);
       chart.addSeries(LC.LineSeries, line(KDJ_C[0]), p).setData(toSeries(bars, v5));
       chart.addSeries(LC.LineSeries, line(KDJ_C[1]), p).setData(toSeries(bars, v20));
-      addLegend(p, i => `<span class="n">成交量(張)</span><span>${fmt(V[i], 0)}</span><span style="color:${KDJ_C[0]}">MA5 ${fmt(v5[i], 0)}</span><span style="color:${KDJ_C[1]}">MA20 ${fmt(v20[i], 0)}</span>`);
+      addLegend(p, i => `<span class="n">${IS_INDEX() ? '成交金額(億)' : '成交量(張)'}</span><span>${fmt(V[i], 0)}</span><span style="color:${KDJ_C[0]}">MA5 ${fmt(v5[i], 0)}</span><span style="color:${KDJ_C[1]}">MA20 ${fmt(v20[i], 0)}</span>`);
     } else if (key === 'rsi') {
       const r = rsi(C);
       const rs = chart.addSeries(LC.LineSeries, line(KDJ_C[2], 1.5), p);
@@ -362,16 +364,16 @@ function build() {
       chart.priceScale('net' + key, p).applyOptions({scaleMargins: {top: 0.55, bottom: 0}, visible: false});
       chart.addSeries(LC.LineSeries, line(color, 2, {lastValueVisible: true, priceFormat: {type: 'volume'}}), p).setData(toSeries(bars, h));
       chart.addSeries(LC.LineSeries, line(Theme.css('--text-mid'), 1, {lineStyle: LC.LineStyle.Dashed, priceFormat: {type: 'volume'}}), p).setData(toSeries(bars, m));
-      const nm = key === 'foreign' && !inst.foreign_anchor ? label + '(累計買賣超)' : label;
-      addLegend(p, i => `<span class="n">${nm}(張)</span><span style="color:${color}">${fmt(h[i], 0)}</span><span>MA${cfg.holdN} ${fmt(m[i], 0)}</span>` +
-        (net[i] != null && ['D', ...INTRADAY].includes(cfg.period) ? `<span class="${net[i] >= 0 ? 'up' : 'dn'}">當日 ${net[i] >= 0 ? '+' : ''}${fmt(net[i], 0)}</span>` : ''));
-      // 盤後選股訊號：持股穿越均線且 KD 同日交叉（日線）
+      const idx = IS_INDEX(), unit = idx ? '億' : '張', dp = idx ? 1 : 0;
+      const nm = idx ? label.replace('持股', '') + '累計買賣超' : key === 'foreign' && !inst.foreign_anchor ? label + '(累計買賣超)' : label;
+      addLegend(p, i => `<span class="n">${nm}(${unit})</span><span style="color:${color}">${fmt(h[i], dp)}</span><span>MA${cfg.holdN} ${fmt(m[i], dp)}</span>` +
+        (net[i] != null && ['D', ...INTRADAY].includes(cfg.period) ? `<span class="${net[i] >= 0 ? 'up' : 'dn'}">當日 ${net[i] >= 0 ? '+' : ''}${fmt(net[i], dp)}${idx ? '億' : ''}</span>` : ''));
+      // 盤後選股訊號：持股線穿越持股均線（日線）
       if (cfg.signals && cfg.period === 'D') {
-        kd = kd || kdj(H, L, C);
         for (let i = 1; i < bars.length; i++) {
-          if (crossUp(h, m, i) && crossUp(kd.K, kd.D, i))
+          if (crossUp(h, m, i))
             markers.push({time: bars[i].time, position: 'belowBar', color: UP, shape: 'arrowUp', text: label.slice(0, 2) + 'B'});
-          else if (crossDn(h, m, i) && crossDn(kd.K, kd.D, i))
+          else if (crossDn(h, m, i))
             markers.push({time: bars[i].time, position: 'aboveBar', color: DN, shape: 'arrowDown', text: label.slice(0, 2) + 'S'});
         }
       }
@@ -434,6 +436,7 @@ function fetchChart(c) {
 let loadSeq = 0;
 async function load() {
   const seq = ++loadSeq;
+  renderTools();
   $('#loading').textContent = '載入中…'; $('#loading').style.display = 'flex';
   if (!EMBED) history.replaceState(null, '', '/tw/board/chart?code=' + encodeURIComponent(code));
   renderNav();
@@ -463,14 +466,16 @@ async function loadQuote() {
     const q = await api('/api/tw/board/quote/' + encodeURIComponent(c));
     if (c !== code) return;
     const cc = q.chg > 0 ? 'up' : q.chg < 0 ? 'dn' : '';
-    $('#title').innerHTML = `<div class="code">${esc(q.code)}<span class="meta">${q.market === 'TSE' ? '上市' : '上櫃'}・${esc(q.industry || '')}</span></div><div class="name">${esc(q.name)}</div>`;
+    const metaTxt = q.kind === 'index' ? (q.market === 'TSE' ? '證交所' : '櫃買中心') + '・大盤指數' : (q.market === 'TSE' ? '上市' : '上櫃') + '・' + (q.industry || '');
+    $('#title').innerHTML = `<div class="code">${esc(q.code)}<span class="meta">${esc(metaTxt)}</span></div><div class="name">${esc(q.name)}</div>`;
+    $('#star').style.visibility = q.kind === 'index' ? 'hidden' : '';
     const ent = nav && nav.list.find(x => x[0] === q.code);
     if (ent && ent[1] === ent[0]) { ent[1] = q.name; $('#sideList').dataset.key = ''; renderNav(); }
     $('#px').className = 'px ' + cc; $('#px').textContent = fmt(q.price);
     $('#chg').className = 'chg ' + cc;
     $('#chg').innerHTML = q.chg == null ? '' : `<span class="pill">${q.chg > 0 ? '▲' : q.chg < 0 ? '▼' : ''}${fmt(Math.abs(q.chg))}</span><span class="pill">${q.chg_pct > 0 ? '+' : ''}${fmt(q.chg_pct)}%</span>`;
     $('#ohlc').innerHTML = `<span>開<b>${fmt(q.open)}</b></span><span>高<b>${fmt(q.high)}</b></span><span>低<b>${fmt(q.low)}</b></span>` +
-      `<span>昨收<b>${fmt(q.prev)}</b></span><span>量<b>${fmt(q.volume, 0)}</b></span>` +
+      `<span>昨收<b>${fmt(q.prev)}</b></span><span>${q.kind === 'index' ? '金額' : '量'}<b>${fmt(q.volume, 0)}${q.kind === 'index' ? '億' : ''}</b></span>` +
       `<span>${q.realtime ? '<span class="rtflag"><i></i>LIVE ' + esc(q.time || '') + '</span>' : '<b style="margin:0;color:var(--text-dim)">' + esc(q.date || '') + '</b>'}</span>`;
     if (q.realtime) quoteTimer = setTimeout(loadQuote, 20000);
   } catch (e) {
@@ -547,8 +552,8 @@ function renderTools() {
   document.querySelectorAll('[data-wheel]').forEach(b => b.classList.toggle('on', b.dataset.wheel === cfg.wheel));
   $('#maToggles').innerHTML = '<b>均線</b>' + MAS.map(([n, c]) => `<span class="tg${cfg.ma.includes(n) ? ' on' : ''}" data-ma="${n}"><i style="background:${c}"></i>MA${n}</span>`).join('');
   $('#mainToggles').innerHTML = `<span class="tg${cfg.boll ? ' on' : ''}" data-flag="boll"><i style="background:var(--text-dim)"></i>布林</span>` +
-    `<span class="tg${cfg.signals ? ' on' : ''}" data-flag="signals" title="在日 K 上標示：法人持股穿越均線且 KD 同日交叉">選股訊號</span>`;
-  $('#paneToggles').innerHTML = '<b>副圖</b>' + PANES.map(([k, l]) => `<span class="tg${cfg.panes.includes(k) ? ' on' : ''}" data-pane="${k}">${HOLD_COLOR[k] ? `<i style="background:${HOLD_COLOR[k]}"></i>` : ''}${l}</span>`).join('');
+    `<span class="tg${cfg.signals ? ' on' : ''}" data-flag="signals" title="在日 K 上標示：法人持股線穿越持股均線">選股訊號</span>`;
+  $('#paneToggles').innerHTML = '<b>副圖</b>' + PANES.map(([k, l]) => `<span class="tg${cfg.panes.includes(k) ? ' on' : ''}" data-pane="${k}">${HOLD_COLOR[k] ? `<i style="background:${HOLD_COLOR[k]}"></i>` : ''}${IS_INDEX() ? l.replace('持股', '買賣超') : l}</span>`).join('');
   $('#holdN').value = cfg.holdN;
 }
 document.querySelector('.tools').addEventListener('click', e => {

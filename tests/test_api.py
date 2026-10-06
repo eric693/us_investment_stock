@@ -55,8 +55,31 @@ def test_list_and_screen_endpoints(client, board):
     r = client.get('/api/tw/board/list', headers={'Accept-Encoding': 'gzip'})
     assert r.status_code == 200 and r.headers.get('Content-Encoding') == 'gzip'
     r = client.get('/api/tw/board/list')
-    assert len(r.json['rows']) == 20
+    rows = r.json['rows']
+    assert len(rows) == 22 and [x[0] for x in rows[:2]] == ['TAIEX', 'TPEX']   # 大盤指數在最前面
     r = client.post('/api/tw/board/screen/after', json={'rules': [{'investor': 'trust', 'side': 'buy'}]})
     assert r.status_code == 200 and 'results' in r.json
     r = client.post('/api/tw/board/backtest', json={'rules': [{'investor': 'trust', 'side': 'buy'}], 'ma_list': [3, 5]})
     assert r.status_code == 200 and [x['ma_n'] for x in r.json['results']] == [3, 5]
+
+
+def test_index_chart_and_quote(client, board):
+    import sqlite3
+    make_market(board, n_days=40, n_codes=5)
+    con = sqlite3.connect(board.DB_PATH)
+    days = [r[0] for r in con.execute("SELECT DISTINCT date FROM daily ORDER BY date")]
+    for i, d in enumerate(days):
+        con.execute('INSERT INTO index_daily VALUES(?,?,?,?,?,?)', ('TAIEX', d, 100 + i, 102 + i, 99 + i, 101 + i))
+        con.execute('INSERT INTO market_inst VALUES(?,?,?,?,?,?)', ('TSE', d, 1.5, -0.5, 0.2, 1.2))
+    con.commit()
+    login(client, 'amy', 'user12345')
+    q = client.get('/api/tw/board/quote/TAIEX').json
+    assert q['price'] == 101 + len(days) - 1 and q['chg'] == 1 and q['kind'] == 'index'
+    j = client.get('/api/tw/board/chart/TAIEX?period=D').json
+    assert len(j['bars']) == len(days) and j['bars'][0]['volume'] > 0          # 成交金額由個股加總
+    assert j['inst']['hold']['foreign'][-1] == round(1.5 * len(days), 2)       # 累計買賣超（億）
+    w = client.get('/api/tw/board/chart/TAIEX?period=W').json
+    assert len(w['bars']) < len(days) and w['bars'][-1]['close'] == 101 + len(days) - 1
+    assert client.get('/api/tw/board/chart/TPEX?period=60').status_code == 400   # 櫃買沒有盤中歷史
+    idx = client.get('/api/tw/board/indices').json
+    assert [x['code'] for x in idx] == ['TAIEX', 'TPEX'] and len(idx[0]['spark']) == min(60, len(days))

@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""台股看盤：全市場行情、自選股、技術分析圖、盤後選股（法人持股 × KD）、即時選股（KDJ）。
+"""台股看盤：全市場行情、自選股、技術分析圖、盤後選股（法人持股穿越均線）、即時選股（KDJ）。
 
 資料來源
   - 每日行情：TWSE MI_INDEX / TPEx afterTrading/otc
@@ -96,6 +96,10 @@ def _init_db():
         CREATE TABLE IF NOT EXISTS foreign_hold(code TEXT PRIMARY KEY, date TEXT, lots REAL);
         CREATE TABLE IF NOT EXISTS sync_log(date TEXT, source TEXT, status TEXT, ts TEXT,
             PRIMARY KEY(date, source));
+        CREATE TABLE IF NOT EXISTS index_daily(code TEXT, date TEXT, open REAL, high REAL, low REAL,
+            close REAL, PRIMARY KEY(code, date));
+        CREATE TABLE IF NOT EXISTS market_inst(market TEXT, date TEXT, foreign_amt REAL, trust_amt REAL,
+            dealer_amt REAL, total_amt REAL, PRIMARY KEY(market, date));   -- 億元
         CREATE INDEX IF NOT EXISTS idx_daily_date ON daily(date);
         CREATE INDEX IF NOT EXISTS idx_inst_date ON inst(date);
         ''')
@@ -219,10 +223,79 @@ def _fetch_foreign_hold_tpex(d):
             if CODE_RE.match(r[ix['代號']].strip())]
 
 
+def _fetch_twse_mkt(d):
+    js = _get_json(f'https://www.twse.com.tw/rwd/zh/fund/BFI82U?type=day&dayDate={d:%Y%m%d}&response=json')
+    if js.get('stat') != 'OK' or not js.get('data'):
+        return None
+    v = {r[0].strip(): (_num(r[3]) or 0) / 1e8 for r in js['data']}
+    return [('TSE', v.get('外資及陸資(不含外資自營商)', 0), v.get('投信', 0),
+             v.get('自營商(自行買賣)', 0) + v.get('自營商(避險)', 0), v.get('合計', 0))]
+
+
+def _fetch_tpex_mkt(d):
+    js = _get_json(f'https://www.tpex.org.tw/www/zh-tw/insti/summary?type=Daily&date={d:%Y/%m/%d}'
+                   f'&response=json', host_gap=1.5)
+    fields, data = _tables(js, '單位名稱')
+    if not data:
+        return None
+    v = {r[0].strip().replace('\u3000', '').rstrip('*'): (_num(r[3]) or 0) / 1e8 for r in data}
+    return [('OTC', v.get('外資及陸資(不含自營商)', 0), v.get('投信', 0), v.get('自營商合計', 0),
+             v.get('三大法人合計', 0))]
+
+
+def _fetch_index_month(code, month):
+    """指數某個月的每日開高低收（官方資料）。month = Timestamp（該月任一天）。"""
+    if code == 'TAIEX':
+        js = _get_json(f'https://www.twse.com.tw/rwd/zh/TAIEX/MI_5MINS_HIST?date={month:%Y%m}01&response=json')
+        rows = (js.get('data') or []) if js.get('stat') == 'OK' else []
+        out = []
+        for r in rows:
+            y, m, dd = r[0].split('/')
+            out.append((f'{int(y) + 1911}-{m}-{dd}', *(_num(x) for x in r[1:5])))
+        return out
+    js = _get_json(f'https://www.tpex.org.tw/www/zh-tw/indexInfo/inx?date={month:%Y/%m}/01&response=json',
+                   host_gap=1.5)
+    fields, data = _tables(js, '日期')
+    return [(r[0].replace('/', '-'), *(_num(x) for x in r[1:5])) for r in data or []]
+
+
+INDEX_META = {
+    'TAIEX': dict(name='加權指數', market='TSE', yf='^TWII', mis='t00', alias='大盤 加權 指數 TAIEX 台股'),
+    'TPEX': dict(name='櫃買指數', market='OTC', yf=None, mis='o00', alias='大盤 櫃買 櫃檯 指數 TPEX OTC'),
+}
+INDEX_HISTORY_MONTHS = 72
+
+
+def _sync_index_history():
+    """指數月資料：過去的月份抓一次，當月每次同步都更新。"""
+    this_month = _now().strftime('%Y-%m')
+    for code in INDEX_META:
+        src = f'idx_{code}'
+        with _db() as con:
+            done = {r[0] for r in con.execute('SELECT date FROM sync_log WHERE source=?', (src,))}
+        for i in range(INDEX_HISTORY_MONTHS):
+            month = (_now().tz_localize(None).to_period('M') - i).to_timestamp()
+            key = month.strftime('%Y-%m')
+            if key in done and key != this_month:
+                continue
+            try:
+                rows = _fetch_index_month(code, month)
+            except Exception as e:
+                print(f'[tw_board] index {code} {key}: {e}')
+                continue
+            with _db() as con:
+                con.executemany('INSERT OR REPLACE INTO index_daily VALUES(?,?,?,?,?,?)',
+                                [(code, *r) for r in rows if r[4] is not None])
+                if rows or key < this_month:
+                    con.execute('INSERT OR REPLACE INTO sync_log VALUES(?,?,?,?)',
+                                (key, src, 'ok' if rows else 'nodata', _now().strftime('%Y-%m-%d %H:%M')))
+
+
 # ── 同步 ──────────────────────────────────────────────────────────────
 SOURCES = {
     'twse_px': _fetch_twse_px, 'tpex_px': _fetch_tpex_px,
     'twse_inst': _fetch_twse_inst, 'tpex_inst': _fetch_tpex_inst,
+    'twse_mkt': _fetch_twse_mkt, 'tpex_mkt': _fetch_tpex_mkt,
 }
 
 
@@ -256,6 +329,9 @@ def _sync_source(src, d, today):
                     [(r['code'], r['name'], market,
                       'ETF' if r['code'].startswith('00') else '',
                       'etf' if r['code'].startswith('00') else 'stock', day) for r in rows])
+            elif src.endswith('_mkt'):
+                con.executemany('INSERT OR REPLACE INTO market_inst VALUES(?,?,?,?,?,?)',
+                                [(m, day, a, b, e, f) for m, a, b, e, f in rows])
             else:
                 con.executemany('INSERT OR REPLACE INTO inst VALUES(?,?,?,?,?,?)',
                                 [(c, day, a, b, e, f) for c, a, b, e, f in rows])
@@ -276,9 +352,9 @@ def _sync_day(d, today, sources=None):
             if src in want and src not in done:
                 _sync_source(src, d, today)
 
-    th = threading.Thread(target=run, args=(['tpex_px', 'tpex_inst'],))
+    th = threading.Thread(target=run, args=(['tpex_px', 'tpex_inst', 'tpex_mkt'],))
     th.start()
-    run(['twse_px', 'twse_inst'])
+    run(['twse_px', 'twse_inst', 'twse_mkt'])
     th.join()
 
 
@@ -365,6 +441,8 @@ def run_sync():
     now = _now()
     if now.weekday() < 5 and now.hour >= 14:
         _sync_day(pd.Timestamp(today), today)
+    _status.update(phase='sync', message='更新大盤指數')
+    _sync_index_history()
     # 回補歷史（由新到舊）
     span = int(BACKFILL_DAYS * 7 / 5) + 30
     for i in range(1, span):
@@ -383,17 +461,17 @@ def run_sync():
     # 法人買賣超再往前補（只抓法人，持股估計線更長）
     span = int(INST_BACKFILL_DAYS * 7 / 5) + 30
     for i in range(1, span):
-        if _trading_days_loaded('twse_inst') >= INST_BACKFILL_DAYS:
+        if min(_trading_days_loaded('twse_inst'), _trading_days_loaded('twse_mkt')) >= INST_BACKFILL_DAYS:
             break
         d = pd.Timestamp(today - dt.timedelta(days=i))
         if d.weekday() >= 5:
             continue
         done = _done_sources(d.strftime('%Y-%m-%d'))
-        if {'twse_inst', 'tpex_inst'} <= done:
+        if {'twse_inst', 'tpex_inst', 'twse_mkt', 'tpex_mkt'} <= done:
             continue
         _status.update(phase='backfill', message=f"回補法人資料 {d:%Y-%m-%d}（{_trading_days_loaded('twse_inst')} 日）")
         _write_status()
-        _sync_day(d, today, ['twse_inst', 'tpex_inst'])
+        _sync_day(d, today, ['twse_inst', 'tpex_inst', 'twse_mkt', 'tpex_mkt'])
     _sync_foreign_hold()
     with _db() as con:
         need_meta = con.execute("SELECT COUNT(*) FROM stocks WHERE industry=''").fetchone()[0]
@@ -466,7 +544,7 @@ def _rt_wanted():
 def _poll_realtime_once(prev):
     with _db() as con:
         rows = con.execute('SELECT code, market FROM stocks').fetchall()
-    keys = [f"{'tse' if m == 'TSE' else 'otc'}_{c}.tw" for c, m in rows]
+    keys = ['tse_t00.tw', 'otc_o00.tw'] + [f"{'tse' if m == 'TSE' else 'otc'}_{c}.tw" for c, m in rows]
     quotes = dict(prev.get('quotes', {}))
 
     def fetch(chunk):
@@ -653,9 +731,7 @@ def screen_after_hours(rules, ma_n=5, within=1, kd_n=9, min_volume=0, include_et
     f = _load_frames(max(80, ma_n + within + kd_n + 40), asof)
     if f is None or len(f['dates']) < ma_n + 2:
         return None
-    k, d = calc_kd_frame(f['high'], f['low'], f['close'], kd_n)
-    kd_up = _cross_up(k, d).iloc[-within:].any()
-    kd_dn = _cross_dn(k, d).iloc[-within:].any()
+    k, d = calc_kd_frame(f['high'], f['low'], f['close'], kd_n)   # 只用來在結果中顯示 K / D
     k_last, d_last = k.iloc[-1], d.iloc[-1]
     meta = f['meta']
     vol_ok = f['volume'].iloc[-1] >= min_volume
@@ -664,12 +740,11 @@ def screen_after_hours(rules, ma_n=5, within=1, kd_n=9, min_volume=0, include_et
         col, label = INVESTORS[rule['investor']]
         hold = f[col].cumsum()
         ma = hold.rolling(ma_n).mean()
+        # 持股線穿越 N 日均線（within 日內發生過，且目前仍在均線同一側）
         if rule['side'] == 'buy':
-            hit = _cross_up(hold, ma).iloc[-within:].any() & kd_up & \
-                  (hold.iloc[-1] > ma.iloc[-1]) & (k_last > d_last)
+            hit = _cross_up(hold, ma).iloc[-within:].any() & (hold.iloc[-1] > ma.iloc[-1])
         else:
-            hit = _cross_dn(hold, ma).iloc[-within:].any() & kd_dn & \
-                  (hold.iloc[-1] < ma.iloc[-1]) & (k_last < d_last)
+            hit = _cross_dn(hold, ma).iloc[-within:].any() & (hold.iloc[-1] < ma.iloc[-1])
         hit &= vol_ok
         for code in hit[hit].index:
             if not include_etf and code.startswith('00'):
@@ -697,14 +772,12 @@ def backtest_after_hours(rules, ma_list=(3, 5), within=1, kd_n=9, min_volume=0,
     close, vol = f['close'], f['volume']
     cols = [c for c in close.columns if include_etf or not c.startswith('00')]
     close, vol = close[cols], vol[cols]
-    k, d = calc_kd_frame(f['high'][cols], f['low'][cols], close, kd_n)
-    warm = max(30, max(ma_list) + 2)              # KD 與均線暖機期不計
+    warm = max(30, max(ma_list) + 2)              # 均線暖機期不計
     valid = pd.Series(np.arange(len(close)) >= warm, index=close.index)
 
     def recent(ev):
         return ev.rolling(within, min_periods=1).max().astype(bool) if within > 1 else ev
 
-    kd_up, kd_dn = recent(_cross_up(k, d)), recent(_cross_dn(k, d))
     fwd = {h: close.shift(-h) / close - 1 for h in horizons}
     vol_ok = vol >= min_volume
     base = {h: float(np.nanmean(fwd[h].values[warm:])) * 100 for h in horizons}
@@ -715,9 +788,9 @@ def backtest_after_hours(rules, ma_list=(3, 5), within=1, kd_n=9, min_volume=0,
             hold = f[col][cols].cumsum()
             ma = hold.rolling(ma_n).mean()
             if rule['side'] == 'buy':
-                hit = recent(_cross_up(hold, ma)) & kd_up & (hold > ma) & (k > d)
+                hit = recent(_cross_up(hold, ma)) & (hold > ma)
             else:
-                hit = recent(_cross_dn(hold, ma)) & kd_dn & (hold < ma) & (k < d)
+                hit = recent(_cross_dn(hold, ma)) & (hold < ma)
             hit = hit & vol_ok & valid.values[:, None]
             row = dict(ma_n=ma_n, investor=rule['investor'], label=label, side=rule['side'],
                        signals=int(hit.values.sum()), stats={})
@@ -828,23 +901,22 @@ def _check_alerts():
 
 
 # 即時選股條件；新增條件只要在這裡加一個函式並登錄到 RT_RULES。
-def _rt_kdj_buy(k, d, vol, vol_ma, p):
-    return _cross_up(k, d).iloc[-1] & (k.iloc[-1] < p.get('k_low', 20)) & (vol > vol_ma)
+def _rt_kdj_buy(k, d, vol, vol_prev, p):
+    return _cross_up(k, d).iloc[-1] & (k.iloc[-1] < p.get('k_low', 20)) & (vol > vol_prev)
 
 
-def _rt_kdj_sell(k, d, vol, vol_ma, p):
-    return _cross_dn(k, d).iloc[-1] & (k.iloc[-1] > p.get('k_high', 80)) & (vol > vol_ma)
+def _rt_kdj_sell(k, d, vol, vol_prev, p):
+    return _cross_dn(k, d).iloc[-1] & (k.iloc[-1] > p.get('k_high', 80)) & (vol > vol_prev)
 
 
 RT_RULES = {
-    'kdj_buy': dict(label='KDJ 買進：K 金叉 D 且 K<20 且量 > 5 日均量', side='buy', fn=_rt_kdj_buy),
-    'kdj_sell': dict(label='KDJ 賣出：K 死叉 D 且 K>80 且量 > 5 日均量', side='sell', fn=_rt_kdj_sell),
+    'kdj_buy': dict(label='KDJ 買進：K 金叉 D 且 K<20 且成交量 > 昨日成交量', side='buy', fn=_rt_kdj_buy),
+    'kdj_sell': dict(label='KDJ 賣出：K 死叉 D 且 K>80 且成交量 > 昨日成交量', side='sell', fn=_rt_kdj_sell),
 }
 
 
 def screen_realtime(rule_ids, params, include_etf=False):
     kd_n = int(params.get('kd_n', 9))
-    vol_n = int(params.get('vol_n', 5))
     f = _load_frames(kd_n + 60)
     if f is None:
         return None
@@ -870,13 +942,13 @@ def screen_realtime(rule_ids, params, include_etf=False):
         source = 'realtime'
     k, d = calc_kd_frame(high, low, close, kd_n)
     vol = volume.iloc[-1]
-    vol_ma = volume.iloc[-1 - vol_n:-1].mean()
+    vol_prev = volume.iloc[-2]                     # 昨日成交量
     out = {}
     for rid in rule_ids:
         rule = RT_RULES.get(rid)
         if not rule:
             continue
-        hit = rule['fn'](k, d, vol, vol_ma, params)
+        hit = rule['fn'](k, d, vol, vol_prev, params)
         for code in hit[hit.fillna(False).astype(bool)].index:
             if not include_etf and code.startswith('00'):
                 continue
@@ -885,7 +957,7 @@ def screen_realtime(rule_ids, params, include_etf=False):
                                                       side=rule['side']))
             row.update(k=round(float(k[code].iloc[-1]), 1), d=round(float(d[code].iloc[-1]), 1),
                        j=round(float(3 * k[code].iloc[-1] - 2 * d[code].iloc[-1]), 1),
-                       vol_ma=round(float(vol_ma[code])))
+                       vol_prev=round(float(vol_prev[code])))
             out[code] = row
     return dict(date=close.index[-1], source=source, ts=(snap or {}).get('ts'),
                 results=list(out.values()))
@@ -947,6 +1019,38 @@ def api_status():
     return jsonify(st)
 
 
+def _turnover(market, since=None):
+    """大盤成交金額（億元）＝ 個股收盤 × 成交量 加總。"""
+    with _db() as con:
+        q = ('SELECT d.date, SUM(d.close * d.volume) / 100000.0 FROM daily d JOIN stocks s ON s.code = d.code '
+             'WHERE s.market = ?' + (' AND d.date >= ?' if since else '') + ' GROUP BY d.date')
+        return dict(con.execute(q, (market, since) if since else (market,)))
+
+
+def _index_quote(code):
+    """指數最新報價：盤中用 MIS 即時，否則用官方日資料。"""
+    meta = INDEX_META[code]
+    with _db() as con:
+        rows = con.execute('SELECT date, open, high, low, close FROM index_daily WHERE code=? '
+                           'ORDER BY date DESC LIMIT 2', (code,)).fetchall()
+    res = dict(code=code, name=meta['name'], market=meta['market'], industry='大盤指數', kind='index',
+               realtime=False)
+    if rows:
+        d, o, h, l, c = rows[0]
+        prev = rows[1][4] if len(rows) > 1 else None
+        res.update(date=d, open=o, high=h, low=l, price=c, prev=prev)
+    snap = _rt_today()
+    q = (snap or {}).get('quotes', {}).get(meta['mis'])
+    if q and q.get('price') and (not rows or rows[0][0] < _now().strftime('%Y-%m-%d')):
+        res.update(open=q['open'], high=q['high'], low=q['low'], price=q['price'], prev=q['prev'],
+                   realtime=True, time=q.get('time'), date=_now().strftime('%Y-%m-%d'))
+    if res.get('price') is not None and res.get('prev'):
+        res['chg'] = round(res['price'] - res['prev'], 2)
+        res['chg_pct'] = round(res['chg'] / res['prev'] * 100, 2)
+    res['volume'] = round(_turnover(meta['market'], res.get('date')).get(res.get('date'), 0) or 0) or None
+    return res
+
+
 _list_cache = {}
 
 
@@ -995,6 +1099,13 @@ def api_list():
                     round(chg, 2) if chg is not None else None,
                     round(chg / prev * 100, 2) if chg is not None and prev else None,
                     vol, o, h, l, prev])
+    idx_rows = []
+    for code in INDEX_META:
+        q = _index_quote(code)
+        idx_rows.append([code, q['name'], q['market'], '大盤指數', 'index', q.get('price'), q.get('chg'),
+                         q.get('chg_pct'), q.get('volume'), q.get('open'), q.get('high'), q.get('low'),
+                         q.get('prev')])
+    out = idx_rows + out
     return jsonify(dict(date=latest, realtime=bool(rt), ts=(snap or {}).get('ts') if rt else None,
                         market_open=_market_open(),
                         fields=['code', 'name', 'market', 'industry', 'kind', 'price', 'chg',
@@ -1005,6 +1116,8 @@ def api_list():
 @bp.route('/api/tw/board/quote/<code>')
 def api_quote(code):
     _touch_active()
+    if code in INDEX_META:
+        return jsonify(_index_quote(code))
     with _db() as con:
         meta = con.execute('SELECT code, name, market, industry FROM stocks WHERE code=?',
                            (code,)).fetchone()
@@ -1030,7 +1143,10 @@ def api_quote(code):
 
 
 def _yf_bars(code, market, period):
-    sym = f"{code}.{'TW' if market == 'TSE' else 'TWO'}"
+    return _yf_bars_symbol(f"{code}.{'TW' if market == 'TSE' else 'TWO'}", period)
+
+
+def _yf_bars_symbol(sym, period):
     # 週 / 月線由日線自己合成：yfinance 的週線常缺本週
     cfg = PERIODS[period]
     key = f'tw_board_bars:{sym}:{period}'
@@ -1082,11 +1198,60 @@ def _db_bars(code):
             for d, o, h, l, c, v in rows if o is not None]
 
 
+def _resample(bars, period):
+    """日線 → 週 / 月線（以該期第一個交易日標示，量為加總）。"""
+    if period == 'D' or not bars:
+        return bars
+    df = pd.DataFrame(bars)
+    df['p'] = pd.to_datetime(df['day']).dt.to_period('W-SUN' if period == 'W' else 'M')
+    g = df.groupby('p', sort=True).agg(day=('day', 'first'), open=('open', 'first'), high=('high', 'max'),
+                                      low=('low', 'min'), close=('close', 'last'), volume=('volume', 'sum'))
+    return [dict(time=r.day, day=r.day, open=r.open, high=r.high, low=r.low, close=r.close,
+                 volume=round(r.volume)) for r in g.itertuples()]
+
+
+def _index_chart(code, period):
+    meta = INDEX_META[code]
+    with _db() as con:
+        rows = con.execute('SELECT date, open, high, low, close FROM index_daily WHERE code=? ORDER BY date',
+                           (code,)).fetchall()
+        inst = con.execute('SELECT date, foreign_amt, trust_amt, dealer_amt, total_amt FROM market_inst '
+                           'WHERE market=? ORDER BY date', (meta['market'],)).fetchall()
+    turnover = _turnover(meta['market'])
+    source = 'twse' if code == 'TAIEX' else 'tpex'
+    if period in INTRADAY:
+        if not meta['yf']:
+            return None, '櫃買指數沒有公開的盤中歷史資料，請改看日線以上'
+        bars = _yf_bars_symbol(meta['yf'], period)
+        source = 'yfinance'
+    else:
+        bars = [dict(time=d, day=d, open=o, high=h, low=l, close=c, volume=round(turnover.get(d) or 0))
+                for d, o, h, l, c in rows if c is not None]
+        q = _index_quote(code)
+        if q.get('realtime') and bars and q['date'] > bars[-1]['day']:   # 盤中：把今天接上去
+            bars.append(dict(time=q['date'], day=q['date'], open=q['open'], high=q['high'], low=q['low'],
+                             close=q['price'], volume=0))
+        bars = _resample(bars, period)
+    days = [r[0] for r in inst]
+    cum = [0.0] * 4
+    hold = {k: [] for k in ('foreign', 'trust', 'dealer', 'total')}
+    for r in inst:
+        for i, k in enumerate(('foreign', 'trust', 'dealer', 'total')):
+            cum[i] += r[i + 1] or 0
+            hold[k].append(round(cum[i], 2))
+    nets = {k: [round(r[i + 1] or 0, 2) for r in inst] for i, k in enumerate(('foreign', 'trust', 'dealer', 'total'))}
+    return dict(code=code, name=meta['name'], market=meta['market'], kind='index', unit='億', period=period,
+                source=source, bars=bars, inst=dict(days=days, hold=hold, net=nets, foreign_anchor=False)), None
+
+
 @bp.route('/api/tw/board/chart/<code>')
 def api_chart(code):
     period = request.args.get('period', 'D')
     if period not in PERIODS:
         return jsonify(error='period 必須是 1 / 15 / 60 / D / W / M'), 400
+    if code in INDEX_META:
+        res, err = _index_chart(code, period)
+        return (jsonify(error=err), 400) if err else jsonify(res)
     with _db() as con:
         meta = con.execute('SELECT name, market FROM stocks WHERE code=?', (code,)).fetchone()
         inst = con.execute('SELECT date, foreign_net, trust_net, dealer_net, total_net FROM inst '
@@ -1127,6 +1292,25 @@ def api_chart(code):
     return jsonify(dict(code=code, name=meta[0], market=meta[1], period=period, source=source,
                         bars=bars, inst=dict(days=inst_days, hold=hold, net=nets,
                                              foreign_anchor=foreign_anchor)))
+
+
+@bp.route('/api/tw/board/indices')
+def api_indices():
+    """加權 / 櫃買指數：最新報價、近 60 日收盤（走勢小圖）、當日三大法人買賣超（億元）。"""
+    out = []
+    with _db() as con:
+        for code, meta in INDEX_META.items():
+            q = _index_quote(code)
+            closes = [r[0] for r in con.execute(
+                'SELECT close FROM (SELECT date, close FROM index_daily WHERE code=? ORDER BY date DESC LIMIT 60) '
+                'ORDER BY date', (code,))]
+            if q.get('realtime') and q.get('price'):
+                closes.append(q['price'])
+            inst = con.execute('SELECT date, foreign_amt, trust_amt, dealer_amt, total_amt FROM market_inst '
+                               'WHERE market=? ORDER BY date DESC LIMIT 1', (meta['market'],)).fetchone()
+            q.update(spark=closes, inst=dict(zip(('date', 'foreign', 'trust', 'dealer', 'total'), inst)) if inst else None)
+            out.append(q)
+    return jsonify(out)
 
 
 @bp.route('/api/tw/board/watchlist', methods=['GET', 'POST', 'DELETE'])
@@ -1239,7 +1423,7 @@ def api_alerts():
             cfg['scope'] = str(b.get('scope') or 'watch')
             cfg['rules'] = [r for r in b.get('rules', []) if r in RT_RULES] or list(RT_RULES)
             cfg['params'] = {k: float(v) for k, v in (b.get('params') or {}).items()
-                             if k in ('kd_n', 'vol_n', 'k_low', 'k_high')}
+                             if k in ('kd_n', 'k_low', 'k_high')}
             cfg['include_etf'] = bool(b.get('include_etf'))
             _save_alerts(cfg)
     token, uid = _line_creds()
@@ -1260,7 +1444,7 @@ def api_screen_realtime():
     if request.method == 'GET':
         return jsonify([dict(id=k, label=v['label'], side=v['side']) for k, v in RT_RULES.items()])
     b = request.get_json(silent=True) or {}
-    params = dict(kd_n=b.get('kd_n', 9), vol_n=b.get('vol_n', 5),
+    params = dict(kd_n=b.get('kd_n', 9),
                   k_low=float(b.get('k_low', 20)), k_high=float(b.get('k_high', 80)))
     res = screen_realtime(b.get('rules') or list(RT_RULES), params,
                           include_etf=bool(b.get('include_etf')))
