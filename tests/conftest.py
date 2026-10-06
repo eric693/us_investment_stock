@@ -7,6 +7,7 @@ import pandas as pd
 import pytest
 
 os.environ['TW_BOARD_NO_BG'] = '1'          # 測試時不啟動背景同步 / 即時輪詢
+os.environ['STOCKLENS_SKIP_MIGRATION'] = '1'  # 測試不能搬動正式資料檔
 os.environ['SESSION_COOKIE_SECURE'] = '0'
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
@@ -17,9 +18,11 @@ import tw_board    # noqa: E402
 @pytest.fixture
 def board(tmp_path, monkeypatch):
     """把 tw_board 的資料檔都指到暫存目錄。"""
-    for name, fn in [('DB_PATH', 'tw.db'), ('WATCH_FILE', 'watch.json'), ('ALERT_FILE', 'alerts.json'),
-                     ('RT_FILE', 'rt.json'), ('MONITOR_FILE', 'monitor.json'), ('STATUS_FILE', 'st.json')]:
+    import userdata
+    for name, fn in [('DB_PATH', 'tw.db'), ('RT_FILE', 'rt.json'), ('STATUS_FILE', 'st.json')]:
         monkeypatch.setattr(tw_board, name, str(tmp_path / fn))
+    monkeypatch.setattr(userdata, 'DB_PATH', str(tmp_path / 'user_data.db'))
+    monkeypatch.setattr(userdata, 'BASE_DIR', str(tmp_path))
     tw_board._frames_cache.clear()
     tw_board._list_cache.clear()
     tw_board._rt_cache.update(mtime=0, data=None)
@@ -67,11 +70,13 @@ def users(tmp_path, monkeypatch):
 
 
 @pytest.fixture
-def client(users, board):
+def client(users, board, tmp_path, monkeypatch):
     import app as app_module
+    monkeypatch.setattr(app_module, 'MONITOR_FILE', str(tmp_path / 'monitor.json'))
     app_module.app.config['TESTING'] = True
     return app_module.app.test_client()
 
 
 def login(client, user, pw):
     return client.post('/login', data={'username': user, 'password': pw})
+

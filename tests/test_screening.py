@@ -116,9 +116,9 @@ def test_realtime_intraday_equals_close(board, monkeypatch):
 
 
 def test_watchlist_migrates_old_format(board):
-    with open(board.WATCH_FILE, 'w') as f:
-        json.dump(['2330', '2317'], f)
-    data = board._load_watch()
+    import userdata
+    userdata.put('amy', 'tw_watchlist', ['2330', '2317'])
+    data = board._load_watch('amy')
     assert data == {'groups': [{'name': board.DEFAULT_GROUP, 'codes': ['2330', '2317']}]}
 
 
@@ -177,16 +177,16 @@ def test_line_alerts_pipeline(board, monkeypatch):
     hits = {r['code'] for r in board.screen_realtime(['kdj_buy', 'kdj_sell'], params)['results']}
     assert len(hits) >= 2
     watched = sorted(hits)[:1] + [c for c in codes if c not in hits][:1]   # 一檔會中、一檔不會
-    board._save_watch({'groups': [{'name': '自選股', 'codes': watched}]})
+    board._save_watch('amy', {'groups': [{'name': '自選股', 'codes': watched}]})
     sent = []
-    monkeypatch.setattr(board, '_push_line', lambda text: (sent.append(text), (True, ''))[1])
-    board._save_alerts({'enabled': True, 'scope': 'watch', 'rules': ['kdj_buy', 'kdj_sell'],
+    monkeypatch.setattr(board, '_push_line', lambda text, user: (sent.append((user, text)), (True, ''))[1])
+    board._save_alerts('amy', {'enabled': True, 'scope': 'watch', 'rules': ['kdj_buy', 'kdj_sell'],
                         'params': params, 'include_etf': False, 'sent': {}, 'log': []})
     board._check_alerts()
-    assert len(sent) == 1 and watched[0] in sent[0] and watched[1] not in sent[0]
+    assert len(sent) == 1 and sent[0][0] == 'amy' and watched[0] in sent[0][1] and watched[1] not in sent[0][1]
     board._check_alerts()                      # 同一天再跑：不重複推
     assert len(sent) == 1
-    log = board._load_alerts()['log']
+    log = board._load_alerts('amy')['log']
     assert [x['code'] for x in log] == [watched[0]] * len(log) and all(x['pushed'] for x in log)
 
 

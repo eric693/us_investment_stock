@@ -12,3 +12,6 @@ backups/
 tw_alerts.json
 .login_fail.json
 .monitor.lock
+user_data.db*
+.userdata_migrate.lock
+*.migrated

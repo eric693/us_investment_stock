@@ -819,7 +819,7 @@ function displayTW(ticker) {
 // ── State ──────────────────────────────────────────────────────────
 let currentData   = null;
 let currentPeriod = '1M';
-let maSettings    = JSON.parse(localStorage.getItem('tw_ma_settings') || 'null') || {m1:5, m2:20, m3:60};
+let maSettings    = JSON.parse(UserStore.getItem('tw_ma_settings') || 'null') || {m1:5, m2:20, m3:60};
 
 // ── MA helpers ──────────────────────────────────────────────────────
 function calcMA(closes, period) {
@@ -926,7 +926,7 @@ function applyMASettings() {
   const v1 = parseInt($('maInput1').value), v2 = parseInt($('maInput2').value), v3 = parseInt($('maInput3').value);
   if (!v1||!v2||!v3||v1<1||v2<1||v3<1) return;
   maSettings = {m1:v1, m2:v2, m3:v3};
-  localStorage.setItem('tw_ma_settings', JSON.stringify(maSettings));
+  UserStore.setItem('tw_ma_settings', JSON.stringify(maSettings));
   $('maSettingsPanel').classList.add('hidden');
   if (currentData) {
     currentData._customMA = computeCustomMAs(currentData);
@@ -1461,8 +1461,8 @@ async function saveLineToken() {
   const tok = ($('lineTokenInput').value || '').trim();
   const uid = ($('lineUserIdInput').value || '').trim();
   // Save locally AND to server so any browser gets the settings
-  localStorage.setItem('line_channel_token', tok);
-  localStorage.setItem('line_user_id', uid);
+  UserStore.setItem('line_channel_token', tok);
+  UserStore.setItem('line_user_id', uid);
   try {
     await fetch('/api/tw/line/config', {
       method: 'POST', headers: {'Content-Type':'application/json'},
@@ -1475,21 +1475,21 @@ async function saveLineToken() {
     : '<span style="color:var(--text-dim)">設定已清除</span>');
 }
 
-function _getLineToken() { return localStorage.getItem('line_channel_token') || ''; }
-function _getLineUserId() { return localStorage.getItem('line_user_id') || ''; }
+function _getLineToken() { return UserStore.getItem('line_channel_token') || ''; }
+function _getLineUserId() { return UserStore.getItem('line_user_id') || ''; }
 
 async function _loadLineConfigFromServer() {
   try {
     const r = await fetch('/api/tw/line/config');
     const d = await r.json();
-    if (d.line_token)   { localStorage.setItem('line_channel_token', d.line_token); }
-    if (d.line_user_id) { localStorage.setItem('line_user_id', d.line_user_id); }
+    if (d.line_token)   { UserStore.setItem('line_channel_token', d.line_token); }
+    if (d.line_user_id) { UserStore.setItem('line_user_id', d.line_user_id); }
   } catch(e) {}
 }
 
 // ── Position Tracking ────────────────────────────────────────────────────
 function getPosition(ticker) {
-  const all = JSON.parse(localStorage.getItem('positions_tw') || '{}');
+  const all = JSON.parse(UserStore.getItem('positions_tw') || '{}');
   return all[ticker] || { avgPrice: 0, shares: 0 };
 }
 
@@ -1498,9 +1498,9 @@ function savePosition() {
   const ticker   = currentData.ticker;
   const avgPrice = parseFloat($('avgPriceInput').value) || 0;
   const shares   = parseInt($('sharesInput').value)     || 0;
-  const all = JSON.parse(localStorage.getItem('positions_tw') || '{}');
+  const all = JSON.parse(UserStore.getItem('positions_tw') || '{}');
   all[ticker] = { avgPrice, shares };
-  localStorage.setItem('positions_tw', JSON.stringify(all));
+  UserStore.setItem('positions_tw', JSON.stringify(all));
   const msg = $('posStatusMsg');
   if (avgPrice && shares) {
     const cost = (avgPrice * shares).toLocaleString('zh-TW', {maximumFractionDigits:0});
@@ -1541,13 +1541,13 @@ function _buildPnlBlock(price) {
 }
 
 function _saveMonitorSettings(ticker, settings) {
-  const all = JSON.parse(localStorage.getItem('monitor_settings') || '{}');
+  const all = JSON.parse(UserStore.getItem('monitor_settings') || '{}');
   all[ticker] = settings;
-  localStorage.setItem('monitor_settings', JSON.stringify(all));
+  UserStore.setItem('monitor_settings', JSON.stringify(all));
 }
 
 function _loadMonitorSettings(ticker) {
-  const all = JSON.parse(localStorage.getItem('monitor_settings') || '{}');
+  const all = JSON.parse(UserStore.getItem('monitor_settings') || '{}');
   return all[ticker] || { mode: 'off', profile: 'aggressive' };
 }
 
@@ -2457,8 +2457,8 @@ function setupCrosshair() {
 }
 
 // ── Watchlist ─────────────────────────────────────────────────────────
-function getWatchlist() { return JSON.parse(localStorage.getItem('wl_tw') || '[]'); }
-function saveWatchlist(wl) { localStorage.setItem('wl_tw', JSON.stringify(wl)); }
+function getWatchlist() { return JSON.parse(UserStore.getItem('wl_tw') || '[]'); }
+function saveWatchlist(wl) { UserStore.setItem('wl_tw', JSON.stringify(wl)); }
 
 function toggleWatch() {
   if (!currentData) return;
@@ -2490,8 +2490,8 @@ function renderWatchlist() {
 }
 
 // ── Price Alerts ──────────────────────────────────────────────────────
-function getAlerts() { return JSON.parse(localStorage.getItem('priceAlerts_tw') || '{}'); }
-function _saveAlerts(a) { localStorage.setItem('priceAlerts_tw', JSON.stringify(a)); }
+function getAlerts() { return JSON.parse(UserStore.getItem('priceAlerts_tw') || '{}'); }
+function _saveAlerts(a) { UserStore.setItem('priceAlerts_tw', JSON.stringify(a)); }
 
 function openAlertModal() {
   if (!currentData) return;

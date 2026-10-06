@@ -339,10 +339,10 @@
 // ═══════════════════════════════════════════
 const STORE_KEY = 'pflio_v2';
 function loadData() {
-  try { return JSON.parse(localStorage.getItem(STORE_KEY)) || { groups: {}, holdings: [] }; }
+  try { return JSON.parse(UserStore.getItem(STORE_KEY)) || { groups: {}, holdings: [] }; }
   catch { return { groups: {}, holdings: [] }; }
 }
-function saveData(d) { localStorage.setItem(STORE_KEY, JSON.stringify(d)); }
+function saveData(d) { UserStore.setItem(STORE_KEY, JSON.stringify(d)); }
 function getData() { return loadData(); }
 
 // ═══════════════════════════════════════════

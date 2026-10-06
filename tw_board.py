@@ -27,13 +27,14 @@ import requests
 import yfinance as yf
 from flask import Blueprint, jsonify, request, render_template
 
+import userdata
+
 bp = Blueprint('tw_board', __name__)
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 DB_PATH = os.path.join(BASE_DIR, 'tw_market.db')
 RT_FILE = os.path.join(BASE_DIR, 'tw_realtime.json')
 RT_ACTIVE_FILE = os.path.join(BASE_DIR, '.tw_rt_active')
-WATCH_FILE = os.path.join(BASE_DIR, 'tw_watchlist.json')
 SYNC_LOCK_FILE = os.path.join(BASE_DIR, '.tw_sync.lock')
 RT_LOCK_FILE = os.path.join(BASE_DIR, '.tw_rt.lock')
 
@@ -41,8 +42,7 @@ BACKFILL_DAYS = int(os.environ.get('TW_BACKFILL_DAYS', '250'))   # 交易日（�
 INST_BACKFILL_DAYS = int(os.environ.get('TW_INST_BACKFILL_DAYS', '500'))   # 法人資料再往前補，持股線更完整
 BACKUP_DIR = os.path.join(BASE_DIR, 'backups')
 BACKUP_KEEP = 7
-ALERT_FILE = os.path.join(BASE_DIR, 'tw_alerts.json')
-MONITOR_FILE = os.path.join(BASE_DIR, 'monitor_config.json')
+# 自選股、推播設定、LINE 金鑰都依帳號存在 userdata（user_data.db）
 HDRS = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 '
                       '(KHTML, like Gecko) Chrome/124.0 Safari/537.36'}
 CODE_RE = re.compile(r'^(\d{4}|00\d{2,4}[A-Z]?)$')
@@ -602,7 +602,7 @@ def _rt_loop():
         while True:
             t0 = time.time()
             try:
-                alerts_on = _load_alerts().get('enabled')
+                alerts_on = any(c.get('enabled') for _, c in userdata.users_with('tw_alerts'))
                 if (_rt_wanted() or alerts_on) and _market_open():
                     snap = _poll_realtime_once(snap if snap.get('date') == _now().strftime('%Y%m%d')
                                                else {})
@@ -874,32 +874,26 @@ def inst_ranking(investor='total', side='buy', days=1, by='lots', limit=50, incl
 _alert_lock = threading.Lock()
 
 
-def _load_alerts():
-    try:
-        with open(ALERT_FILE, encoding='utf-8') as f:
-            return json.load(f)
-    except (OSError, ValueError):
-        return {'enabled': False, 'scope': 'watch', 'rules': list(RT_RULES), 'params': {},
-                'include_etf': False, 'sent': {}, 'log': []}
+def _default_alerts():
+    return {'enabled': False, 'scope': 'watch', 'rules': list(RT_RULES), 'params': {},
+            'include_etf': False, 'sent': {}, 'log': []}
 
 
-def _save_alerts(cfg):
-    with open(ALERT_FILE + '.tmp', 'w', encoding='utf-8') as f:
-        json.dump(cfg, f, ensure_ascii=False, indent=1)
-    os.replace(ALERT_FILE + '.tmp', ALERT_FILE)
+def _load_alerts(user):
+    return userdata.get(user, 'tw_alerts') or _default_alerts()
 
 
-def _line_creds():
-    try:
-        with open(MONITOR_FILE, encoding='utf-8') as f:
-            c = json.load(f)
-        return c.get('line_token', ''), c.get('line_user_id', '')
-    except (OSError, ValueError):
-        return '', ''
+def _save_alerts(user, cfg):
+    userdata.put(user, 'tw_alerts', cfg)
 
 
-def _push_line(text):
-    token, uid = _line_creds()
+def _line_creds(user):
+    c = userdata.get(user, 'line') or {}
+    return c.get('token', ''), c.get('user_id', '')
+
+
+def _push_line(text, user):
+    token, uid = _line_creds(user)
     if not token or not uid:
         return False, '尚未設定 LINE Channel Token 與 User ID'
     try:
@@ -911,26 +905,36 @@ def _push_line(text):
         return False, str(e)
 
 
-def _scope_codes(scope):
+def _scope_codes(scope, user):
     if scope == 'all':
         return None
-    groups = _load_watch()['groups']
+    groups = _load_watch(user)['groups']
     if scope == 'watch':
         return {c for g in groups for c in g['codes']}
     return {c for g in groups if g['name'] == scope for c in g['codes']}
 
 
 def _check_alerts():
-    """盤中每次更新報價後跑一次即時選股；新出現的訊號推播到 LINE（同一檔同一條件一天只推一次）。"""
+    """盤中每次更新報價後，替每個開啟推播的帳號各跑一次。"""
+    for user, cfg in userdata.users_with('tw_alerts'):
+        if cfg.get('enabled'):
+            try:
+                _check_alerts_user(user)
+            except Exception as e:
+                print(f'[tw_board] alerts {user}: {e}')
+
+
+def _check_alerts_user(user):
+    """新出現的訊號推播到這個帳號的 LINE（同一檔同一條件一天只推一次）。"""
     with _alert_lock:
-        cfg = _load_alerts()
+        cfg = _load_alerts(user)
         if not cfg.get('enabled'):
             return
         res = screen_realtime(cfg.get('rules') or list(RT_RULES), cfg.get('params') or {},
                               include_etf=cfg.get('include_etf', False))
         if not res or res.get('source') != 'realtime':
             return
-        allow = _scope_codes(cfg.get('scope', 'watch'))
+        allow = _scope_codes(cfg.get('scope', 'watch'), user)
         today = _now().strftime('%Y-%m-%d')
         sent = set(cfg.get('sent', {}).get(today, []))
         new = []
@@ -951,7 +955,7 @@ def _check_alerts():
                          f" K{r['k']} D{r['d']}")
         if len(new) > 30:
             lines.append(f"…另有 {len(new) - 30} 檔")
-        ok, err = _push_line('\n'.join(lines))
+        ok, err = _push_line('\n'.join(lines), user)
         cfg['sent'] = {today: sorted(sent)}
         log = cfg.get('log', [])
         for r, sig in new:
@@ -959,7 +963,7 @@ def _check_alerts():
                             side=sig['side'], rule=sig['rule'], price=r['close'], pushed=ok))
         cfg['log'] = log[-100:]
         cfg['last_error'] = err
-        _save_alerts(cfg)
+        _save_alerts(user, cfg)
 
 
 # 即時選股條件；新增條件只要在這裡加一個函式並登錄到 RT_RULES。
@@ -1032,13 +1036,9 @@ _watch_lock = threading.Lock()
 DEFAULT_GROUP = '自選股'
 
 
-def _load_watch():
+def _load_watch(user):
     """{'groups': [{'name': ..., 'codes': [...]}, ...]}；舊版的單一清單自動轉成預設群組。"""
-    try:
-        with open(WATCH_FILE, encoding='utf-8') as f:
-            data = json.load(f)
-    except (OSError, ValueError):
-        data = []
+    data = userdata.get(user, 'tw_watchlist') or []
     if isinstance(data, list):
         data = {'groups': [{'name': DEFAULT_GROUP, 'codes': data}]}
     if not data.get('groups'):
@@ -1046,10 +1046,8 @@ def _load_watch():
     return data
 
 
-def _save_watch(data):
-    with open(WATCH_FILE + '.tmp', 'w', encoding='utf-8') as f:
-        json.dump(data, f, ensure_ascii=False)
-    os.replace(WATCH_FILE + '.tmp', WATCH_FILE)
+def _save_watch(user, data):
+    userdata.put(user, 'tw_watchlist', data)
 
 
 def _watch_payload(data):
@@ -1383,7 +1381,8 @@ def api_indices():
 def api_watchlist():
     """GET：所有群組；POST {code, group}：加入；DELETE {code, group?}：移出（不給 group = 從所有群組移出）。"""
     with _watch_lock:
-        data = _load_watch()
+        user = userdata.current()
+        data = _load_watch(user)
         if request.method == 'GET':
             return jsonify(_watch_payload(data))
         body = request.get_json(silent=True) or {}
@@ -1400,7 +1399,7 @@ def api_watchlist():
             for g in groups:
                 if (gname is None or g['name'] == gname) and code in g['codes']:
                     g['codes'].remove(code)
-        _save_watch(data)
+        _save_watch(user, data)
         return jsonify(_watch_payload(data))
 
 
@@ -1410,7 +1409,8 @@ def api_watch_groups():
     b = request.get_json(silent=True) or {}
     action, name = b.get('action'), str(b.get('name', '')).strip()
     with _watch_lock:
-        data = _load_watch()
+        user = userdata.current()
+        data = _load_watch(user)
         groups = data['groups']
         names = [g['name'] for g in groups]
         if action == 'add':
@@ -1433,7 +1433,7 @@ def api_watch_groups():
             g['codes'] = [c for c in b.get('codes', []) if CODE_RE.match(str(c))]
         else:
             return jsonify(error='未知的動作'), 400
-        _save_watch(data)
+        _save_watch(user, data)
         return jsonify(_watch_payload(data))
 
 
@@ -1502,8 +1502,9 @@ def api_inst_rank():
 
 @bp.route('/api/tw/board/alerts', methods=['GET', 'POST'])
 def api_alerts():
+    user = userdata.current()
     with _alert_lock:
-        cfg = _load_alerts()
+        cfg = _load_alerts(user)
         if request.method == 'POST':
             b = request.get_json(silent=True) or {}
             cfg['enabled'] = bool(b.get('enabled'))
@@ -1512,8 +1513,8 @@ def api_alerts():
             cfg['params'] = {k: float(v) for k, v in (b.get('params') or {}).items()
                              if k in ('kd_n', 'k_low', 'k_high')}
             cfg['include_etf'] = bool(b.get('include_etf'))
-            _save_alerts(cfg)
-    token, uid = _line_creds()
+            _save_alerts(user, cfg)
+    token, uid = _line_creds(user)
     out = {k: v for k, v in cfg.items() if k != 'sent'}
     out['line_ready'] = bool(token and uid)
     return jsonify(out)
@@ -1521,7 +1522,7 @@ def api_alerts():
 
 @bp.route('/api/tw/board/alerts/test', methods=['POST'])
 def api_alerts_test():
-    ok, err = _push_line(f'【StockLens】LINE 推播測試成功 {_now():%Y-%m-%d %H:%M}')
+    ok, err = _push_line(f'【StockLens】LINE 推播測試成功 {_now():%Y-%m-%d %H:%M}', userdata.current())
     return (jsonify(ok=True), 200) if ok else (jsonify(error=err), 400)
 
 

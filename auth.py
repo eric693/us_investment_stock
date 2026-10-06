@@ -214,6 +214,8 @@ def api_users():
             if name == me:
                 return jsonify(error='不能刪除自己'), 400
             users.pop(name)
+            import userdata
+            userdata.delete_user(name)       # 該帳號的個人資料一併刪除
         else:
             return jsonify(error='未知的動作'), 400
         save_users(users)

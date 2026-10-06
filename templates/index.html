@@ -1649,8 +1649,8 @@ function setupCrosshair() {
 }
 
 // ── Watchlist ─────────────────────────────────────────────────────────
-function getWatchlist() { return JSON.parse(localStorage.getItem('wl') || '[]'); }
-function saveWatchlist(wl) { localStorage.setItem('wl', JSON.stringify(wl)); }
+function getWatchlist() { return JSON.parse(UserStore.getItem('wl') || '[]'); }
+function saveWatchlist(wl) { UserStore.setItem('wl', JSON.stringify(wl)); }
 
 function toggleWatch() {
   if (!currentData) return;
@@ -1689,8 +1689,8 @@ function renderWatchlist() {
 }
 
 // ── Price Alerts ──────────────────────────────────────────────────────
-function getAlerts() { return JSON.parse(localStorage.getItem('priceAlerts') || '{}'); }
-function _saveAlerts(a) { localStorage.setItem('priceAlerts', JSON.stringify(a)); }
+function getAlerts() { return JSON.parse(UserStore.getItem('priceAlerts') || '{}'); }
+function _saveAlerts(a) { UserStore.setItem('priceAlerts', JSON.stringify(a)); }
 
 function openAlertModal() {
   if (!currentData) return;
@@ -1829,10 +1829,10 @@ let _prevSignals     = {};  // ticker → last action (for change detection)
 let _editHoldingsTk  = '';
 
 function getMonitorList() {
-  return JSON.parse(localStorage.getItem('monitorList') || '[]');
+  return JSON.parse(UserStore.getItem('monitorList') || '[]');
 }
 function _saveMonitorList(list) {
-  localStorage.setItem('monitorList', JSON.stringify(list));
+  UserStore.setItem('monitorList', JSON.stringify(list));
 }
 
 function toggleMonitorPanel() {

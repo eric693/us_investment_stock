@@ -17,9 +17,16 @@ app = Flask(__name__)
 
 # ── 登入（帳號 + 密碼）：見 auth.py ─────────────────────────────────────
 from auth import init_auth, login_required, load_users as _load_users, USERS_FILE   # noqa: F401
+import userdata
 
 _BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 init_auth(app)
+app.register_blueprint(userdata.bp)
+app.context_processor(userdata.page_context)
+# 改版前的共用資料（自選股、推播、LINE、策略、盯盤）歸給當時的管理員帳號
+_legacy = next((u for u, v in _load_users().items() if v.get('role') == 'admin'), None)
+if _legacy and not os.environ.get('STOCKLENS_SKIP_MIGRATION'):
+    userdata.migrate_shared_files(_legacy)
 app.config.update(SEND_FILE_MAX_AGE_DEFAULT=86400 * 365)   # 靜態檔以 ?v= 版本號更新
 
 
@@ -48,13 +55,36 @@ MONITOR_FILE = os.path.join(os.path.dirname(__file__), 'monitor_config.json')
 _monitor_lock = threading.Lock()
 
 def _load_monitor_cfg():
+    """盯盤清單：key = '帳號|代碼'，每筆記錄 owner；改版前沒有 owner 的歸給原帳號。"""
+    cfg = {'tickers': {}}
     try:
         if os.path.exists(MONITOR_FILE):
             with open(MONITOR_FILE, 'r', encoding='utf-8') as f:
-                return json.load(f)
+                cfg = json.load(f)
     except Exception:
         pass
-    return {'tickers': {}}
+    legacy = None
+    for key in list(cfg.get('tickers', {})):
+        entry = cfg['tickers'][key]
+        if 'owner' not in entry:
+            legacy = legacy or userdata.get(userdata.SYSTEM, 'legacy_owner') or ''
+            entry.update(owner=legacy, ticker=key)
+            cfg['tickers'][f'{legacy}|{key}'] = cfg['tickers'].pop(key)
+    # 共用的 LINE 金鑰已搬到各帳號（userdata 'line'），不再留在共用檔
+    cfg.pop('line_token', None)
+    cfg.pop('line_user_id', None)
+    return cfg
+
+
+def _mon_key(user, ticker):
+    return f'{user}|{ticker}'
+
+
+def _entry_line(entry):
+    """盯盤推播用的 LINE：以該筆擁有者帳號的設定為準。"""
+    c = userdata.get(entry.get('owner', ''), 'line') or {}
+    return (c.get('token') or entry.get('line_token', ''),
+            c.get('user_id') or entry.get('line_user_id', ''))
 
 def _save_monitor_cfg(cfg):
     with open(MONITOR_FILE, 'w', encoding='utf-8') as f:
@@ -89,7 +119,11 @@ def _run_server_scan():
     if not tickers_cfg:
         return
     now_str = pd.Timestamp.now(tz='Asia/Taipei').strftime('%Y-%m-%d %H:%M')
-    for ticker, settings in list(tickers_cfg.items()):
+    users = _load_users()
+    for key, settings in list(tickers_cfg.items()):
+        ticker = settings.get('ticker') or key.split('|')[-1]
+        if settings.get('owner') not in users:     # 帳號已刪除
+            continue
         try:
             profile = settings.get('profile', 'aggressive')
             stock = yf.Ticker(ticker)
@@ -104,19 +138,18 @@ def _run_server_scan():
             action = result.get('action', 'WAIT')
             with _monitor_lock:
                 cfg2 = _load_monitor_cfg()
-                if ticker not in cfg2['tickers']:
+                if key not in cfg2['tickers']:
                     continue
-                cfg2['tickers'][ticker]['last_signal'] = result
-                cfg2['tickers'][ticker]['last_scan'] = now_str
-                entry        = cfg2['tickers'][ticker]
-                line_token   = entry.get('line_token', '')
-                line_user_id = entry.get('line_user_id', '')
+                cfg2['tickers'][key]['last_signal'] = result
+                cfg2['tickers'][key]['last_scan'] = now_str
+                entry        = cfg2['tickers'][key]
+                line_token, line_user_id = _entry_line(entry)
                 last_notify  = entry.get('last_notify_time', '')
                 cooldown_ok  = (not last_notify or
                     (pd.Timestamp.now(tz='Asia/Taipei') -
                      pd.Timestamp(last_notify, tz='Asia/Taipei')).total_seconds() > 1800)
                 if action == 'BUY' and line_token and line_user_id and cooldown_ok:
-                    cfg2['tickers'][ticker]['last_notify_time'] = now_str
+                    cfg2['tickers'][key]['last_notify_time'] = now_str
                     _save_monitor_cfg(cfg2)
                     _push_line_msg(line_token, line_user_id, _build_line_text(result))
                 else:
@@ -2243,23 +2276,15 @@ def send_line_notify():
 
 @app.route('/api/tw/line/config', methods=['GET', 'POST'])
 def line_config():
-    """Store/retrieve LINE credentials server-side so any browser gets them."""
-    cfg_file = os.path.join(os.path.dirname(__file__), 'monitor_config.json')
+    """目前帳號的 LINE 金鑰（每個帳號各自一組）。"""
+    user = userdata.current()
     if request.method == 'POST':
         data = request.json or {}
-        with _monitor_lock:
-            cfg = _load_monitor_cfg()
-            cfg['line_token']   = data.get('line_token', '').strip()
-            cfg['line_user_id'] = data.get('line_user_id', '').strip()
-            _save_monitor_cfg(cfg)
+        userdata.put(user, 'line', {'token': data.get('line_token', '').strip(),
+                                    'user_id': data.get('line_user_id', '').strip()})
         return jsonify({'ok': True})
-    else:
-        with _monitor_lock:
-            cfg = _load_monitor_cfg()
-        return jsonify({
-            'line_token':   cfg.get('line_token', ''),
-            'line_user_id': cfg.get('line_user_id', ''),
-        })
+    c = userdata.get(user, 'line') or {}
+    return jsonify({'line_token': c.get('token', ''), 'line_user_id': c.get('user_id', '')})
 
 
 @app.route('/api/tw/monitor/register', methods=['POST'])
@@ -2272,10 +2297,13 @@ def monitor_register():
     line_token   = data.get('line_token', '').strip()
     line_user_id = data.get('line_user_id', '').strip()
     now_str = pd.Timestamp.now(tz='Asia/Taipei').strftime('%Y-%m-%d %H:%M')
+    user = userdata.current()
     with _monitor_lock:
         cfg = _load_monitor_cfg()
-        existing = cfg['tickers'].get(ticker, {})
-        cfg['tickers'][ticker] = {
+        existing = cfg['tickers'].get(_mon_key(user, ticker), {})
+        cfg['tickers'][_mon_key(user, ticker)] = {
+            'owner':            user,
+            'ticker':           ticker,
             'profile':          profile,
             'line_token':       line_token,
             'line_user_id':     line_user_id,
@@ -2294,16 +2322,19 @@ def monitor_unregister():
     ticker = tw_normalize(data.get('ticker', '').strip())
     with _monitor_lock:
         cfg = _load_monitor_cfg()
-        cfg['tickers'].pop(ticker, None)
+        cfg['tickers'].pop(_mon_key(userdata.current(), ticker), None)
         _save_monitor_cfg(cfg)
     return jsonify({'ok': True, 'ticker': ticker})
 
 
 @app.route('/api/tw/monitor/list')
 def monitor_list():
+    user = userdata.current()
     with _monitor_lock:
         cfg = _load_monitor_cfg()
-    return jsonify(cfg.get('tickers', {}))
+    hide = ('line_token', 'line_user_id', 'owner')
+    return jsonify({e['ticker']: {k: v for k, v in e.items() if k not in hide}
+                    for e in cfg.get('tickers', {}).values() if e.get('owner') == user})
 
 
 @app.route('/api/tw/monitor/scan_now', methods=['POST'])
@@ -3333,6 +3364,14 @@ STRATEGIES_FILE = os.path.join(os.path.dirname(__file__), 'strategies.json')
 _strat_lock = threading.Lock()
 
 def _load_strategies():
+    return userdata.get(userdata.current(), 'strategies') or {}
+
+
+def _save_strategies(s):
+    userdata.put(userdata.current(), 'strategies', s)
+
+
+def _load_strategies_file_unused():
     try:
         if os.path.exists(STRATEGIES_FILE):
             with open(STRATEGIES_FILE, 'r', encoding='utf-8') as f:
@@ -3341,7 +3380,7 @@ def _load_strategies():
         pass
     return {}
 
-def _save_strategies(s):
+def _save_strategies_file_unused(s):
     with open(STRATEGIES_FILE, 'w', encoding='utf-8') as f:
         json.dump(s, f, ensure_ascii=False, indent=2)
 
@@ -3764,14 +3803,17 @@ def screener_add_alert():
     ticker = tw_normalize(ticker_raw) if is_tw else ticker_raw.upper()
     now_str = pd.Timestamp.now(tz='Asia/Taipei').strftime('%Y-%m-%d %H:%M')
 
+    user = userdata.current()
     with _monitor_lock:
         cfg = _load_monitor_cfg()
-        existing = cfg['tickers'].get(ticker, {})
+        existing = cfg['tickers'].get(_mon_key(user, ticker), {})
         # Preserve existing keys, add/update exit conditions
-        cfg['tickers'][ticker] = {
+        cfg['tickers'][_mon_key(user, ticker)] = {
+            'owner':          user,
+            'ticker':         ticker,
             'profile':        existing.get('profile', 'steady'),
-            'line_token':     line_token or existing.get('line_token', cfg.get('line_token', '')),
-            'line_user_id':   line_user_id or existing.get('line_user_id', cfg.get('line_user_id', '')),
+            'line_token':     line_token or existing.get('line_token', ''),
+            'line_user_id':   line_user_id or existing.get('line_user_id', ''),
             'last_signal':    existing.get('last_signal'),
             'last_scan':      existing.get('last_scan', ''),
             'last_notify_time': existing.get('last_notify_time', ''),
@@ -3814,7 +3856,11 @@ def _run_server_scan_with_exit():
     with _monitor_lock:
         cfg = _load_monitor_cfg()
     now_str = pd.Timestamp.now(tz='Asia/Taipei').strftime('%Y-%m-%d %H:%M')
-    for ticker, entry in list(cfg.get('tickers', {}).items()):
+    users = _load_users()
+    for mkey, entry in list(cfg.get('tickers', {}).items()):
+        ticker = entry.get('ticker') or mkey.split('|')[-1]
+        if entry.get('owner') not in users:
+            continue
         if not entry.get('exit_conditions'):
             continue
         try:
@@ -3828,8 +3874,7 @@ def _run_server_scan_with_exit():
                 continue
             # Cooldown: don't spam same exit alert within 4 hours
             last_alerts = entry.get('exit_last_alert', {})
-            line_token   = entry.get('line_token', '')
-            line_user_id = entry.get('line_user_id', '')
+            line_token, line_user_id = _entry_line(entry)
             for alert_text in alerts:
                 key = alert_text[:40]
                 last_t = last_alerts.get(key, '')
@@ -3842,8 +3887,8 @@ def _run_server_scan_with_exit():
                     _push_line_msg(line_token, line_user_id, msg)
                     with _monitor_lock:
                         cfg2 = _load_monitor_cfg()
-                        if ticker in cfg2['tickers']:
-                            cfg2['tickers'][ticker].setdefault('exit_last_alert', {})[key] = now_str
+                        if mkey in cfg2['tickers']:
+                            cfg2['tickers'][mkey].setdefault('exit_last_alert', {})[key] = now_str
                             _save_monitor_cfg(cfg2)
         except Exception as e:
             print(f'[ExitAlert scan] {ticker}: {e}')
