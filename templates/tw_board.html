@@ -249,12 +249,13 @@ table.q tbody tr:hover td:first-child { box-shadow: inset 3px 0 0 var(--accent);
     <div class="tabs">
       <button class="tab" data-tab="all"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3 3v18h18"/><path d="M7 14l4-4 3 3 5-6"/></svg>全部行情<span class="cnt" id="cntAll"></span></button>
       <button class="tab" data-tab="watch"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M12 3l2.8 5.7 6.2.9-4.5 4.4 1 6.2L12 17.3 6.5 20.2l1-6.2L3 9.6l6.2-.9z"/></svg>自選股<span class="cnt" id="cntWatch"></span></button>
+      <button class="tab" data-tab="rank"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 20V10M12 20V4M18 20v-7"/></svg>法人排行</button>
       <button class="tab" data-tab="after"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg>盤後選股<span class="cnt" id="cntAfter"></span></button>
       <button class="tab" data-tab="rt"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2L4 14h7l-1 8 9-12h-7z"/></svg>即時選股<span class="cnt" id="cntRt"></span></button>
     </div>
     <div class="filters">
       <label class="search"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg>
-        <input id="search" type="search" name="stock-filter" placeholder="搜尋代碼或名稱" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" readonly onfocus="this.removeAttribute('readonly')" data-lpignore="true" data-1p-ignore><kbd>/</kbd></label>
+        <input id="search" type="search" name="stock-filter" placeholder="搜尋代碼或名稱" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" data-lpignore="true" data-1p-ignore><kbd>/</kbd></label>
       <select class="sel" id="fMarket"><option value="">全部市場</option><option value="TSE">上市</option><option value="OTC">上櫃</option></select>
       <select class="sel" id="fInd"><option value="">全部產業</option></select>
       <label class="chip-toggle" id="etfWrap"><input type="checkbox" id="fEtf"><span class="sw"></span>含 ETF</label>
@@ -263,6 +264,20 @@ table.q tbody tr:hover td:first-child { box-shadow: inset 3px 0 0 var(--accent);
 
   <!-- 自選股群組 -->
   <div class="groups hidden" id="groupBar"></div>
+
+  <!-- 法人買賣超排行 -->
+  <section class="panel hidden" id="rankPanel">
+    <div class="panel-head"><h3>法人買賣超排行</h3><span id="rankInfo">三大法人買賣超於盤後公布</span></div>
+    <div class="params">
+      <div class="param">法人 <span class="seg" id="rkInv"><button data-v="total" class="on">三大法人</button><button data-v="foreign">外資</button><button data-v="trust">投信</button><button data-v="dealer">自營商</button></span></div>
+      <div class="param"><span class="seg" id="rkSide"><button data-v="buy" class="on">買超</button><button data-v="sell">賣超</button></span></div>
+      <div class="param">期間 <span class="seg" id="rkDays"><button data-v="1" class="on">1日</button><button data-v="3">3日</button><button data-v="5">5日</button><button data-v="10">10日</button><button data-v="20">20日</button></span></div>
+      <div class="param">排序 <span class="seg" id="rkBy"><button data-v="lots" class="on">張數</button><button data-v="amount">金額</button></span></div>
+      <div class="param"><span class="seg" id="rkMkt"><button data-v="" class="on">全部</button><button data-v="TSE">上市</button><button data-v="OTC">上櫃</button></span></div>
+      <label class="chip-toggle"><input type="checkbox" id="rkEtf"><span class="sw"></span>含 ETF</label>
+    </div>
+    <div class="hint">金額 = 每日買賣超張數 × 當日收盤價，逐日加總。佔成交量 = 期間買賣超 ÷ 期間成交量。連續 = 到最新一日為止連續買（賣）超的天數。</div>
+  </section>
 
   <!-- 盤後選股 -->
   <section class="panel hidden" id="afterPanel">
@@ -306,8 +321,8 @@ table.q tbody tr:hover td:first-child { box-shadow: inset 3px 0 0 var(--accent);
           <button class="btn2" id="alertSave" style="height:34px">儲存設定</button>
         </div>
         <div class="row">
-          <input class="txt-in" id="lineToken" type="password" name="line-channel-token" placeholder="LINE Channel access token" autocomplete="new-password" readonly onfocus="this.removeAttribute('readonly')" data-lpignore="true" data-1p-ignore>
-          <input class="txt-in" id="lineUser" name="line-user-id" placeholder="LINE User ID（U 開頭）" autocomplete="off" readonly onfocus="this.removeAttribute('readonly')" data-lpignore="true" data-1p-ignore>
+          <input class="txt-in" id="lineToken" type="password" name="line-channel-token" placeholder="LINE Channel access token" autocomplete="new-password" data-lpignore="true" data-1p-ignore>
+          <input class="txt-in" id="lineUser" name="line-user-id" placeholder="LINE User ID（U 開頭）" autocomplete="off" data-lpignore="true" data-1p-ignore>
           <button class="btn2" id="lineSave" style="height:34px">儲存 LINE</button>
           <button class="btn2" id="lineTest" style="height:34px">傳送測試</button>
         </div>
@@ -332,8 +347,11 @@ const $ = s => document.querySelector(s);
 const ss = {get(k,d){try{const v=sessionStorage.getItem(k);return v==null?d:JSON.parse(v)}catch(e){return d}},
             set(k,v){try{sessionStorage.setItem(k,JSON.stringify(v))}catch(e){}}};
 const st = Object.assign({tab:'all', sort:'volume', dir:-1, search:'', market:'', ind:'', etf:false}, ss.get('twBoardState', {}));
+if (st.tab !== 'rank' && ['rank', 'net', 'amount', 'ratio', 'streak'].includes(st.sort)) { st.sort = 'volume'; st.dir = -1; }
 const ME = {{ (current_user.name if current_user else '')|tojson }};
 if (ME && st.search.trim().toLowerCase() === ME.toLowerCase()) st.search = '';   // 之前被瀏覽器自動填入的帳號
+let RANK = null;
+const rk = Object.assign({investor: 'total', side: 'buy', days: 1, by: 'lots', market: '', etf: false}, ss.get('twRank', {}));
 let ALL = [], BYCODE = {}, WATCH = [], WGROUPS = [], WNAMES = {}, AFTER = null, RT = null, marketOpen = false, LIST_META = {};
 const PAGE = 200;          // 表格一次畫 200 列，捲到底再補
 let shown = PAGE, ROWS = [], COLS = [];
@@ -344,6 +362,8 @@ const BASE_COLS = [
   ['open','開盤','hide-sm'], ['high','最高','hide-sm'], ['low','最低','hide-sm'], ['prev','昨收','hide-sm'],
 ];
 const SCREEN_COLS = [['signals','訊號','l'], ['k','K'], ['d','D']];
+const RANK_COLS = [['rank','#','l'], ['star','','l'], ['code','代碼','l'], ['name','名稱','l'], ['industry','產業','l hide-sm'],
+  ['price','股價'], ['chg_pct','漲跌幅'], ['net','買賣超(張)'], ['amount','金額(億)'], ['ratio','佔成交量','hide-sm'], ['streak','連續']];
 const STAR = '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 3l2.8 5.7 6.2.9-4.5 4.4 1 6.2L12 17.3 6.5 20.2l1-6.2L3 9.6l6.2-.9z"/></svg>';
 const STAR_O = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M12 3l2.8 5.7 6.2.9-4.5 4.4 1 6.2L12 17.3 6.5 20.2l1-6.2L3 9.6l6.2-.9z"/></svg>';
 const CHECK = '<svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12l5 5 9-10"/></svg>';
@@ -464,6 +484,7 @@ function currentRows() {
   let rows;
   if (st.tab === 'all') rows = ALL;
   else if (st.tab === 'watch') rows = curGroup().codes.map(c => BYCODE[c] || {code:c, name: WNAMES[c] || c});
+  else if (st.tab === 'rank') rows = (RANK?.results || []).map(r => Object.assign({}, r, {price: r.close}));
   else {
     const res = st.tab === 'after' ? AFTER : RT;
     // 即時選股的價格用清單上最新（盤中即時）的報價；盤後選股維持選股當日的收盤
@@ -504,8 +525,10 @@ function renderInner() {
   $('#afterPanel').classList.toggle('hidden', st.tab !== 'after');
   $('#rtPanel').classList.toggle('hidden', st.tab !== 'rt');
   $('#etfWrap').classList.toggle('hidden', st.tab !== 'all');
+  $('#rankPanel').classList.toggle('hidden', st.tab !== 'rank');
+  if (st.tab === 'rank' && !RANK) loadRank();
   const screen = st.tab === 'after' || st.tab === 'rt';
-  const cols = screen ? BASE_COLS.slice(0, 9).concat(SCREEN_COLS) : BASE_COLS;
+  const cols = st.tab === 'rank' ? RANK_COLS : screen ? BASE_COLS.slice(0, 9).concat(SCREEN_COLS) : BASE_COLS;
   const rows = currentRows();
   const maxVol = Math.max(1, ...rows.slice(0, 300).map(r => r.volume || 0));
   $('#tbl thead').innerHTML = '<tr>' + cols.map(([k, t, c='']) =>
@@ -514,6 +537,7 @@ function renderInner() {
   ROWS = rows; COLS = cols; shown = PAGE;
   $('#tbl tbody').innerHTML = rows.length ? rowsHtml(0, shown, maxVol) : `<tr><td colspan="${cols.length}" class="empty">${emptyText()}</td></tr>`;
   let meta = `<b class="num" style="color:var(--text)">${rows.length}</b> 檔`;
+  if (st.tab === 'rank' && RANK) meta += `・${RANK.label}${RANK.side === 'buy' ? '買超' : '賣超'}・${RANK.days === 1 ? RANK.date : RANK.start + ' ～ ' + RANK.date}`;
   if (st.tab === 'after' && AFTER) meta += `・資料日 <span class="num">${AFTER.date}</span>（${AFTER.days} 個交易日）`;
   if (st.tab === 'rt' && RT) meta += RT.source === 'realtime' ? `・即時 <span class="num">${RT.ts?.slice(11,19)||''}</span>` : `・收盤資料 <span class="num">${RT.date}</span>`;
   $('#tblMeta').innerHTML = meta;
@@ -544,6 +568,11 @@ function rowsHtml(from, to, maxVol) {
       case 'volume': return `<td><span class="volcell">${fmt(v,0)}<span class="volbar"><i style="width:${Math.min(100,(v||0)/maxVol*100)}%"></i></span></span></td>`;
       case 'signals': return `<td class="l">${(v||[]).map(s => `<span class="tag ${s.side}">${esc(s.label.split('：')[0])}${st.tab==='after'?(s.side==='buy'?' BUY':' SELL'):''}</span>`).join('')}</td>`;
       case 'k': case 'd': return `<td>${fmt(v,1)}</td>`;
+      case 'rank': return `<td class="l"><b class="num" style="color:${v <= 3 ? 'var(--accent)' : 'var(--text-dim)'}">${v}</b></td>`;
+      case 'net': return `<td class="${cls(v)}" style="font-weight:700">${v > 0 ? '+' : ''}${fmt(v, 0)}</td>`;
+      case 'amount': return `<td class="${cls(v)}">${v > 0 ? '+' : ''}${fmt(v, 2)}</td>`;
+      case 'ratio': return `<td class="${c}" style="color:var(--text-mid)">${v == null ? '-' : fmt(Math.abs(v), 1) + '%'}</td>`;
+      case 'streak': return `<td>${v ? `<span class="pct ${rk.side === 'buy' ? 'up' : 'dn'}" style="min-width:0">${v} 天</span>` : '-'}</td>`;
     }
     return `<td>${esc(v)}</td>`;
   }).join('') + '</tr>').join('') + more;
@@ -574,6 +603,7 @@ async function retryLoad() {
 function emptyText() {
   const icon = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg><br>';
   if (st.tab === 'watch') return icon + '尚無自選股，點清單左側的 ☆ 加入';
+  if (st.tab === 'rank') return icon + (RANK ? '沒有符合的股票' : '載入中…');
   if (st.tab === 'after') return icon + (AFTER ? `${AFTER.date} 沒有符合條件的股票` : '選擇條件後按「開始選股」');
   if (st.tab === 'rt') return icon + (RT ? '目前沒有符合條件的股票' : '選擇條件後按「開始選股」');
   if (LOAD_ERR) return icon + `行情載入失敗：${esc(LOAD_ERR)}<br><button class="clear-btn" onclick="retryLoad()">重新載入</button>`;
@@ -607,7 +637,7 @@ $('#tbl').addEventListener('click', async e => {
     return;
   }
   const go = e.target.closest('[data-go]');
-  if (go) openChart(go.dataset.go, currentRows(), {all:'全部行情', watch: curGroup().name, after:'盤後選股', rt:'即時選股'}[st.tab]);
+  if (go) openChart(go.dataset.go, currentRows(), {all:'全部行情', watch: curGroup().name, rank: '法人排行', after:'盤後選股', rt:'即時選股'}[st.tab]);
 });
 document.querySelector('.pulse').addEventListener('click', e => {
   const m = e.target.closest('[data-go]');
@@ -616,7 +646,14 @@ document.querySelector('.pulse').addEventListener('click', e => {
   openChart(m.dataset.go, list, {up:'漲幅領先', dn:'跌幅領先', vol:'成交量排行'}[m.dataset.list]);
 });
 
-document.querySelectorAll('.tab').forEach(t => t.onclick = () => { st.tab = t.dataset.tab; render(); });
+const RANK_ONLY = ['rank', 'net', 'amount', 'ratio', 'streak'];
+document.querySelectorAll('.tab').forEach(t => t.onclick = () => {
+  st.tab = t.dataset.tab;
+  // 排行頁預設依名次排序；離開排行頁時，排行專用的排序換回成交量
+  if (st.tab === 'rank') { st.sort = 'rank'; st.dir = 1; }
+  else if (RANK_ONLY.includes(st.sort)) { st.sort = 'volume'; st.dir = -1; }
+  render();
+});
 $('#search').oninput = e => {
   let auto = false;
   try { auto = e.target.matches(':autofill') || e.target.matches(':-webkit-autofill'); } catch (_) {}
@@ -685,6 +722,31 @@ function renderBacktest(r) {
   <div class="hint">勝率：BUY 為之後上漲的比例，SELL 為之後下跌的比例。紫色底 = 該條件下平均報酬表現最好的均線天數。訊號比全市場平均好越多，條件越有參考價值。</div>`;
   $('#btBox').classList.remove('hidden');
 }
+
+// ── 法人買賣超排行 ──
+async function loadRank() {
+  ss.set('twRank', rk);
+  const q = new URLSearchParams({investor: rk.investor, side: rk.side, days: rk.days, by: rk.by, market: rk.market, etf: rk.etf ? '1' : '0', limit: 100});
+  try {
+    RANK = await api('/api/tw/board/inst_rank?' + q);
+    st.sort = 'rank'; st.dir = 1;
+  } catch (e) { RANK = {results: [], error: e.message}; }
+  if (st.tab === 'rank') render();
+}
+function syncRankUI() {
+  for (const [id, key] of [['#rkInv', 'investor'], ['#rkSide', 'side'], ['#rkDays', 'days'], ['#rkBy', 'by'], ['#rkMkt', 'market']])
+    document.querySelectorAll(id + ' button').forEach(b => b.classList.toggle('on', String(rk[key]) === b.dataset.v));
+  $('#rkEtf').checked = rk.etf;
+}
+for (const [id, key] of [['#rkInv', 'investor'], ['#rkSide', 'side'], ['#rkDays', 'days'], ['#rkBy', 'by'], ['#rkMkt', 'market']]) {
+  $(id).addEventListener('click', e => {
+    const b = e.target.closest('button'); if (!b) return;
+    rk[key] = key === 'days' ? +b.dataset.v : b.dataset.v;
+    syncRankUI(); loadRank();
+  });
+}
+$('#rkEtf').onchange = e => { rk.etf = e.target.checked; loadRank(); };
+syncRankUI();
 
 // ── LINE 推播 ──
 async function loadAlerts() {

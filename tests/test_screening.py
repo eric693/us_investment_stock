@@ -139,3 +139,23 @@ def test_realtime_volume_vs_yesterday(board):
             if dn(k, d, i) and k[i] > 50:
                 want.add((c, 'kdj_sell'))
     assert want and got == want
+
+
+def test_inst_ranking_matches_reference(board):
+    """法人排行：期間買賣超加總、排序、連續天數。"""
+    dates, codes = make_market(board, n_days=40, n_codes=30, seed=11)
+    for side in ('buy', 'sell'):
+        res = board.inst_ranking('trust', side, days=5, by='lots', limit=10)
+        sums = {c: sum(inst(board, c, 'trust_net')[-5:]) for c in codes}
+        sign = 1 if side == 'buy' else -1
+        want = sorted([c for c in codes if sums[c] * sign > 0], key=lambda c: -sums[c] * sign)[:10]
+        assert [r['code'] for r in res['results']] == want
+        for r in res['results']:
+            nets = inst(board, r['code'], 'trust_net')
+            streak = 0
+            for v in reversed(nets):
+                if v * sign > 0:
+                    streak += 1
+                else:
+                    break
+            assert r['streak'] == streak and r['net'] == round(sums[r['code']])

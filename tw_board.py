@@ -808,6 +808,55 @@ def backtest_after_hours(rules, ma_list=(3, 5), within=1, kd_n=9, min_volume=0,
                 results=out)
 
 
+def inst_ranking(investor='total', side='buy', days=1, by='lots', limit=50, include_etf=False,
+                 market=''):
+    """法人買賣超排行：最近 days 個交易日累計，依張數或金額排序。
+
+    金額（億元）= 每日買賣超張數 × 當日收盤 × 1000，逐日加總；連續天數 = 到最新一日為止，
+    同方向（買超 / 賣超）連續了幾天。
+    """
+    col, label = INVESTORS[investor]
+    f = _load_frames(max(days, 30) + 5)
+    if f is None or len(f['dates']) < days:
+        return None
+    net = f[col]
+    close = f['close'].reindex(columns=net.columns)
+    vol = f['volume'].reindex(columns=net.columns)
+    window = net.iloc[-days:]
+    lots = window.sum()
+    amount = (window * close.iloc[-days:] * 1000).sum() / 1e8
+    vol_sum = vol.iloc[-days:].sum()
+    sign = 1 if side == 'buy' else -1
+    # 連續買（賣）超天數
+    same = (np.sign(net.values) == sign)
+    streak = np.zeros(net.shape[1], dtype=int)
+    alive = np.ones(net.shape[1], dtype=bool)
+    for i in range(len(net) - 1, -1, -1):
+        alive &= same[i]
+        if not alive.any():
+            break
+        streak += alive
+    df = pd.DataFrame({'lots': lots, 'amount': amount, 'vol': vol_sum,
+                       'streak': pd.Series(streak, index=net.columns)})
+    meta = f['meta']
+    df = df[df.index.isin(meta.index)]
+    if not include_etf:
+        df = df[~df.index.str.startswith('00')]
+    if market:
+        df = df[meta.loc[df.index, 'market'] == market]
+    key = 'amount' if by == 'amount' else 'lots'
+    df = df[df[key] * sign > 0].sort_values(key, ascending=(sign < 0)).head(limit)
+    out = []
+    for rank, (code, r) in enumerate(df.iterrows(), 1):
+        row = _row_base(code, f, meta)
+        row.update(rank=rank, net=round(float(r['lots'])), amount=round(float(r['amount']), 2),
+                   ratio=round(float(r['lots'] / r['vol'] * 100), 1) if r['vol'] else None,
+                   streak=int(r['streak']))
+        out.append(row)
+    return dict(date=f['dates'][-1], start=f['dates'][-days], days=days, investor=investor,
+                label=label, side=side, by=key, results=out)
+
+
 # ── LINE 推播（即時選股訊號）─────────────────────────────────────────
 _alert_lock = threading.Lock()
 
@@ -1410,6 +1459,27 @@ def api_backtest():
         return jsonify(error=f'參數錯誤：{e}'), 400
     if res is None:
         return jsonify(error='歷史資料不足（至少需要 60 個交易日）'), 503
+    return jsonify(res)
+
+
+@bp.route('/api/tw/board/inst_rank')
+def api_inst_rank():
+    a = request.args
+    investor = a.get('investor', 'total')
+    if investor not in INVESTORS:
+        return jsonify(error='investor 必須是 trust / foreign / dealer / total'), 400
+    try:
+        days = int(a.get('days', 1))
+        limit = int(a.get('limit', 50))
+    except ValueError:
+        return jsonify(error='days / limit 必須是整數'), 400
+    if days not in (1, 3, 5, 10, 20):
+        return jsonify(error='days 必須是 1 / 3 / 5 / 10 / 20'), 400
+    res = inst_ranking(investor, 'sell' if a.get('side') == 'sell' else 'buy', days,
+                       'amount' if a.get('by') == 'amount' else 'lots', max(10, min(200, limit)),
+                       a.get('etf') == '1', a.get('market') if a.get('market') in ('TSE', 'OTC') else '')
+    if res is None:
+        return jsonify(error='法人資料尚未載入完成'), 503
     return jsonify(res)
 
 
