@@ -63,13 +63,13 @@
 @keyframes blink { 0%,100%{opacity:1} 50%{opacity:.2} }
 .rt-off .rt-dot { background:var(--text-dim); animation:none; }
 /* ── 智慧盯盤監控面板 ───────────────────────────────────────────── */
-.monitor-panel { display:flex; flex-direction:column; gap:14px; }
-.monitor-row { display:flex; align-items:center; gap:12px; flex-wrap:wrap; }
-.monitor-label { font-size:0.75rem; color:var(--text-dim); min-width:60px; font-weight:700; letter-spacing:.4px; }
-.mode-btn-group { display:flex; gap:6px; }
-.mode-btn { padding:5px 16px; font-size:0.78rem; font-weight:700; border-radius:6px; border:1px solid var(--border); background:transparent; color:var(--text-dim); cursor:pointer; transition:all .15s; }
-.mode-btn.active { color:#fff; background:var(--accent); border-color:var(--accent); }
-.mode-btn:hover:not(.active) { border-color:var(--text-mid); color:var(--text-mid); }
+.watch-settings { display:flex; flex-direction:column; gap:12px; }
+.monitor-row { display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
+.monitor-label { font-size:0.8rem; color:var(--text-mid); width:72px; flex-shrink:0; font-weight:600; }
+.mode-btn-group { display:inline-flex; padding:3px; gap:2px; border-radius:10px; background:var(--surface-1); border:1px solid var(--card-bd); }
+.mode-btn { height:30px; padding:0 16px; font-size:0.8rem; font-weight:600; border-radius:7px; border:none; background:transparent; color:var(--text-mid); cursor:pointer; transition:all .15s; }
+.mode-btn.active { color:#fff; background:var(--accent-grad); box-shadow:var(--glow); }
+.mode-btn:hover:not(.active) { color:var(--text); }
 .profile-select-wrap { display:flex; gap:8px; align-items:center; animation:fadeIn .25s; }
 @keyframes fadeIn { from{opacity:0;transform:translateY(-4px)} to{opacity:1;transform:translateY(0)} }
 .profile-btn { display:flex; align-items:center; gap:6px; padding:7px 18px; font-size:0.82rem; font-weight:800; border-radius:8px; border:2px solid transparent; cursor:pointer; transition:all .2s; background:var(--overlay-1); color:var(--text-dim); }
@@ -115,10 +115,10 @@
 .sig-line-btn:hover { background:rgba(0,214,143,.2); }
 .sig-auto-badge { padding:5px 12px; font-size:0.72rem; color:var(--text-dim); background:var(--overlay-1); border-radius:6px; display:flex; align-items:center; gap:5px; }
 /* Position tracking */
-.pos-input { width:100px; padding:5px 8px; background:var(--surface-1); border:1px solid var(--border); border-radius:5px; color:var(--text); font-size:0.78rem; }
+.pos-input { width:130px; height:36px; padding:0 12px; background:var(--surface-1); border:1px solid var(--card-bd2); border-radius:10px; color:var(--text); font-size:0.84rem; }
 .pos-input:focus { outline:none; border-color:var(--accent); }
-.pos-save-btn { padding:5px 12px; background:rgba(88,166,255,.15); border:1px solid rgba(88,166,255,.3); color:var(--accent); border-radius:5px; font-size:0.75rem; cursor:pointer; white-space:nowrap; }
-.pos-save-btn:hover { background:rgba(88,166,255,.25); }
+.pos-save-btn { height:36px; padding:0 18px; background:var(--card-bg); border:1px solid var(--card-bd2); color:var(--text); border-radius:10px; font-size:0.82rem; font-weight:600; cursor:pointer; white-space:nowrap; transition:all .15s; }
+.pos-save-btn:hover { border-color:var(--accent); color:var(--accent); }
 .pnl-strip { display:flex; border:1px solid var(--overlay-2); border-radius:8px; overflow:hidden; margin:10px 0 6px; }
 .pnl-cell { flex:1; padding:8px 6px; text-align:center; }
 .pnl-cell:not(:last-child) { border-right:1px solid var(--overlay-2); }
@@ -415,7 +415,7 @@
       <span id="monitorAutoLabel" class="rt-indicator rt-off" style="margin-left:0"><span class="rt-dot"></span><span id="monitorAutoText">已停止</span></span>
       <span id="monitorServerLabel" class="rt-indicator hidden" style="margin-left:4px;background:rgba(99,192,255,.12);color:#63c0ff;border:1px solid rgba(99,192,255,.3);font-size:0.68rem;padding:2px 8px;border-radius:20px">伺服器監控中</span>
     </div>
-    <div class="monitor-panel">
+    <div class="watch-settings">
       <!-- Row 1: Mode -->
       <div class="monitor-row">
         <span class="monitor-label">操作模式</span>
