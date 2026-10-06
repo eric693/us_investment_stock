@@ -159,3 +159,56 @@ def test_inst_ranking_matches_reference(board):
                 else:
                     break
             assert r['streak'] == streak and r['net'] == round(sums[r['code']])
+
+
+def test_line_alerts_pipeline(board, monkeypatch):
+    """盤中推播：符合條件的自選股推一次，同一檔同一條件當天不重複；不在範圍內的不推。"""
+    dates, codes = make_market(board, n_days=60, n_codes=80, seed=3)
+    import sqlite3
+    con = sqlite3.connect(board.DB_PATH)
+    q = {c: dict(price=cl, prev=cl - ch, open=o, high=h, low=l, volume=v)
+         for c, o, h, l, cl, ch, v in con.execute(
+             'SELECT code, open, high, low, close, chg, volume FROM daily WHERE date=?', (dates[-1],))}
+    orig = board._load_frames
+    monkeypatch.setattr(board, '_load_frames', lambda n, asof=None: orig(n, dates[-2]))
+    monkeypatch.setattr(board, '_rt_today', lambda: dict(ts='t', date='d', quotes=q))
+    monkeypatch.setattr(board, '_now', lambda: pd.Timestamp(dates[-1] + ' 10:00', tz='Asia/Taipei'))
+    params = {'k_low': 50, 'k_high': 50}
+    hits = {r['code'] for r in board.screen_realtime(['kdj_buy', 'kdj_sell'], params)['results']}
+    assert len(hits) >= 2
+    watched = sorted(hits)[:1] + [c for c in codes if c not in hits][:1]   # 一檔會中、一檔不會
+    board._save_watch({'groups': [{'name': '自選股', 'codes': watched}]})
+    sent = []
+    monkeypatch.setattr(board, '_push_line', lambda text: (sent.append(text), (True, ''))[1])
+    board._save_alerts({'enabled': True, 'scope': 'watch', 'rules': ['kdj_buy', 'kdj_sell'],
+                        'params': params, 'include_etf': False, 'sent': {}, 'log': []})
+    board._check_alerts()
+    assert len(sent) == 1 and watched[0] in sent[0] and watched[1] not in sent[0]
+    board._check_alerts()                      # 同一天再跑：不重複推
+    assert len(sent) == 1
+    log = board._load_alerts()['log']
+    assert [x['code'] for x in log] == [watched[0]] * len(log) and all(x['pushed'] for x in log)
+
+
+def test_realtime_poll_retry_and_total_failure(board, monkeypatch):
+    import sqlite3
+    con = sqlite3.connect(board.DB_PATH)
+    con.execute("INSERT INTO stocks VALUES('2330','台積電','TSE','半導體','stock','x')")
+    con.commit()
+    monkeypatch.setattr(board.time, 'sleep', lambda s: None)
+    calls = []
+
+    class Resp:
+        def __init__(self, ok): self.ok = ok
+        def json(self):
+            if not self.ok:
+                raise ValueError('not json')
+            return {'msgArray': [{'c': '2330', 'z': '1000', 'y': '990', 'o': '995', 'h': '1001', 'l': '994', 'v': '5000'}]}
+
+    # 第一次失敗、重試成功
+    monkeypatch.setattr(board.requests, 'get', lambda *a, **k: (calls.append(1), Resp(len(calls) > 1))[1])
+    snap = board._poll_realtime_once({})
+    assert snap['quotes']['2330']['price'] == 1000 and snap['failed_chunks'] == 0 and len(calls) == 2
+    # 整輪失敗：回傳上一次的快照（時間戳不更新）
+    monkeypatch.setattr(board.requests, 'get', lambda *a, **k: Resp(False))
+    assert board._poll_realtime_once(snap) is snap

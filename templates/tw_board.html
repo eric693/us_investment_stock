@@ -387,7 +387,11 @@ async function loadList() {
   ALL = j.rows.map(r => Object.fromEntries(j.fields.map((f, i) => [f, r[i]])));
   BYCODE = Object.fromEntries(ALL.map(r => [r.code, r]));
   $('#liveTag').classList.toggle('hidden', !j.realtime);
-  $('#tblSrc').innerHTML = j.realtime ? `即時報價 <span class="num">${esc((j.ts||'').slice(11,19))}</span>` : `收盤資料 <span class="num">${esc(j.date||'')}</span>`;
+  const lag = j.realtime && j.market_open && (j.rt_age > 90 || j.rt_partial);
+  $('#tblSrc').innerHTML = j.realtime
+    ? `即時報價 <span class="num">${esc((j.ts||'').slice(11,19))}</span>` +
+      (lag ? `<span style="color:var(--yellow);margin-left:8px">⚠ ${j.rt_partial ? '部分報價延遲' : '報價延遲 ' + Math.round(j.rt_age / 60) + ' 分鐘'}（證交所即時資料暫時沒有回應）</span>` : '')
+    : `收盤資料 <span class="num">${esc(j.date||'')}</span>`;
   const inds = [...new Set(ALL.map(r => r.industry).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'zh-TW'));
   const cur = $('#fInd').value || st.ind;
   $('#fInd').innerHTML = '<option value="">全部產業</option>' + inds.map(i => `<option${i===cur?' selected':''}>${esc(i)}</option>`).join('');

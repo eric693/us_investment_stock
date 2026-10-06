@@ -548,19 +548,29 @@ def _poll_realtime_once(prev):
     quotes = dict(prev.get('quotes', {}))
 
     def fetch(chunk):
+        """失敗（逾時、回傳非 JSON）時隔 2 秒重試一次；仍失敗回傳 None，這批沿用上一筆報價。"""
         url = ('https://mis.twse.com.tw/stock/api/getStockInfo.jsp?json=1&delay=0&ex_ch='
                + '|'.join(chunk))
-        try:
-            return requests.get(url, headers=HDRS, timeout=15).json().get('msgArray', [])
-        except Exception as e:
-            print(f'[tw_board] mis: {e}')
-            return []
+        for attempt in (1, 2):
+            try:
+                return requests.get(url, headers=HDRS, timeout=12).json().get('msgArray', [])
+            except Exception as e:
+                if attempt == 2:
+                    print(f'[tw_board] mis: {e}')
+                    return None
+                time.sleep(2)
 
     chunks = [keys[i:i + 90] for i in range(0, len(keys), 90)]
+    failed = 0
     with ThreadPoolExecutor(4) as ex:
         for msgs in ex.map(fetch, chunks):
+            if msgs is None:
+                failed += 1
+                continue
             for m in msgs:
                 code = m.get('c')
+                if not code:
+                    continue
                 z = _num(m.get('z'))
                 if z is None:   # 這一刻沒有成交，沿用上一筆或最佳買價
                     old = quotes.get(code)
@@ -568,8 +578,11 @@ def _poll_realtime_once(prev):
                 quotes[code] = dict(price=z, prev=_num(m.get('y')), open=_num(m.get('o')),
                                     high=_num(m.get('h')), low=_num(m.get('l')),
                                     volume=_num(m.get('v')), date=m.get('d'), time=m.get('t'))
+    if failed == len(chunks) and prev.get('ts'):
+        # 整輪都失敗：不更新時間戳，畫面上看得出報價停在上一次
+        return prev
     snap = dict(ts=_now().strftime('%Y-%m-%d %H:%M:%S'), date=_now().strftime('%Y%m%d'),
-                quotes=quotes)
+                quotes=quotes, failed_chunks=failed, total_chunks=len(chunks))
     with open(RT_FILE + '.tmp', 'w') as f:
         json.dump(snap, f)
     os.replace(RT_FILE + '.tmp', RT_FILE)
@@ -1155,7 +1168,11 @@ def api_list():
                          q.get('chg_pct'), q.get('volume'), q.get('open'), q.get('high'), q.get('low'),
                          q.get('prev')])
     out = idx_rows + out
+    age = None
+    if rt and snap.get('ts'):
+        age = int((_now().tz_localize(None) - pd.Timestamp(snap['ts'])).total_seconds())
     return jsonify(dict(date=latest, realtime=bool(rt), ts=(snap or {}).get('ts') if rt else None,
+                        rt_age=age, rt_partial=bool(rt and snap.get('failed_chunks')),
                         market_open=_market_open(),
                         fields=['code', 'name', 'market', 'industry', 'kind', 'price', 'chg',
                                 'chg_pct', 'volume', 'open', 'high', 'low', 'prev'],
