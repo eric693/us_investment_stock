@@ -180,6 +180,12 @@ table.q tbody tr:hover td:first-child { box-shadow: inset 3px 0 0 var(--accent);
 .gchip .n { font-family: 'JetBrains Mono', monospace; font-size: .7rem; color: var(--text-dim); }
 .gact { height: 34px; padding: 0 12px; border-radius: 999px; border: 1px dashed var(--card-bd2); background: none; color: var(--text-dim); font-size: .8rem; cursor: pointer; }
 .gact:hover { color: var(--text); border-color: var(--text-dim); }
+#afterPanel[data-mode="ma"] .ratio-only, #afterPanel[data-mode="ratio"] .ma-only { display: none !important; }
+.opt-rule { margin-bottom: 18px; }
+.opt-rule h5 { font-size: .86rem; margin-bottom: 6px; display: flex; gap: 8px; align-items: center; }
+.apply-btn { height: 26px; padding: 0 10px; border-radius: 8px; border: 1px solid var(--card-bd2); background: var(--surface-1); color: var(--text); font-size: .74rem; cursor: pointer; }
+.apply-btn:hover { border-color: var(--accent); color: var(--accent); }
+.warn-box { padding: 10px 14px; border-radius: 12px; background: rgba(251,191,36,.08); border: 1px solid rgba(251,191,36,.3); color: var(--text); font-size: .8rem; line-height: 1.7; margin-bottom: 14px; }
 /* 回測 */
 .bt { margin-top: 16px; border-top: 1px solid var(--line); padding-top: 14px; }
 .bt-head { display: flex; justify-content: space-between; align-items: baseline; flex-wrap: wrap; gap: 8px; margin-bottom: 10px; font-size: .8rem; color: var(--text-dim); }
@@ -281,22 +287,40 @@ table.q tbody tr:hover td:first-child { box-shadow: inset 3px 0 0 var(--accent);
 
   <!-- 盤後選股 -->
   <section class="panel hidden" id="afterPanel">
-    <div class="panel-head"><h3>法人持股穿越均線</h3><span>法人買賣超於盤後公布・多個條件之間為「或」</span></div>
+    <div class="panel-head"><h3><span class="seg" id="afterMode" style="font-size:.9rem"><button data-v="ma">持股均線交叉</button><button data-v="ratio">持股比例變化</button></span></h3><span>法人買賣超於盤後公布・多個條件之間為「或」</span></div>
     <div class="rules" id="afterRules"></div>
-    <div class="params">
-      <div class="param">持股均線
+    <div class="params ratio-only">
+      <div class="param">最近
+        <span class="seg" id="rDaysSeg"><button data-v="5">5</button><button data-v="10">10</button><button data-v="20">20</button></span>
+        <input class="num-in" id="rDays" type="number" min="1" max="60" value="5" title="自訂天數"> 天</div>
+      <div class="param">持股比例變化 ≥
+        <span class="seg" id="rThSeg"><button data-v="1">1%</button><button data-v="2">2%</button><button data-v="3">3%</button></span>
+        <input class="num-in" id="rTh" type="number" min="0.1" max="50" step="0.1" value="1" title="自訂門檻（百分點）"> %</div>
+    </div>
+    <div class="params" style="margin-top:10px">
+      <div class="param ma-only">持股均線
         <span class="seg" id="maSeg"><button data-v="3">3 日</button><button data-v="5" class="on">5 日</button></span>
         <input class="num-in" id="maN" type="number" min="2" max="60" value="5" title="自訂天數"></div>
-      <div class="param" title="1 = 兩個交叉同一天；3 = 最近 3 日內都發生過且目前仍維持">訊號容許天數 <input class="num-in" id="within" type="number" min="1" max="10" value="1"></div>
+      <div class="param ma-only" title="1 = 兩個交叉同一天；3 = 最近 3 日內都發生過且目前仍維持">訊號容許天數 <input class="num-in" id="within" type="number" min="1" max="10" value="1"></div>
       <div class="param">最低量(張) <input class="num-in" id="minVol" type="number" min="0" value="0"></div>
       <div class="param">資料日期 <input class="date-in" id="asof" type="date" title="留空 = 最新交易日"></div>
       <label class="chip-toggle"><input type="checkbox" id="afterEtf"><span class="sw"></span>含 ETF</label>
-      <button class="btn2" id="runBt" title="把勾選的條件套用到過去每一天，看訊號出現後的報酬與勝率" style="margin-left:auto"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3 3v18h18"/><path d="M7 15l3-3 3 3 5-6"/></svg>歷史回測</button>
+      <button class="btn2 ratio-only" id="runOpt" title="自動測試多組天數與門檻，找出歷史上表現最好的參數" style="margin-left:auto"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="3"/><path d="M12 1v4M12 19v4M4.2 4.2l2.8 2.8M17 17l2.8 2.8M1 12h4M19 12h4M4.2 19.8L7 17M17 7l2.8-2.8"/></svg>參數最佳化</button>
+      <button class="btn2 ma-only" id="runBt" title="把勾選的條件套用到過去每一天，看訊號出現後的報酬與勝率" style="margin-left:auto"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3 3v18h18"/><path d="M7 15l3-3 3 3 5-6"/></svg>歷史回測</button>
       <button class="run" id="runAfter" style="margin-left:0"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>開始選股</button>
     </div>
-    <div class="param" style="margin-top:10px">回測比較的持股均線 <input class="txt-in" id="btMa" value="3,5,10" style="flex:0;min-width:110px" title="用逗號分隔，最多 4 個"></div>
-    <div class="bt hidden" id="btBox"></div>
-    <div class="hint">金叉：法人持股線由下往上穿越其 N 日均線；死叉：由上往下跌破。結果表中的 K、D 僅供參考，不列入條件。投信／自營商沒有公開的逐日持股，持股線以「累計買賣超(張)」表示（交叉判斷不受影響）；外資以證交所／櫃買中心公布的實際持股張數為基準。</div>
+    <div class="params ratio-only" style="margin-top:10px">
+      <div class="param">最佳化：測試天數 <input class="txt-in" id="oDays" value="3,5,10,20" style="flex:0;min-width:100px"></div>
+      <div class="param">門檻% <input class="txt-in" id="oTh" value="0.5,1,2,3" style="flex:0;min-width:100px"></div>
+      <div class="param">看之後 <span class="seg" id="oH"><button data-v="5">5日</button><button data-v="10" class="on">10日</button><button data-v="20">20日</button></span></div>
+      <div class="param">挑選依據 <span class="seg" id="oObj"><button data-v="excess" class="on">超額報酬</button><button data-v="beat">勝過大盤</button><button data-v="avg">報酬率</button><button data-v="win">勝率</button></span></div>
+      <div class="param">最少訊號數 <input class="num-in" id="oMin" type="number" min="5" value="30"></div>
+    </div>
+    <div class="bt hidden" id="optBox"></div>
+    <div class="param ma-only" style="margin-top:10px">回測比較的持股均線 <input class="txt-in" id="btMa" value="3,5,10" style="flex:0;min-width:110px" title="用逗號分隔，最多 4 個"></div>
+    <div class="bt hidden ma-only" id="btBox"></div>
+    <div class="hint ratio-only">持股比例變化 = 最近 N 天的法人買賣超張數合計 ÷ 發行張數（百分點）。例如發行 10 萬張、5 天買超 2,000 張 = +2%。這個算法與「目前實際持股多少」無關，投信／自營商也是精確值。</div>
+    <div class="hint ma-only">金叉：法人持股線由下往上穿越其 N 日均線；死叉：由上往下跌破。結果表中的 K、D 僅供參考，不列入條件。投信／自營商沒有公開的逐日持股，持股線以「累計買賣超(張)」表示（交叉判斷不受影響）；外資以證交所／櫃買中心公布的實際持股張數為基準。</div>
   </section>
 
   <!-- 即時選股 -->
@@ -362,6 +386,7 @@ const BASE_COLS = [
   ['open','開盤','hide-sm'], ['high','最高','hide-sm'], ['low','最低','hide-sm'], ['prev','昨收','hide-sm'],
 ];
 const SCREEN_COLS = [['signals','訊號','l'], ['k','K'], ['d','D']];
+const RATIO_COLS = [['signals','訊號','l'], ['ratio_chg','比例變化'], ['foreign_ratio','外資持股%']];
 const RANK_COLS = [['rank','#','l'], ['star','','l'], ['code','代碼','l'], ['name','名稱','l'], ['industry','產業','l hide-sm'],
   ['price','股價'], ['chg_pct','漲跌幅'], ['net','買賣超(張)'], ['amount','金額(億)'], ['ratio','佔成交量','hide-sm'], ['streak','連續']];
 const STAR = '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 3l2.8 5.7 6.2.9-4.5 4.4 1 6.2L12 17.3 6.5 20.2l1-6.2L3 9.6l6.2-.9z"/></svg>';
@@ -532,7 +557,7 @@ function renderInner() {
   $('#rankPanel').classList.toggle('hidden', st.tab !== 'rank');
   if (st.tab === 'rank' && !RANK) loadRank();
   const screen = st.tab === 'after' || st.tab === 'rt';
-  const cols = st.tab === 'rank' ? RANK_COLS : screen ? BASE_COLS.slice(0, 9).concat(SCREEN_COLS) : BASE_COLS;
+  const cols = st.tab === 'rank' ? RANK_COLS : screen ? BASE_COLS.slice(0, 9).concat(st.tab === 'after' && AFTER?.mode === 'ratio' ? RATIO_COLS : SCREEN_COLS) : BASE_COLS;
   const rows = currentRows();
   const maxVol = Math.max(1, ...rows.slice(0, 300).map(r => r.volume || 0));
   $('#tbl thead').innerHTML = '<tr>' + cols.map(([k, t, c='']) =>
@@ -542,7 +567,9 @@ function renderInner() {
   $('#tbl tbody').innerHTML = rows.length ? rowsHtml(0, shown, maxVol) : `<tr><td colspan="${cols.length}" class="empty">${emptyText()}</td></tr>`;
   let meta = `<b class="num" style="color:var(--text)">${rows.length}</b> 檔`;
   if (st.tab === 'rank' && RANK) meta += `・${RANK.label}${RANK.side === 'buy' ? '買超' : '賣超'}・${RANK.days === 1 ? RANK.date : RANK.start + ' ～ ' + RANK.date}`;
-  if (st.tab === 'after' && AFTER) meta += `・資料日 <span class="num">${AFTER.date}</span>（${AFTER.days} 個交易日）`;
+  if (st.tab === 'after' && AFTER) meta += AFTER.mode === 'ratio'
+    ? `・${AFTER.start} ～ ${AFTER.date}（${AFTER.days} 天）持股比例變化 ≥ ${AFTER.threshold}%`
+    : `・資料日 <span class="num">${AFTER.date}</span>（${AFTER.days} 個交易日）`;
   if (st.tab === 'rt' && RT) meta += RT.source === 'realtime' ? `・即時 <span class="num">${RT.ts?.slice(11,19)||''}</span>` : `・收盤資料 <span class="num">${RT.date}</span>`;
   $('#tblMeta').innerHTML = meta;
 }
@@ -572,6 +599,8 @@ function rowsHtml(from, to, maxVol) {
       case 'volume': return `<td><span class="volcell">${fmt(v,0)}<span class="volbar"><i style="width:${Math.min(100,(v||0)/maxVol*100)}%"></i></span></span></td>`;
       case 'signals': return `<td class="l">${(v||[]).map(s => `<span class="tag ${s.side}">${esc(s.label.split('：')[0])}${st.tab==='after'?(s.side==='buy'?' BUY':' SELL'):''}</span>`).join('')}</td>`;
       case 'k': case 'd': return `<td>${fmt(v,1)}</td>`;
+      case 'ratio_chg': return `<td class="${cls(v)}" style="font-weight:700">${v == null ? '-' : (v > 0 ? '+' : '') + fmt(v) + '%'}</td>`;
+      case 'foreign_ratio': return `<td style="color:var(--text-mid)">${v == null ? '-' : fmt(v) + '%'}</td>`;
       case 'rank': return `<td class="l"><b class="num" style="color:${v <= 3 ? 'var(--accent)' : 'var(--text-dim)'}">${v}</b></td>`;
       case 'net': return `<td class="${cls(v)}" style="font-weight:700">${v > 0 ? '+' : ''}${fmt(v, 0)}</td>`;
       case 'amount': return `<td class="${cls(v)}">${v > 0 ? '+' : ''}${fmt(v, 2)}</td>`;
@@ -674,9 +703,32 @@ document.addEventListener('keydown', e => {
 // ── 盤後選股 ──
 const INV = [['trust','投信'], ['foreign','外資'], ['dealer','自營商'], ['total','法人']];
 const afterSel = ss.get('twAfterRules', ['trust:buy']);
-$('#afterRules').innerHTML = INV.map(([k, n]) => ['buy','sell'].map(s =>
-  `<label class="rule"><input type="checkbox" value="${k}:${s}"${afterSel.includes(k+':'+s)?' checked':''}><span class="box">${CHECK}</span>
-   <span class="side ${s}">${s==='buy'?'BUY':'SELL'}</span>${n}持股${s==='buy'?'金叉':'死叉'}持股均線</label>`).join('')).join('');
+let afterMode = ss.get('twAfterMode', 'ma');
+function renderAfterRules() {
+  const sel = [...document.querySelectorAll('#afterRules input:checked')].map(i => i.value);
+  const keep = sel.length ? sel : afterSel;
+  $('#afterRules').innerHTML = INV.map(([k, n]) => ['buy','sell'].map(s =>
+    `<label class="rule"><input type="checkbox" value="${k}:${s}"${keep.includes(k+':'+s)?' checked':''}><span class="box">${CHECK}</span>
+     <span class="side ${s}">${s==='buy'?'BUY':'SELL'}</span>${afterMode === 'ratio'
+       ? `${n}持股比例${s === 'buy' ? '增加' : '減少'}`
+       : `${n}持股${s==='buy'?'金叉':'死叉'}持股均線`}</label>`).join('')).join('');
+  $('#afterPanel').dataset.mode = afterMode;
+  document.querySelectorAll('#afterMode button').forEach(b => b.classList.toggle('on', b.dataset.v === afterMode));
+}
+$('#afterMode').onclick = e => {
+  const b = e.target.closest('button'); if (!b || b.dataset.v === afterMode) return;
+  afterMode = b.dataset.v; ss.set('twAfterMode', afterMode);
+  AFTER = null; $('#cntAfter').textContent = ''; renderAfterRules(); render();
+};
+function segBind(segId, inputId) {
+  const sync = () => document.querySelectorAll(segId + ' button').forEach(b => b.classList.toggle('on', +b.dataset.v === +$(inputId).value));
+  $(segId).onclick = e => { const b = e.target.closest('button'); if (!b) return; $(inputId).value = b.dataset.v; sync(); };
+  $(inputId).oninput = sync; sync();
+  return sync;
+}
+const syncRDays = segBind('#rDaysSeg', '#rDays'), syncRTh = segBind('#rThSeg', '#rTh');
+for (const id of ['#oH', '#oObj']) $(id).onclick = e => { const b = e.target.closest('button'); if (!b) return; document.querySelectorAll(id + ' button').forEach(x => x.classList.toggle('on', x === b)); };
+const segVal = id => document.querySelector(id + ' button.on')?.dataset.v;
 $('#maSeg').onclick = e => { const b = e.target.closest('button'); if (!b) return; $('#maN').value = b.dataset.v; syncSeg(); };
 $('#maN').oninput = syncSeg;
 function syncSeg() { document.querySelectorAll('#maSeg button').forEach(b => b.classList.toggle('on', b.dataset.v === $('#maN').value)); }
@@ -686,15 +738,61 @@ $('#runAfter').onclick = async () => {
   ss.set('twAfterRules', rules.map(r => r.investor + ':' + r.side));
   const btn = $('#runAfter'); btn.disabled = true;
   try {
-    AFTER = await api('/api/tw/board/screen/after', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({
-      rules, ma_n: +$('#maN').value, within: +$('#within').value,
-      min_volume: +$('#minVol').value, include_etf: $('#afterEtf').checked, asof: $('#asof').value || null})});
+    AFTER = afterMode === 'ratio'
+      ? await api('/api/tw/board/screen/ratio', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({
+          rules, days: +$('#rDays').value, threshold: +$('#rTh').value,
+          min_volume: +$('#minVol').value, include_etf: $('#afterEtf').checked, asof: $('#asof').value || null})})
+      : await api('/api/tw/board/screen/after', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({
+          rules, ma_n: +$('#maN').value, within: +$('#within').value,
+          min_volume: +$('#minVol').value, include_etf: $('#afterEtf').checked, asof: $('#asof').value || null})});
+    AFTER.mode = afterMode;
     $('#cntAfter').textContent = AFTER.results.length;
-    st.sort = 'volume'; st.dir = -1;
+    if (afterMode === 'ratio') { st.sort = 'ratio_chg'; st.dir = rules.every(r => r.side === 'sell') ? 1 : -1; }
+    else { st.sort = 'volume'; st.dir = -1; }
     render();
   } catch (e) { alert(e.message); }
   btn.disabled = false;
 };
+
+// ── 持股比例：參數最佳化 ──
+$('#runOpt').onclick = async () => {
+  const rules = [...document.querySelectorAll('#afterRules input:checked')].map(i => { const [investor, side] = i.value.split(':'); return {investor, side}; });
+  const nums = v => v.split(/[,，\s]+/).map(Number).filter(x => x > 0);
+  const btn = $('#runOpt'); btn.disabled = true; btn.lastChild.textContent = '最佳化中…（約 10 秒）';
+  try {
+    const r = await api('/api/tw/board/optimize/ratio', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({
+      rules, days_list: nums($('#oDays').value), th_list: nums($('#oTh').value), horizon: +segVal('#oH'),
+      objective: segVal('#oObj'), min_signals: +$('#oMin').value, min_volume: +$('#minVol').value, include_etf: $('#afterEtf').checked})});
+    renderOpt(r);
+  } catch (e) { alert(e.message); }
+  btn.disabled = false; btn.lastChild.textContent = '參數最佳化';
+};
+function renderOpt(r) {
+  const pct = v => v == null ? '-' : `<span class="${v > 0 ? 'up' : v < 0 ? 'dn' : ''}">${v > 0 ? '+' : ''}${v.toFixed(2)}%</span>`;
+  const objName = {excess: '超額報酬', beat: '勝過大盤比例', avg: '報酬率', win: '勝率'}[r.objective];
+  // 測試期是否仍有效：BUY 超額 > 0、SELL 超額 < 0
+  const holds = (x, c) => c?.test && (x.side === 'buy' ? c.test.excess > 0 : c.test.excess < 0);
+  const nHold = r.results.filter(x => x.best && holds(x, x.best)).length, nBest = r.results.filter(x => x.best).length;
+  $('#optBox').innerHTML = `<div class="bt-head"><b>參數最佳化（依「${objName}」挑選，看之後 ${r.horizon} 日）</b>
+      <span>訓練期 ${r.start} ～ ${r.split}・測試期 ${r.split} ～ ${r.end}・全市場平均：訓練 ${pct(r.baseline.train)}／測試 ${pct(r.baseline.test)}</span></div>
+    <div class="warn-box">只用<b>訓練期</b>挑參數，再看同一組參數在<b>測試期</b>（沒參與挑選的資料）表現如何。訓練期很好、測試期變差，代表那組參數只是剛好符合過去，不一定能用在未來。
+      目前 ${nBest} 個條件中，最佳參數在測試期仍勝過大盤的有 <b>${nHold}</b> 個。${r.days_note || ''}</div>
+    ${r.results.map(x => `<div class="opt-rule"><h5><span class="side ${x.side}">${x.side === 'buy' ? 'BUY' : 'SELL'}</span>${x.label}持股比例${x.side === 'buy' ? '增加' : '減少'}
+        ${x.best ? (holds(x, x.best) ? '<span class="pct up" style="min-width:0">測試期仍有效</span>' : '<span class="pct dn" style="min-width:0">測試期失效</span>') : ''}</h5>
+      ${x.top.length ? `<div style="overflow:auto"><table><thead><tr><th class="l">天數</th><th>門檻</th><th>訓練 訊號</th><th>訓練 超額</th><th>訓練 勝大盤</th><th>訓練 報酬</th><th>測試 訊號</th><th>測試 超額</th><th>測試 勝大盤</th><th>測試 報酬</th><th></th></tr></thead><tbody>
+        ${x.top.map((c, i) => `<tr><td class="l${i === 0 ? ' best' : ''}">${c.days} 天</td><td class="${i === 0 ? 'best' : ''}">${c.threshold}%</td>
+          <td>${c.train.n}</td><td>${pct(c.train.excess)}</td><td>${c.train.beat}%</td><td>${pct(c.train.avg)}</td>
+          <td>${c.test?.n ?? '-'}</td><td>${pct(c.test?.excess)}</td><td>${c.test ? c.test.beat + '%' : '-'}</td><td>${pct(c.test?.avg)}</td>
+          <td><button class="apply-btn" data-days="${c.days}" data-th="${c.threshold}">套用</button></td></tr>`).join('')}
+        </tbody></table></div>` : '<div class="hint">訊號數不足，請降低「最少訊號數」或放寬門檻。</div>'}</div>`).join('')}
+    <div class="hint">超額報酬 = 訊號股之後的報酬 − 同一天全市場平均報酬（排除大盤漲跌）。勝過大盤 = 超額報酬為正的比例（SELL 為負的比例）。訊號只算條件「剛成立」那天。報酬以收盤價計算，未還原除權息。</div>`;
+  $('#optBox').classList.remove('hidden');
+}
+$('#optBox').addEventListener('click', e => {
+  const b = e.target.closest('.apply-btn'); if (!b) return;
+  $('#rDays').value = b.dataset.days; $('#rTh').value = b.dataset.th; syncRDays(); syncRTh();
+  $('#runAfter').click();
+});
 
 $('#runBt').onclick = async () => {
   const rules = [...document.querySelectorAll('#afterRules input:checked')].map(i => { const [investor, side] = i.value.split(':'); return {investor, side}; });
@@ -822,6 +920,7 @@ async function tick() {
   setTimeout(tick, !ALL.length ? 10000 : marketOpen ? 20000 : 300000);
 }
 
+renderAfterRules();
 (async () => {
   $('#search').value = st.search; $('#fMarket').value = st.market; $('#fEtf').checked = st.etf;
   render();

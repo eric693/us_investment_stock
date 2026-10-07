@@ -38,7 +38,7 @@ RT_ACTIVE_FILE = os.path.join(BASE_DIR, '.tw_rt_active')
 SYNC_LOCK_FILE = os.path.join(BASE_DIR, '.tw_sync.lock')
 RT_LOCK_FILE = os.path.join(BASE_DIR, '.tw_rt.lock')
 
-BACKFILL_DAYS = int(os.environ.get('TW_BACKFILL_DAYS', '250'))   # 交易日（行情 + 法人）
+BACKFILL_DAYS = int(os.environ.get('TW_BACKFILL_DAYS', '500'))   # 交易日（行情 + 法人；回測 / 最佳化用）
 INST_BACKFILL_DAYS = int(os.environ.get('TW_INST_BACKFILL_DAYS', '500'))   # 法人資料再往前補，持股線更完整
 BACKUP_DIR = os.path.join(BASE_DIR, 'backups')
 BACKUP_KEEP = 7
@@ -94,6 +94,7 @@ def _init_db():
         CREATE TABLE IF NOT EXISTS inst(code TEXT, date TEXT, foreign_net REAL, trust_net REAL,
             dealer_net REAL, total_net REAL, PRIMARY KEY(code, date));
         CREATE TABLE IF NOT EXISTS foreign_hold(code TEXT PRIMARY KEY, date TEXT, lots REAL);
+        CREATE TABLE IF NOT EXISTS issued(code TEXT PRIMARY KEY, date TEXT, lots REAL);   -- 發行股數（張）
         CREATE TABLE IF NOT EXISTS sync_log(date TEXT, source TEXT, status TEXT, ts TEXT,
             PRIMARY KEY(date, source));
         CREATE TABLE IF NOT EXISTS index_daily(code TEXT, date TEXT, open REAL, high REAL, low REAL,
@@ -207,7 +208,7 @@ def _fetch_foreign_hold_twse(d):
                    f'&selectType=ALLBUT0999&response=json')
     if js.get('stat') != 'OK':
         return []
-    return [(r[0].strip(), (_num(r[5]) or 0) / 1000) for r in js.get('data') or []
+    return [(r[0].strip(), (_num(r[5]) or 0) / 1000, (_num(r[3]) or 0) / 1000) for r in js.get('data') or []
             if CODE_RE.match(r[0].strip())]
 
 
@@ -216,11 +217,12 @@ def _fetch_foreign_hold_tpex(d):
                    f'&response=json', host_gap=1.5)
     fields, data = _tables(js, '代號')
     hk = next((f for f in fields or [] if f.startswith('僑外資及陸資持有股數')), None)
-    if not data or not hk:
+    ik = next((f for f in fields or [] if f.startswith('發行股數')), None)
+    if not data or not hk or not ik:
         return []
     ix = {f: i for i, f in enumerate(fields)}
-    return [(r[ix['代號']].strip(), (_num(r[ix[hk]]) or 0) / 1000) for r in data
-            if CODE_RE.match(r[ix['代號']].strip())]
+    return [(r[ix['代號']].strip(), (_num(r[ix[hk]]) or 0) / 1000, (_num(r[ix[ik]]) or 0) / 1000)
+            for r in data if CODE_RE.match(r[ix['代號']].strip())]
 
 
 def _fetch_twse_mkt(d):
@@ -388,8 +390,11 @@ def _sync_foreign_hold():
             days = [r[0] for r in con.execute(
                 "SELECT date FROM sync_log WHERE source=? AND status='ok' "
                 "ORDER BY date DESC LIMIT 3", (src,))]
-            have = con.execute('SELECT MAX(f.date) FROM foreign_hold f JOIN stocks s '
-                               'ON s.code=f.code WHERE s.market=?', (market,)).fetchone()[0]
+            f_have = con.execute('SELECT MAX(f.date) FROM foreign_hold f JOIN stocks s ON s.code=f.code '
+                                 'WHERE s.market=?', (market,)).fetchone()[0]
+            i_have = con.execute('SELECT MAX(i.date) FROM issued i JOIN stocks s ON s.code=i.code '
+                                 'WHERE s.market=?', (market,)).fetchone()[0]
+            have = min(f_have, i_have) if f_have and i_have else None   # 兩者都有才算已更新
         for day in days:
             if have and have >= day:
                 break
@@ -401,7 +406,9 @@ def _sync_foreign_hold():
             if rows:
                 with _db() as con:
                     con.executemany('INSERT OR REPLACE INTO foreign_hold VALUES(?,?,?)',
-                                    [(c, day, v) for c, v in rows])
+                                    [(c, day, v) for c, v, _ in rows])
+                    con.executemany('INSERT OR REPLACE INTO issued VALUES(?,?,?)',
+                                    [(c, day, n) for c, _, n in rows if n])
                 break
 
 
@@ -698,6 +705,8 @@ def _load_frames_db(n_days, asof=None):
         inst = pd.read_sql_query('SELECT * FROM inst WHERE date>=? AND date<=?', con,
                                  params=(dates[0], dates[-1]))
         meta = pd.read_sql_query('SELECT * FROM stocks', con).set_index('code')
+        issued = dict(con.execute('SELECT code, lots FROM issued'))
+        fhold = dict(con.execute('SELECT code, lots FROM foreign_hold'))
     idx = pd.Index(dates)
 
     def piv(df, col, fill=None):
@@ -709,6 +718,8 @@ def _load_frames_db(n_days, asof=None):
              volume=piv(px, 'volume', 0), chg=piv(px, 'chg'), dates=dates, meta=meta)
     for col in ('foreign_net', 'trust_net', 'dealer_net', 'total_net'):
         f[col] = piv(inst, col, 0).reindex(columns=close.columns, fill_value=0)
+    f['issued'] = pd.Series(issued, dtype=float).reindex(close.columns)          # 發行股數（張）
+    f['foreign_ratio'] = (pd.Series(fhold, dtype=float).reindex(close.columns) / f['issued'] * 100)
     return f
 
 
@@ -868,6 +879,118 @@ def inst_ranking(investor='total', side='buy', days=1, by='lots', limit=50, incl
         out.append(row)
     return dict(date=f['dates'][-1], start=f['dates'][-days], days=days, investor=investor,
                 label=label, side=side, by=key, results=out)
+
+
+# ── 法人持股比例 ─────────────────────────────────────────────────────
+# 持股比例的變化（百分點）＝ N 日內買賣超張數合計 ÷ 發行張數 × 100。
+# 與「目前實際持股多少」無關，所以投信 / 自營商也能精確計算。
+def _ratio_change(f, col, days):
+    return f[col].rolling(days, min_periods=days).sum().div(f['issued'], axis=1) * 100
+
+
+def screen_ratio(rules, days=5, threshold=1.0, min_volume=0, include_etf=False, asof=None):
+    """最近 days 天，法人持股比例增加（BUY）/ 減少（SELL）至少 threshold 個百分點。多條規則為 OR。"""
+    f = _load_frames(max(days + 5, 40), asof)
+    if f is None or len(f['dates']) < days:
+        return None
+    meta = f['meta']
+    vol_ok = f['volume'].iloc[-1] >= min_volume
+    out = {}
+    for rule in rules:
+        col, label = INVESTORS[rule['investor']]
+        chg = _ratio_change(f, col, days).iloc[-1]
+        hit = (chg >= threshold) if rule['side'] == 'buy' else (chg <= -threshold)
+        hit &= vol_ok
+        for code in hit[hit.fillna(False)].index:
+            if not include_etf and code.startswith('00'):
+                continue
+            row = out.get(code) or _row_base(code, f, meta)
+            row.setdefault('signals', []).append(dict(investor=rule['investor'], label=label, side=rule['side'],
+                                                      ratio_chg=round(float(chg[code]), 2)))
+            row['ratio_chg'] = max((s['ratio_chg'] for s in row['signals']), key=abs)
+            fr = f['foreign_ratio'].get(code)
+            row['foreign_ratio'] = round(float(fr), 2) if pd.notna(fr) else None
+            out[code] = row
+    return dict(date=f['dates'][-1], start=f['dates'][-days], days=days, threshold=threshold,
+                results=list(out.values()))
+
+
+def optimize_ratio(rules, days_list=(3, 5, 10, 20), th_list=(0.5, 1, 2, 3), horizon=10,
+                   objective='excess', min_signals=30, train_frac=0.7, min_volume=0, include_etf=False):
+    """參數最佳化：把每組 (天數, 門檻) 套用到歷史上，統計訊號出現後 horizon 日的報酬。
+
+    - 訊號只算「條件剛成立的那一天」，避免同一波重複計算。
+    - 前 train_frac 的期間用來挑參數（訓練），之後的期間只用來驗證（測試）；
+      測試期的表現才代表參數在沒看過的資料上是否仍然有效，避免過度擬合。
+    - 超額報酬 = 訊號股的報酬 − 同一天全市場平均報酬，排除大盤漲跌的影響；
+      勝過大盤 = 超額報酬 > 0 的比例（SELL 則看 < 0）。預設以超額報酬挑參數。
+    - 報酬以收盤價計算，未還原除權息；BUY 勝率 = 之後上漲比例，SELL 勝率 = 之後下跌比例。
+    """
+    f = _load_frames(BACKFILL_DAYS + 10)
+    if f is None or len(f['dates']) < max(days_list) + horizon + 40:
+        return None
+    cols = [c for c in f['close'].columns if (include_etf or not c.startswith('00')) and pd.notna(f['issued'].get(c))]
+    close, vol = f['close'][cols], f['volume'][cols]
+    fwd = (close.shift(-horizon) / close - 1).values
+    import warnings
+    with warnings.catch_warnings():
+        warnings.simplefilter('ignore', RuntimeWarning)          # 最後 horizon 天沒有未來報酬
+        excess = fwd - np.nanmean(fwd, axis=1, keepdims=True)    # 相對同日全市場
+    n = len(close)
+    split = int(n * train_frac)
+    period = np.zeros(n, dtype=int)            # 0 = 訓練期、1 = 測試期
+    period[split:] = 1
+    warm = max(days_list) + 1
+    vol_ok = (vol >= min_volume).values
+    base = {}
+    for p in (0, 1):
+        rows = (np.arange(n) >= warm) & (period == p)
+        base[p] = float(np.nanmean(fwd[rows])) * 100
+    sub = {k: f[k][cols] if isinstance(f[k], pd.DataFrame) else f[k] for k in ('trust_net', 'foreign_net', 'dealer_net', 'total_net')}
+    sub['issued'] = f['issued'][cols]
+
+    def stats(m, side):
+        r, x = fwd[m], excess[m]
+        ok = ~np.isnan(r)
+        r, x = r[ok], x[ok]
+        if not len(r):
+            return None
+        sgn = 1 if side == 'buy' else -1
+        return dict(n=int(len(r)), avg=round(float(r.mean()) * 100, 2), median=round(float(np.median(r)) * 100, 2),
+                    win=round(float((r * sgn > 0).mean()) * 100, 1),
+                    excess=round(float(x.mean()) * 100, 2), beat=round(float((x * sgn > 0).mean()) * 100, 1))
+
+    results = []
+    for rule in rules:
+        col, label = INVESTORS[rule['investor']]
+        grid = []
+        for days in days_list:
+            chg = _ratio_change(sub, col, days).values
+            for th in th_list:
+                cond = (chg >= th) if rule['side'] == 'buy' else (chg <= -th)
+                trig = cond & ~np.vstack([np.zeros((1, cond.shape[1]), bool), cond[:-1]])   # 剛成立
+                trig &= vol_ok
+                trig[:warm] = False
+                cell = dict(days=days, threshold=th)
+                for p, name in ((0, 'train'), (1, 'test')):
+                    m = trig & (period == p)[:, None]
+                    cell[name] = stats(m, rule['side'])
+                grid.append(cell)
+        # 依訓練期挑最佳（訊號數不足的不列入），測試期只看不挑
+        def score(c):
+            t = c['train']
+            if not t or t['n'] < min_signals:
+                return -1e9
+            v = t[objective]
+            # 報酬類：BUY 越高越好、SELL 越低（跌越多）越好；勝率類兩邊都是越高越好
+            return -v if rule['side'] == 'sell' and objective in ('avg', 'excess') else v
+        ranked = sorted(grid, key=score, reverse=True)
+        results.append(dict(investor=rule['investor'], label=label, side=rule['side'],
+                            best=ranked[0] if score(ranked[0]) > -1e9 else None,
+                            top=[c for c in ranked[:5] if score(c) > -1e9], grid=grid))
+    return dict(start=f['dates'][warm], split=f['dates'][split], end=f['dates'][-1], horizon=horizon,
+                objective=objective, min_signals=min_signals, baseline={'train': round(base[0], 2), 'test': round(base[1], 2)},
+                days_list=list(days_list), th_list=list(th_list), results=results)
 
 
 # ── LINE 推播（即時選股訊號）─────────────────────────────────────────
@@ -1324,6 +1447,7 @@ def api_chart(code):
             "SELECT date FROM sync_log WHERE source=? AND status='ok' ORDER BY date",
             ('twse_inst' if not meta or meta[1] == 'TSE' else 'tpex_inst',))]
         fh = con.execute('SELECT date, lots FROM foreign_hold WHERE code=?', (code,)).fetchone()
+        iss = con.execute('SELECT lots FROM issued WHERE code=?', (code,)).fetchone()
     if not meta:
         return jsonify(error='查無此代碼'), 404
     try:
@@ -1354,8 +1478,8 @@ def api_chart(code):
     nets = {k: [round((by_day.get(day, (0, 0, 0, 0))[i] or 0), 1) for day in inst_days]
             for i, k in enumerate(('foreign', 'trust', 'dealer', 'total'))}
     return jsonify(dict(code=code, name=meta[0], market=meta[1], period=period, source=source,
-                        bars=bars, inst=dict(days=inst_days, hold=hold, net=nets,
-                                             foreign_anchor=foreign_anchor)))
+                        bars=bars, issued=iss[0] if iss else None,
+                        inst=dict(days=inst_days, hold=hold, net=nets, foreign_anchor=foreign_anchor)))
 
 
 @bp.route('/api/tw/board/indices')
@@ -1497,6 +1621,51 @@ def api_inst_rank():
                        a.get('etf') == '1', a.get('market') if a.get('market') in ('TSE', 'OTC') else '')
     if res is None:
         return jsonify(error='法人資料尚未載入完成'), 503
+    return jsonify(res)
+
+
+def _ratio_rules(b):
+    return [r for r in b.get('rules', []) if r.get('investor') in INVESTORS and r.get('side') in ('buy', 'sell')]
+
+
+@bp.route('/api/tw/board/screen/ratio', methods=['POST'])
+def api_screen_ratio():
+    b = request.get_json(silent=True) or {}
+    rules = _ratio_rules(b)
+    if not rules:
+        return jsonify(error='請至少選擇一個條件'), 400
+    try:
+        res = screen_ratio(rules, days=max(1, min(60, int(b.get('days', 5)))),
+                           threshold=max(0.01, min(50, float(b.get('threshold', 1)))),
+                           min_volume=float(b.get('min_volume', 0) or 0),
+                           include_etf=bool(b.get('include_etf')), asof=b.get('asof') or None)
+    except (TypeError, ValueError) as e:
+        return jsonify(error=f'參數錯誤：{e}'), 400
+    if res is None:
+        return jsonify(error='歷史資料尚未載入完成'), 503
+    return jsonify(res)
+
+
+@bp.route('/api/tw/board/optimize/ratio', methods=['POST'])
+def api_optimize_ratio():
+    b = request.get_json(silent=True) or {}
+    rules = _ratio_rules(b)
+    if not rules:
+        return jsonify(error='請至少選擇一個條件'), 400
+    try:
+        days_list = sorted({max(1, min(60, int(x))) for x in (b.get('days_list') or [3, 5, 10, 20])})[:6]
+        th_list = sorted({max(0.05, min(20, float(x))) for x in (b.get('th_list') or [0.5, 1, 2, 3])})[:6]
+        horizon = int(b.get('horizon', 10))
+        if horizon not in (5, 10, 20):
+            return jsonify(error='horizon 必須是 5 / 10 / 20'), 400
+        res = optimize_ratio(rules, days_list, th_list, horizon=horizon,
+                             objective=b.get('objective') if b.get('objective') in ('avg', 'excess', 'win', 'beat') else 'excess',
+                             min_signals=max(5, min(500, int(b.get('min_signals', 30)))),
+                             min_volume=float(b.get('min_volume', 0) or 0), include_etf=bool(b.get('include_etf')))
+    except (TypeError, ValueError) as e:
+        return jsonify(error=f'參數錯誤：{e}'), 400
+    if res is None:
+        return jsonify(error='歷史資料不足，無法最佳化'), 503
     return jsonify(res)
 
 

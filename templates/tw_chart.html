@@ -111,6 +111,7 @@ body.embed::before { display: none; }
       <div class="grp" id="maToggles"></div>
       <div class="grp" id="mainToggles"></div>
       <div class="grp" id="paneToggles"></div>
+      <div class="grp" id="unitGrp"><b>持股單位</b><span class="seg"><button data-unit="lots">張</button><button data-unit="pct">%</button></span></div>
       <div class="grp"><b>持股均線</b><input class="inp" id="holdN" type="number" min="2" max="60" title="法人持股均線天數（3 或 5，可自訂）"><span>日</span></div>
       <div class="grp wheel-grp"><b>滾輪</b><span class="seg"><button data-wheel="switch" title="在圖上滾動滑鼠滾輪切換上一檔 / 下一檔">換股</button><button data-wheel="zoom" title="在圖上滾動滑鼠滾輪縮放 K 線">縮放</button></span></div>
     </div>
@@ -169,7 +170,7 @@ const EMBED = QS.get('embed') === '1';
 const CFG_KEY = EMBED ? 'twChartCfgEmbed' : 'twChartCfg';
 const INTRADAY = ['1', '15', '60'];
 const cfg = Object.assign({period:'D', ma:[5,10,20,60,120,240], boll:true, signals:true,
-  panes:['vol','kdj','trust','foreign'], holdN:5, wheel: EMBED ? 'zoom' : 'switch', bars:120}, ls.get(CFG_KEY, {}));
+  panes:['vol','kdj','trust','foreign'], holdN:5, holdUnit:'lots', wheel: EMBED ? 'zoom' : 'switch', bars:120}, ls.get(CFG_KEY, {}));
 if (EMBED) { cfg.wheel = 'zoom'; document.body.classList.add('embed'); }
 if (QS.get('period') && ['1','15','60','D','W','M'].includes(QS.get('period'))) cfg.period = QS.get('period');
 const saveCfg = () => ls.set(CFG_KEY, cfg);
@@ -356,18 +357,24 @@ function build() {
       js.createPriceLine({price: 20, color: alpha(DN, .35), lineStyle: LC.LineStyle.Dashed, axisLabelVisible: false});
       addLegend(p, i => `<span class="n">KDJ(9,3,3)</span><span style="color:${KDJ_C[0]}">K ${fmt(kd.K[i])}</span><span style="color:${KDJ_C[1]}">D ${fmt(kd.D[i])}</span><span style="color:${KDJ_C[2]}">J ${fmt(kd.J[i])}</span>`);
     } else {
-      const hold = inst.hold[key], maDaily = sma(hold, cfg.holdN);
+      // 持股比例（%）= 持股張數 ÷ 發行張數；投信／自營商的持股為累計買賣超估計，比例的「變化」才精確
+      const asPct = cfg.holdUnit === 'pct' && DATA.issued && !IS_INDEX();
+      const conv = v => v == null ? null : asPct ? v / DATA.issued * 100 : v;
+      const hold = inst.hold[key].map(conv), maDaily = sma(hold, cfg.holdN);
       const h = mapDaily(bars, inst.days, hold), m = mapDaily(bars, inst.days, maDaily), net = mapDaily(bars, inst.days, inst.net[key]);
       const color = HOLD_COLOR[key];
       chart.addSeries(LC.HistogramSeries, {priceScaleId: 'net' + key, priceLineVisible: false, lastValueVisible: false}, p)
         .setData(bars.map((b, i) => net[i] == null || !['D', ...INTRADAY].includes(cfg.period) ? {time: b.time} : {time: b.time, value: net[i], color: net[i] >= 0 ? alpha(UP, .22) : alpha(DN, .22)}));
       chart.priceScale('net' + key, p).applyOptions({scaleMargins: {top: 0.55, bottom: 0}, visible: false});
-      chart.addSeries(LC.LineSeries, line(color, 2, {lastValueVisible: true, priceFormat: {type: 'volume'}}), p).setData(toSeries(bars, h));
-      chart.addSeries(LC.LineSeries, line(Theme.css('--text-mid'), 1, {lineStyle: LC.LineStyle.Dashed, priceFormat: {type: 'volume'}}), p).setData(toSeries(bars, m));
-      const idx = IS_INDEX(), unit = idx ? '億' : '張', dp = idx ? 1 : 0;
-      const nm = idx ? label.replace('持股', '') + '累計買賣超' : key === 'foreign' && !inst.foreign_anchor ? label + '(累計買賣超)' : label;
+      const pf = asPct ? {type: 'custom', formatter: v => v.toFixed(2) + '%'} : {type: 'volume'};
+      chart.addSeries(LC.LineSeries, line(color, 2, {lastValueVisible: true, priceFormat: pf}), p).setData(toSeries(bars, h));
+      chart.addSeries(LC.LineSeries, line(Theme.css('--text-mid'), 1, {lineStyle: LC.LineStyle.Dashed, priceFormat: pf}), p).setData(toSeries(bars, m));
+      const idx = IS_INDEX(), unit = idx ? '億' : asPct ? '%' : '張', dp = idx ? 1 : asPct ? 2 : 0;
+      const nm = idx ? label.replace('持股', '') + '累計買賣超'
+        : asPct ? label + '比例' + (key === 'foreign' && inst.foreign_anchor ? '' : '(估)')
+        : key === 'foreign' && !inst.foreign_anchor ? label + '(累計買賣超)' : label;
       addLegend(p, i => `<span class="n">${nm}(${unit})</span><span style="color:${color}">${fmt(h[i], dp)}</span><span>MA${cfg.holdN} ${fmt(m[i], dp)}</span>` +
-        (net[i] != null && ['D', ...INTRADAY].includes(cfg.period) ? `<span class="${net[i] >= 0 ? 'up' : 'dn'}">當日 ${net[i] >= 0 ? '+' : ''}${fmt(net[i], dp)}${idx ? '億' : ''}</span>` : ''));
+        (net[i] != null && ['D', ...INTRADAY].includes(cfg.period) ? `<span class="${net[i] >= 0 ? 'up' : 'dn'}">當日 ${net[i] >= 0 ? '+' : ''}${fmt(net[i], idx ? 1 : 0)}${idx ? '億' : '張'}${asPct ? '（' + (net[i] >= 0 ? '+' : '') + fmt(net[i] / DATA.issued * 100, 3) + '%）' : ''}</span>` : ''));
       // 盤後選股訊號：持股線穿越持股均線（日線）
       if (cfg.signals && cfg.period === 'D') {
         for (let i = 1; i < bars.length; i++) {
@@ -550,6 +557,8 @@ $('#star').onclick = async () => {
 function renderTools() {
   document.querySelectorAll('[data-period]').forEach(b => b.classList.toggle('on', b.dataset.period === cfg.period));
   document.querySelectorAll('[data-wheel]').forEach(b => b.classList.toggle('on', b.dataset.wheel === cfg.wheel));
+  document.querySelectorAll('[data-unit]').forEach(b => b.classList.toggle('on', b.dataset.unit === cfg.holdUnit));
+  $('#unitGrp').style.display = IS_INDEX() ? 'none' : '';
   $('#maToggles').innerHTML = '<b>均線</b>' + MAS.map(([n, c]) => `<span class="tg${cfg.ma.includes(n) ? ' on' : ''}" data-ma="${n}"><i style="background:${c}"></i>MA${n}</span>`).join('');
   $('#mainToggles').innerHTML = `<span class="tg${cfg.boll ? ' on' : ''}" data-flag="boll"><i style="background:var(--text-dim)"></i>布林</span>` +
     `<span class="tg${cfg.signals ? ' on' : ''}" data-flag="signals" title="在日 K 上標示：法人持股線穿越持股均線">選股訊號</span>`;
@@ -557,10 +566,11 @@ function renderTools() {
   $('#holdN').value = cfg.holdN;
 }
 document.querySelector('.tools').addEventListener('click', e => {
-  const t = e.target.closest('[data-period],[data-wheel],[data-ma],[data-flag],[data-pane]');
+  const t = e.target.closest('[data-period],[data-wheel],[data-ma],[data-flag],[data-pane],[data-unit]');
   if (!t) return;
   if (t.dataset.period) { cfg.period = t.dataset.period; saveCfg(); renderTools(); return load(); }
   if (t.dataset.wheel) { cfg.wheel = t.dataset.wheel; }
+  if (t.dataset.unit) { cfg.holdUnit = t.dataset.unit; }
   if (t.dataset.ma) { const n = +t.dataset.ma; cfg.ma = cfg.ma.includes(n) ? cfg.ma.filter(x => x !== n) : cfg.ma.concat(n); }
   if (t.dataset.flag) cfg[t.dataset.flag] = !cfg[t.dataset.flag];
   if (t.dataset.pane) { const k = t.dataset.pane; cfg.panes = cfg.panes.includes(k) ? cfg.panes.filter(x => x !== k) : PANES.map(p => p[0]).filter(x => x === k || cfg.panes.includes(x)); }

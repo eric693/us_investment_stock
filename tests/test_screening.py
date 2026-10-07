@@ -212,3 +212,48 @@ def test_realtime_poll_retry_and_total_failure(board, monkeypatch):
     # 整輪失敗：回傳上一次的快照（時間戳不更新）
     monkeypatch.setattr(board.requests, 'get', lambda *a, **k: Resp(False))
     assert board._poll_realtime_once(snap) is snap
+
+
+def _add_issued(board, codes, lots=50000):
+    import sqlite3
+    con = sqlite3.connect(board.DB_PATH)
+    con.executemany('INSERT INTO issued VALUES(?,?,?)', [(c, 'x', lots) for c in codes])
+    con.commit()
+
+
+def test_ratio_screen_matches_reference(board):
+    """持股比例變化 = N 日買賣超合計 ÷ 發行張數。"""
+    dates, codes = make_market(board, n_days=40, n_codes=40, seed=5)
+    _add_issued(board, codes, lots=20000)          # 買賣超約 ±50 張/日 → 5 日約 ±1%
+    for investor, col in [('trust', 'trust_net'), ('total', 'total_net')]:
+        for side in ('buy', 'sell'):
+            for days, th in [(5, 0.5), (10, 1.0)]:
+                res = board.screen_ratio([{'investor': investor, 'side': side}], days=days, threshold=th)
+                got = {r['code']: r['ratio_chg'] for r in res['results']}
+                want = {}
+                for c in codes:
+                    chg = sum(inst(board, c, col)[-days:]) / 20000 * 100
+                    if (chg >= th) if side == 'buy' else (chg <= -th):
+                        want[c] = round(chg, 2)
+                assert got == want, (investor, side, days, th)
+    assert any(board.screen_ratio([{'investor': 'total', 'side': 'buy'}], days=5, threshold=0.5)['results'])
+
+
+def test_ratio_optimizer_counts_trigger_days(board):
+    """最佳化：訊號只算條件剛成立那天，並分訓練 / 測試期。"""
+    dates, codes = make_market(board, n_days=120, n_codes=30, seed=9)
+    _add_issued(board, codes, lots=20000)
+    res = board.optimize_ratio([{'investor': 'trust', 'side': 'buy'}], days_list=(5,), th_list=(0.5,),
+                               horizon=5, min_signals=1)
+    cell = res['results'][0]['grid'][0]
+    n = len(dates)
+    split, warm = int(n * 0.7), 6
+    want = {'train': 0, 'test': 0}
+    for c in codes:
+        net = inst(board, c, 'trust_net')
+        cond = [i >= 4 and sum(net[i - 4:i + 1]) / 20000 * 100 >= 0.5 for i in range(n)]
+        for i in range(warm, n - 5):                      # 最後 5 天沒有之後報酬
+            if cond[i] and not cond[i - 1]:
+                want['train' if i < split else 'test'] += 1
+    assert cell['train']['n'] == want['train'] and (cell['test'] or {'n': 0})['n'] == want['test']
+    assert res['results'][0]['best']['days'] == 5
