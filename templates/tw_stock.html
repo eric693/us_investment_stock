@@ -226,7 +226,7 @@
 .no-data { font-size:0.82rem; color:var(--text-dim); padding:16px 0; text-align:center; }
 </style>
 </head>
-<body>
+<body data-help-page="tw">
 
 <!-- Navigation -->
 {% include "_appbar.html" %}
@@ -412,6 +412,7 @@
   <div class="card hidden" id="monitorCard">
     <div class="card-title" style="display:flex;align-items:center;gap:10px">
       智慧盯盤設定
+      <button class="help-btn" data-help="tw.monitor" style="text-transform:none;letter-spacing:0">說明</button>
       <span id="monitorAutoLabel" class="rt-indicator rt-off" style="margin-left:0"><span class="rt-dot"></span><span id="monitorAutoText">已停止</span></span>
       <span id="monitorServerLabel" class="rt-indicator hidden" style="margin-left:4px;background:rgba(99,192,255,.12);color:#63c0ff;border:1px solid rgba(99,192,255,.3);font-size:0.68rem;padding:2px 8px;border-radius:20px">伺服器監控中</span>
     </div>

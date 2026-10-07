@@ -89,7 +89,7 @@ body.embed .card2 { border-radius: 12px; box-shadow: none; }
 body.embed::before { display: none; }
 </style>
 </head>
-<body>
+<body data-help-page="chart">
 {% include "_appbar.html" %}
 
 <div class="main">
@@ -113,6 +113,7 @@ body.embed::before { display: none; }
       <div class="grp" id="paneToggles"></div>
       <div class="grp" id="unitGrp"><b>持股單位</b><span class="seg"><button data-unit="lots">張</button><button data-unit="pct">%</button></span></div>
       <div class="grp"><b>持股均線</b><input class="inp" id="holdN" type="number" min="2" max="60" title="法人持股均線天數（3 或 5，可自訂）"><span>日</span></div>
+      <div class="grp"><button class="help-btn" data-help="chart.basic"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><circle cx="12" cy="12" r="9.5"/><path d="M9.3 9.2a2.8 2.8 0 0 1 5.4 1c0 1.9-2.7 2.4-2.7 4"/><path d="M12 17.3h.01"/></svg>操作說明</button></div>
       <div class="grp wheel-grp"><b>滾輪</b><span class="seg"><button data-wheel="switch" title="在圖上滾動滑鼠滾輪切換上一檔 / 下一檔">換股</button><button data-wheel="zoom" title="在圖上滾動滑鼠滾輪縮放 K 線">縮放</button></span></div>
     </div>
     <div class="chart-box card2" id="box">
