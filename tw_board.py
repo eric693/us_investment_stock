@@ -993,6 +993,55 @@ def optimize_ratio(rules, days_list=(3, 5, 10, 20), th_list=(0.5, 1, 2, 3), hori
                 days_list=list(days_list), th_list=list(th_list), results=results)
 
 
+def sector_ranking(days=1):
+    """類股漲跌幅：市值加權（同官方類股指數的算法）與等權平均、上漲家數、成交金額、領漲／領跌股。
+
+    盤中用即時報價當作最新價；days=1 為今日漲跌，其餘為與 days 個交易日前收盤相比。
+    """
+    f = _load_frames(max(days, 1) + 5)
+    if f is None or len(f['dates']) <= days:
+        return None
+    close = f['close']
+    now = close.iloc[-1].copy()
+    snap = _rt_today()
+    today = _now().strftime('%Y-%m-%d')
+    live = bool(snap and f['dates'][-1] < today)
+    if live:
+        q = pd.DataFrame(snap['quotes']).T
+        px = pd.to_numeric(q['price'], errors='coerce').reindex(close.columns)
+        now = px.fillna(now)
+        base = close.iloc[-days] if days > 1 else close.iloc[-1]     # 盤中：最後一個收盤日 = 昨天
+        vol = pd.to_numeric(q['volume'], errors='coerce').reindex(close.columns).fillna(0)
+    else:
+        base = close.iloc[-1 - days]
+        vol = f['volume'].iloc[-1]
+    ret = (now / base - 1) * 100
+    meta = f['meta']
+    df = pd.DataFrame({'ret': ret, 'now': now, 'base': base, 'vol': vol, 'issued': f['issued']})
+    df = df[df.index.isin(meta.index) & ~df.index.str.startswith('00')].dropna(subset=['ret'])
+    df['industry'] = meta.loc[df.index, 'industry']
+    df = df[df['industry'].notna() & ~df['industry'].isin(['', 'ETF', '管理股票', '存託憑證'])]
+    df['cap_now'] = df['now'] * df['issued']
+    df['cap_base'] = df['base'] * df['issued']
+    df['turnover'] = df['now'] * df['vol'] / 100000         # 億元（張 × 1000 股 × 價 ÷ 1e8）
+    out = []
+    for ind, g in df.groupby('industry'):
+        cap = g.dropna(subset=['cap_now', 'cap_base'])
+        cw = (cap['cap_now'].sum() / cap['cap_base'].sum() - 1) * 100 if len(cap) and cap['cap_base'].sum() else None
+        g2 = g.sort_values('ret')
+        pick = lambda r: dict(code=r.Index, name=meta.loc[r.Index, 'name'], ret=round(float(r.ret), 2))
+        out.append(dict(industry=ind, count=int(len(g)), cap_ret=round(float(cw), 2) if cw is not None else None,
+                        avg_ret=round(float(g['ret'].mean()), 2), up=int((g['ret'] > 0).sum()),
+                        down=int((g['ret'] < 0).sum()), turnover=round(float(g['turnover'].sum()), 1),
+                        leaders=[pick(r) for r in g2.iloc[::-1].head(3).itertuples()],
+                        laggards=[pick(r) for r in g2.head(3).itertuples()]))
+    out.sort(key=lambda x: -(x['cap_ret'] if x['cap_ret'] is not None else x['avg_ret']))
+    return dict(days=days, live=live, ts=(snap or {}).get('ts') if live else None,
+                date=today if live else f['dates'][-1],
+                start=f['dates'][-days] if live and days > 1 else f['dates'][-1 - days] if not live else f['dates'][-1],
+                sectors=out)
+
+
 # ── LINE 推播（即時選股訊號）─────────────────────────────────────────
 _alert_lock = threading.Lock()
 
@@ -1090,17 +1139,35 @@ def _check_alerts_user(user):
 
 
 # 即時選股條件；新增條件只要在這裡加一個函式並登錄到 RT_RULES。
-def _rt_kdj_buy(k, d, vol, vol_prev, p):
-    return _cross_up(k, d).iloc[-1] & (k.iloc[-1] < p.get('k_low', 20)) & (vol > vol_prev)
+# 每個條件拿到 c（k、d、close、vol、vol_prev，最後一列 = 今天／盤中）與使用者參數 p
+def _rt_kdj_buy(c, p):
+    k, d = c['k'], c['d']
+    return _cross_up(k, d).iloc[-1] & (k.iloc[-1] < p.get('k_low', 20)) & (c['vol'] > c['vol_prev'])
 
 
-def _rt_kdj_sell(k, d, vol, vol_prev, p):
-    return _cross_dn(k, d).iloc[-1] & (k.iloc[-1] > p.get('k_high', 80)) & (vol > vol_prev)
+def _rt_kdj_sell(c, p):
+    k, d = c['k'], c['d']
+    return _cross_dn(k, d).iloc[-1] & (k.iloc[-1] > p.get('k_high', 80)) & (c['vol'] > c['vol_prev'])
+
+
+def _rt_ma_squeeze(c, p):
+    """均線糾結後突破：MA20 上揚、MA5/10/20 彼此相差在 band% 內、股價向上穿越 MA5、量 > 昨日量。"""
+    close = c['close']
+    ma5, ma10, ma20 = (close.rolling(n).mean() for n in (5, 10, 20))
+    band = p.get('ma_band', 1.0)
+    hi = pd.concat([ma5.iloc[-1], ma10.iloc[-1], ma20.iloc[-1]], axis=1).max(axis=1)
+    lo = pd.concat([ma5.iloc[-1], ma10.iloc[-1], ma20.iloc[-1]], axis=1).min(axis=1)
+    squeeze = (hi / lo - 1) * 100 <= band
+    ma20_up = ma20.iloc[-1] > ma20.iloc[-2]
+    cross = (close.iloc[-2] <= ma5.iloc[-2]) & (close.iloc[-1] > ma5.iloc[-1])
+    return ma20_up & squeeze & cross & (c['vol'] > c['vol_prev'])
 
 
 RT_RULES = {
     'kdj_buy': dict(label='KDJ 買進：K 金叉 D 且 K<20 且成交量 > 昨日成交量', side='buy', fn=_rt_kdj_buy),
     'kdj_sell': dict(label='KDJ 賣出：K 死叉 D 且 K>80 且成交量 > 昨日成交量', side='sell', fn=_rt_kdj_sell),
+    'ma_squeeze': dict(label='均線糾結突破：MA20 上揚 且 MA5/10/20 糾結 且 股價穿越 MA5 且成交量 > 昨日成交量',
+                       side='buy', fn=_rt_ma_squeeze),
 }
 
 
@@ -1132,12 +1199,14 @@ def screen_realtime(rule_ids, params, include_etf=False):
     k, d = calc_kd_frame(high, low, close, kd_n)
     vol = volume.iloc[-1]
     vol_prev = volume.iloc[-2]                     # 昨日成交量
+    ctx = dict(k=k, d=d, close=close, vol=vol, vol_prev=vol_prev)
+    ma = {n: close.rolling(n).mean().iloc[-1] for n in (5, 10, 20)}
     out = {}
     for rid in rule_ids:
         rule = RT_RULES.get(rid)
         if not rule:
             continue
-        hit = rule['fn'](k, d, vol, vol_prev, params)
+        hit = rule['fn'](ctx, params)
         for code in hit[hit.fillna(False).astype(bool)].index:
             if not include_etf and code.startswith('00'):
                 continue
@@ -1146,7 +1215,11 @@ def screen_realtime(rule_ids, params, include_etf=False):
                                                       side=rule['side']))
             row.update(k=round(float(k[code].iloc[-1]), 1), d=round(float(d[code].iloc[-1]), 1),
                        j=round(float(3 * k[code].iloc[-1] - 2 * d[code].iloc[-1]), 1),
-                       vol_prev=round(float(vol_prev[code])))
+                       vol_prev=round(float(vol_prev[code])),
+                       ma5=round(float(ma[5][code]), 2), ma10=round(float(ma[10][code]), 2),
+                       ma20=round(float(ma[20][code]), 2),
+                       ma_spread=round(float((max(ma[5][code], ma[10][code], ma[20][code]) /
+                                              min(ma[5][code], ma[10][code], ma[20][code]) - 1) * 100), 2))
             out[code] = row
     return dict(date=close.index[-1], source=source, ts=(snap or {}).get('ts'),
                 results=list(out.values()))
@@ -1669,6 +1742,21 @@ def api_optimize_ratio():
     return jsonify(res)
 
 
+@bp.route('/api/tw/board/sectors')
+def api_sectors():
+    _touch_active()
+    try:
+        days = int(request.args.get('days', 1))
+    except ValueError:
+        days = 1
+    if days not in (1, 5, 10, 20, 60):
+        return jsonify(error='days 必須是 1 / 5 / 10 / 20 / 60'), 400
+    res = sector_ranking(days)
+    if res is None:
+        return jsonify(error='歷史資料尚未載入完成'), 503
+    return jsonify(res)
+
+
 @bp.route('/api/tw/board/alerts', methods=['GET', 'POST'])
 def api_alerts():
     user = userdata.current()
@@ -1680,7 +1768,7 @@ def api_alerts():
             cfg['scope'] = str(b.get('scope') or 'watch')
             cfg['rules'] = [r for r in b.get('rules', []) if r in RT_RULES] or list(RT_RULES)
             cfg['params'] = {k: float(v) for k, v in (b.get('params') or {}).items()
-                             if k in ('kd_n', 'k_low', 'k_high')}
+                             if k in ('kd_n', 'k_low', 'k_high', 'ma_band')}
             cfg['include_etf'] = bool(b.get('include_etf'))
             _save_alerts(user, cfg)
     token, uid = _line_creds(user)
@@ -1702,7 +1790,8 @@ def api_screen_realtime():
         return jsonify([dict(id=k, label=v['label'], side=v['side']) for k, v in RT_RULES.items()])
     b = request.get_json(silent=True) or {}
     params = dict(kd_n=b.get('kd_n', 9),
-                  k_low=float(b.get('k_low', 20)), k_high=float(b.get('k_high', 80)))
+                  k_low=float(b.get('k_low', 20)), k_high=float(b.get('k_high', 80)),
+                  ma_band=max(0.05, min(20, float(b.get('ma_band', 1)))))
     res = screen_realtime(b.get('rules') or list(RT_RULES), params,
                           include_etf=bool(b.get('include_etf')))
     if res is None:

@@ -186,6 +186,29 @@ table.q tbody tr:hover td:first-child { box-shadow: inset 3px 0 0 var(--accent);
 .apply-btn { height: 26px; padding: 0 10px; border-radius: 8px; border: 1px solid var(--card-bd2); background: var(--surface-1); color: var(--text); font-size: .74rem; cursor: pointer; }
 .apply-btn:hover { border-color: var(--accent); color: var(--accent); }
 .warn-box { padding: 10px 14px; border-radius: 12px; background: rgba(251,191,36,.08); border: 1px solid rgba(251,191,36,.3); color: var(--text); font-size: .8rem; line-height: 1.7; margin-bottom: 14px; }
+/* 類股排行 */
+.sec-list { display: flex; flex-direction: column; gap: 2px; margin-top: 12px; }
+.sec-row { display: grid; grid-template-columns: 34px 120px minmax(160px, 1.4fr) 90px 150px 100px minmax(200px, 2fr); gap: 12px; align-items: center;
+           padding: 9px 10px; border-radius: 11px; cursor: pointer; font-size: .84rem; transition: background .12s; }
+.sec-row:hover { background: var(--overlay-1); }
+.sec-row.head { cursor: default; font-size: .7rem; color: var(--text-dim); font-weight: 600; letter-spacing: .04em; }
+.sec-row.head:hover { background: none; }
+.sec-name { font-weight: 700; }
+.sec-name small { display: block; font-weight: 400; font-size: .7rem; color: var(--text-dim); }
+.dcell { display: grid; grid-template-columns: 74px 1fr; gap: 10px; align-items: center; }
+.dcell > b { font-family: 'JetBrains Mono', monospace; font-size: .84rem; text-align: right; }
+.dbar { position: relative; height: 22px; }
+.dbar .mid { position: absolute; left: 50%; top: 2px; bottom: 2px; width: 1px; background: var(--card-bd2); }
+.dbar i { position: absolute; top: 5px; bottom: 5px; border-radius: 4px; }
+.dbar i.up { left: 50%; background: linear-gradient(90deg, rgba(255,77,106,.35), var(--red)); }
+.dbar i.dn { right: 50%; background: linear-gradient(270deg, rgba(18,209,142,.35), var(--green)); }
+.adv { display: flex; height: 8px; border-radius: 6px; overflow: hidden; background: var(--overlay-2); }
+.adv .u { background: var(--red); } .adv .d { background: var(--green); }
+.adv-txt { font-size: .7rem; color: var(--text-dim); margin-top: 3px; font-family: 'JetBrains Mono', monospace; }
+.chips { display: flex; gap: 6px; flex-wrap: wrap; }
+.chip-s { font-size: .74rem; padding: 2px 8px; border-radius: 7px; background: var(--overlay-1); border: 1px solid var(--line); white-space: nowrap; }
+.chip-s b { font-family: 'JetBrains Mono', monospace; font-weight: 600; margin-left: 4px; }
+@media (max-width: 1000px) { .sec-row { grid-template-columns: 28px 1fr 1.2fr 80px; } .sec-row > :nth-child(n+5) { display: none; } }
 /* 回測 */
 .bt { margin-top: 16px; border-top: 1px solid var(--line); padding-top: 14px; }
 .bt-head { display: flex; justify-content: space-between; align-items: baseline; flex-wrap: wrap; gap: 8px; margin-bottom: 10px; font-size: .8rem; color: var(--text-dim); }
@@ -255,6 +278,7 @@ table.q tbody tr:hover td:first-child { box-shadow: inset 3px 0 0 var(--accent);
     <div class="tabs">
       <button class="tab" data-tab="all"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3 3v18h18"/><path d="M7 14l4-4 3 3 5-6"/></svg>全部行情<span class="cnt" id="cntAll"></span></button>
       <button class="tab" data-tab="watch"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M12 3l2.8 5.7 6.2.9-4.5 4.4 1 6.2L12 17.3 6.5 20.2l1-6.2L3 9.6l6.2-.9z"/></svg>自選股<span class="cnt" id="cntWatch"></span></button>
+      <button class="tab" data-tab="sector"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="8" height="8" rx="1.5"/><rect x="13" y="3" width="8" height="5" rx="1.5"/><rect x="13" y="10" width="8" height="11" rx="1.5"/><rect x="3" y="13" width="8" height="8" rx="1.5"/></svg>類股排行</button>
       <button class="tab" data-tab="rank"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 20V10M12 20V4M18 20v-7"/></svg>法人排行</button>
       <button class="tab" data-tab="after"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg>盤後選股<span class="cnt" id="cntAfter"></span></button>
       <button class="tab" data-tab="rt"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2L4 14h7l-1 8 9-12h-7z"/></svg>即時選股<span class="cnt" id="cntRt"></span></button>
@@ -272,6 +296,17 @@ table.q tbody tr:hover td:first-child { box-shadow: inset 3px 0 0 var(--accent);
   <div class="groups hidden" id="groupBar"></div>
 
   <!-- 法人買賣超排行 -->
+  <!-- 類股漲跌幅排行 -->
+  <section class="panel hidden" id="sectorPanel">
+    <div class="panel-head"><h3>類股漲跌幅排行</h3><span id="secInfo"></span></div>
+    <div class="params">
+      <div class="param">期間 <span class="seg" id="secDays"><button data-v="1" class="on">今日</button><button data-v="5">5日</button><button data-v="10">10日</button><button data-v="20">20日</button><button data-v="60">60日</button></span></div>
+      <div class="param">排序 <span class="seg" id="secBy"><button data-v="cap_ret" class="on">市值加權</button><button data-v="avg_ret">等權平均</button><button data-v="turnover">成交金額</button></span></div>
+    </div>
+    <div class="sec-list" id="secList"></div>
+    <div class="hint">市值加權 = 依各股市值計算的類股漲跌（與證交所類股指數同一種算法，大型股影響較大）；等權平均 = 類股內每檔股票漲跌幅的平均。點類股可看成分股。盤中依即時報價計算。</div>
+  </section>
+
   <section class="panel hidden" id="rankPanel">
     <div class="panel-head"><h3>法人買賣超排行</h3><span id="rankInfo">三大法人買賣超於盤後公布</span></div>
     <div class="params">
@@ -330,6 +365,7 @@ table.q tbody tr:hover td:first-child { box-shadow: inset 3px 0 0 var(--accent);
     <div class="params">
       <div class="param">K 低檔 &lt; <input class="num-in" id="kLow" type="number" value="20"></div>
       <div class="param">K 高檔 &gt; <input class="num-in" id="kHigh" type="number" value="80"></div>
+      <div class="param" title="MA5、MA10、MA20 之中最高與最低相差在這個百分比以內，才算均線糾結">均線糾結 ≤ <input class="num-in" id="maBand" type="number" min="0.1" max="20" step="0.1" value="1"> %</div>
       <div class="param">KD 週期 <input class="num-in" id="rtKdN" type="number" min="3" max="30" value="9"></div>
       <label class="chip-toggle"><input type="checkbox" id="rtEtf"><span class="sw"></span>含 ETF</label>
       <label class="chip-toggle"><input type="checkbox" id="rtAuto" checked><span class="sw"></span>盤中每 60 秒重跑</label>
@@ -386,6 +422,7 @@ const BASE_COLS = [
   ['open','開盤','hide-sm'], ['high','最高','hide-sm'], ['low','最低','hide-sm'], ['prev','昨收','hide-sm'],
 ];
 const SCREEN_COLS = [['signals','訊號','l'], ['k','K'], ['d','D']];
+const RT_COLS = [['signals','訊號','l'], ['k','K'], ['d','D'], ['ma_spread','均線差','hide-sm']];
 const RATIO_COLS = [['signals','訊號','l'], ['ratio_chg','比例變化'], ['foreign_ratio','外資持股%']];
 const RANK_COLS = [['rank','#','l'], ['star','','l'], ['code','代碼','l'], ['name','名稱','l'], ['industry','產業','l hide-sm'],
   ['price','股價'], ['chg_pct','漲跌幅'], ['net','買賣超(張)'], ['amount','金額(億)'], ['ratio','佔成交量','hide-sm'], ['streak','連續']];
@@ -555,9 +592,13 @@ function renderInner() {
   $('#rtPanel').classList.toggle('hidden', st.tab !== 'rt');
   $('#etfWrap').classList.toggle('hidden', st.tab !== 'all');
   $('#rankPanel').classList.toggle('hidden', st.tab !== 'rank');
+  $('#sectorPanel').classList.toggle('hidden', st.tab !== 'sector');
+  document.querySelector('.table-card').classList.toggle('hidden', st.tab === 'sector');
+  $('.filters').classList.toggle('hidden', st.tab === 'sector');
+  if (st.tab === 'sector') { if (!SECTORS) loadSectors(); return; }
   if (st.tab === 'rank' && !RANK) loadRank();
   const screen = st.tab === 'after' || st.tab === 'rt';
-  const cols = st.tab === 'rank' ? RANK_COLS : screen ? BASE_COLS.slice(0, 9).concat(st.tab === 'after' && AFTER?.mode === 'ratio' ? RATIO_COLS : SCREEN_COLS) : BASE_COLS;
+  const cols = st.tab === 'rank' ? RANK_COLS : screen ? BASE_COLS.slice(0, 9).concat(st.tab === 'after' && AFTER?.mode === 'ratio' ? RATIO_COLS : st.tab === 'rt' ? RT_COLS : SCREEN_COLS) : BASE_COLS;
   const rows = currentRows();
   const maxVol = Math.max(1, ...rows.slice(0, 300).map(r => r.volume || 0));
   $('#tbl thead').innerHTML = '<tr>' + cols.map(([k, t, c='']) =>
@@ -599,6 +640,7 @@ function rowsHtml(from, to, maxVol) {
       case 'volume': return `<td><span class="volcell">${fmt(v,0)}<span class="volbar"><i style="width:${Math.min(100,(v||0)/maxVol*100)}%"></i></span></span></td>`;
       case 'signals': return `<td class="l">${(v||[]).map(s => `<span class="tag ${s.side}">${esc(s.label.split('：')[0])}${st.tab==='after'?(s.side==='buy'?' BUY':' SELL'):''}</span>`).join('')}</td>`;
       case 'k': case 'd': return `<td>${fmt(v,1)}</td>`;
+      case 'ma_spread': return `<td class="${c}" style="color:var(--text-mid)">${v == null ? '-' : fmt(v) + '%'}</td>`;
       case 'ratio_chg': return `<td class="${cls(v)}" style="font-weight:700">${v == null ? '-' : (v > 0 ? '+' : '') + fmt(v) + '%'}</td>`;
       case 'foreign_ratio': return `<td style="color:var(--text-mid)">${v == null ? '-' : fmt(v) + '%'}</td>`;
       case 'rank': return `<td class="l"><b class="num" style="color:${v <= 3 ? 'var(--accent)' : 'var(--text-dim)'}">${v}</b></td>`;
@@ -825,6 +867,56 @@ function renderBacktest(r) {
   $('#btBox').classList.remove('hidden');
 }
 
+// ── 類股排行 ──
+let SECTORS = null;
+const sec = Object.assign({days: 1, by: 'cap_ret'}, ss.get('twSector', {}));
+async function loadSectors() {
+  ss.set('twSector', sec);
+  document.querySelectorAll('#secDays button').forEach(b => b.classList.toggle('on', +b.dataset.v === sec.days));
+  document.querySelectorAll('#secBy button').forEach(b => b.classList.toggle('on', b.dataset.v === sec.by));
+  try { SECTORS = await api('/api/tw/board/sectors?days=' + sec.days); }
+  catch (e) { $('#secList').innerHTML = `<div class="empty">${esc(e.message)}</div>`; return; }
+  renderSectors();
+}
+function renderSectors() {
+  if (!SECTORS) return;
+  const key = sec.by, list = SECTORS.sectors.slice().sort((a, b) => (b[key] ?? -1e9) - (a[key] ?? -1e9));
+  const val = x => key === 'avg_ret' ? x.avg_ret : (x.cap_ret ?? x.avg_ret);
+  const maxAbs = Math.max(0.5, ...list.map(x => Math.abs(val(x))));
+  const sign = v => (v > 0 ? '+' : '') + fmt(v) + '%';
+  $('#secInfo').innerHTML = SECTORS.live ? `即時 <span class="num">${esc((SECTORS.ts || '').slice(11, 19))}</span>` :
+    (SECTORS.days === 1 ? `收盤 <span class="num">${SECTORS.date}</span>` : `<span class="num">${SECTORS.start} ～ ${SECTORS.date}</span>`);
+  $('#secList').innerHTML = `<div class="sec-row head"><span>#</span><span>類股</span><span>${key === 'avg_ret' ? '等權平均' : '市值加權'}漲跌幅</span><span>${key === 'avg_ret' ? '市值加權' : '等權平均'}</span><span>上漲 / 下跌家數</span><span>成交金額</span><span>領漲股</span></div>` +
+    list.map((x, i) => {
+      const v = val(x), other = key === 'avg_ret' ? x.cap_ret : x.avg_ret, w = Math.abs(v) / maxAbs * 50;
+      const tot = Math.max(1, x.up + x.down);
+      return `<div class="sec-row" data-ind="${esc(x.industry)}">
+        <span class="num" style="color:${i < 3 ? 'var(--accent)' : 'var(--text-dim)'};font-weight:700">${i + 1}</span>
+        <span class="sec-name">${esc(x.industry)}<small>${x.count} 檔</small></span>
+        <span class="dcell"><b class="${cls(v)}">${sign(v)}</b><span class="dbar"><span class="mid"></span><i class="${v >= 0 ? 'up' : 'dn'}" style="width:${w}%"></i></span></span>
+        <span class="num ${cls(other)}" style="font-size:.8rem">${other == null ? '-' : sign(other)}</span>
+        <span><div class="adv"><i class="u" style="width:${x.up / tot * 100}%"></i><i class="d" style="width:${x.down / tot * 100}%"></i></div>
+          <div class="adv-txt"><span class="up">${x.up}</span> / <span class="dn">${x.down}</span></div></span>
+        <span class="num" style="font-size:.8rem">${fmt(x.turnover, 1)} 億</span>
+        <span class="chips">${x.leaders.map(l => `<span class="chip-s" data-go="${esc(l.code)}">${esc(l.name)}<b class="${cls(l.ret)}">${sign(l.ret)}</b></span>`).join('')}</span>
+      </div>`;
+    }).join('');
+}
+$('#secDays').onclick = e => { const b = e.target.closest('button'); if (!b) return; sec.days = +b.dataset.v; loadSectors(); };
+$('#secBy').onclick = e => { const b = e.target.closest('button'); if (!b) return; sec.by = b.dataset.v; ss.set('twSector', sec);
+  document.querySelectorAll('#secBy button').forEach(x => x.classList.toggle('on', x === b)); renderSectors(); };
+$('#secList').addEventListener('click', e => {
+  const chip = e.target.closest('[data-go]');
+  if (chip) { const ind = e.target.closest('[data-ind]').dataset.ind;
+    return openChart(chip.dataset.go, ALL.filter(r => r.industry === ind && r.kind === 'stock').sort((a, b) => (b.chg_pct ?? -99) - (a.chg_pct ?? -99)), ind); }
+  const row = e.target.closest('[data-ind]');
+  if (!row) return;
+  // 看成分股：切到全部行情、篩選該類股、依漲跌幅排序
+  st.tab = 'all'; st.ind = row.dataset.ind; st.search = ''; st.market = ''; st.sort = 'chg_pct'; st.dir = -1;
+  $('#search').value = ''; $('#fMarket').value = ''; $('#fInd').value = st.ind;
+  render(); window.scrollTo({top: document.querySelector('.bar-row').offsetTop - 70, behavior: 'smooth'});
+});
+
 // ── 法人買賣超排行 ──
 async function loadRank() {
   ss.set('twRank', rk);
@@ -872,7 +964,7 @@ $('#alertSave').onclick = async () => {
   try {
     await api('/api/tw/board/alerts', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({
       enabled: $('#alertOn').checked, scope: $('#alertScope').value, rules, include_etf: $('#rtEtf').checked,
-      params: {k_low: +$('#kLow').value, k_high: +$('#kHigh').value, kd_n: +$('#rtKdN').value}})});
+      params: {k_low: +$('#kLow').value, k_high: +$('#kHigh').value, ma_band: +$('#maBand').value, kd_n: +$('#rtKdN').value}})});
     loadAlerts();
   } catch (e) { alert(e.message); }
 };
@@ -900,7 +992,7 @@ async function runRt(silent) {
   const btn = $('#runRt'); if (!silent) btn.disabled = true;
   try {
     RT = await api('/api/tw/board/screen/realtime', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({
-      rules, k_low: +$('#kLow').value, k_high: +$('#kHigh').value, kd_n: +$('#rtKdN').value,
+      rules, k_low: +$('#kLow').value, k_high: +$('#kHigh').value, ma_band: +$('#maBand').value, kd_n: +$('#rtKdN').value,
       include_etf: $('#rtEtf').checked})});
     $('#cntRt').textContent = RT.results.length;
     if (st.tab === 'rt') render();
@@ -916,6 +1008,7 @@ async function tick() {
   try { await loadList(); LOAD_ERR = ''; if (st.tab === 'all' || st.tab === 'watch') render(); }
   catch (e) { if (!ALL.length) { LOAD_ERR = e.message || '網路錯誤'; render(); } }
   loadIndices();
+  if (st.tab === 'sector' && sec.days === 1) loadSectors();
   // 沒拿到資料時 10 秒後重試；盤中 20 秒更新；收盤後 5 分鐘
   setTimeout(tick, !ALL.length ? 10000 : marketOpen ? 20000 : 300000);
 }

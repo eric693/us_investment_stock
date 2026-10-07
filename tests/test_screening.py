@@ -257,3 +257,40 @@ def test_ratio_optimizer_counts_trigger_days(board):
                 want['train' if i < split else 'test'] += 1
     assert cell['train']['n'] == want['train'] and (cell['test'] or {'n': 0})['n'] == want['test']
     assert res['results'][0]['best']['days'] == 5
+
+
+def test_sector_ranking_cap_weighted(board):
+    """類股漲跌：市值加權 = Σ(今價×股數)/Σ(前價×股數) − 1；等權 = 個股漲跌平均。"""
+    import sqlite3
+    dates, codes = make_market(board, n_days=30, n_codes=12, seed=4)
+    con = sqlite3.connect(board.DB_PATH)
+    for i, c in enumerate(codes):
+        con.execute('UPDATE stocks SET industry=? WHERE code=?', ('甲類' if i % 2 else '乙類', c))
+        con.execute('INSERT INTO issued VALUES(?,?,?)', (c, 'x', 1000 * (i + 1)))
+    con.commit()
+    res = board.sector_ranking(5)
+    for s in res['sectors']:
+        members = [(i, c) for i, c in enumerate(codes) if ('甲類' if i % 2 else '乙類') == s['industry']]
+        now = {c: series(board, c, 'close')[-1] for _, c in members}
+        base = {c: series(board, c, 'close')[-6] for _, c in members}
+        cap = sum(now[c] * 1000 * (i + 1) for i, c in members) / sum(base[c] * 1000 * (i + 1) for i, c in members) - 1
+        avg = sum(now[c] / base[c] - 1 for _, c in members) / len(members)
+        assert s['cap_ret'] == round(cap * 100, 2) and s['avg_ret'] == round(avg * 100, 2) and s['count'] == len(members)
+
+
+def test_ma_squeeze_rule_matches_reference(board):
+    dates, codes = make_market(board, n_days=60, n_codes=150, seed=21)
+    for band in (1.0, 3.0):
+        res = board.screen_realtime(['ma_squeeze'], {'ma_band': band})
+        got = {r['code'] for r in res['results']}
+        want = set()
+        for c in codes:
+            cl, v = series(board, c, 'close'), series(board, c, 'volume')
+            ma = lambda n, i: sum(cl[i - n + 1:i + 1]) / n
+            i = len(cl) - 1
+            m5, m10, m20 = ma(5, i), ma(10, i), ma(20, i)
+            if (ma(20, i) > ma(20, i - 1) and (max(m5, m10, m20) / min(m5, m10, m20) - 1) * 100 <= band
+                    and cl[i - 1] <= ma(5, i - 1) and cl[i] > m5 and v[i] > v[i - 1]):
+                want.add(c)
+        assert got == want, band
+    assert board.screen_realtime(['ma_squeeze'], {'ma_band': 3.0})['results']
