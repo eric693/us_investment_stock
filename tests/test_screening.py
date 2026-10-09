@@ -203,12 +203,13 @@ def test_realtime_poll_retry_and_total_failure(board, monkeypatch):
         def json(self):
             if not self.ok:
                 raise ValueError('not json')
-            return {'msgArray': [{'c': '2330', 'z': '1000', 'y': '990', 'o': '995', 'h': '1001', 'l': '994', 'v': '5000'}]}
+            return {'msgArray': [{'c': '2330', 'z': '1000', 'y': '990', 'o': '995', 'h': '1001', 'l': '994', 'v': '5000', 'd': '20261008'}]}
 
     # 第一次失敗、重試成功
     monkeypatch.setattr(board.requests, 'get', lambda *a, **k: (calls.append(1), Resp(len(calls) > 1))[1])
     snap = board._poll_realtime_once({})
     assert snap['quotes']['2330']['price'] == 1000 and snap['failed_chunks'] == 0 and len(calls) == 2
+    assert snap['date'] == '20261008'                      # 快照日期 = 證交所回報的成交日期（休市日不會被當成今天）
     # 整輪失敗：回傳上一次的快照（時間戳不更新）
     monkeypatch.setattr(board.requests, 'get', lambda *a, **k: Resp(False))
     assert board._poll_realtime_once(snap) is snap
@@ -270,7 +271,7 @@ def test_sector_ranking_cap_weighted(board):
     con.commit()
     res = board.sector_ranking(5)
     for s in res['sectors']:
-        members = [(i, c) for i, c in enumerate(codes) if ('甲類' if i % 2 else '乙類') == s['industry']]
+        members = [(i, c) for i, c in enumerate(codes) if ('甲類' if i % 2 else '乙類') == s['name']]
         now = {c: series(board, c, 'close')[-1] for _, c in members}
         base = {c: series(board, c, 'close')[-6] for _, c in members}
         cap = sum(now[c] * 1000 * (i + 1) for i, c in members) / sum(base[c] * 1000 * (i + 1) for i, c in members) - 1
@@ -294,3 +295,22 @@ def test_ma_squeeze_rule_matches_reference(board):
                 want.add(c)
         assert got == want, band
     assert board.screen_realtime(['ma_squeeze'], {'ma_band': 3.0})['results']
+
+
+def test_sector_ranking_concepts_and_flow(board):
+    """概念股分類：一檔可屬於多個概念；成交比重與法人金額加總正確。"""
+    import sqlite3
+    dates, codes = make_market(board, n_days=30, n_codes=6, seed=8)
+    con = sqlite3.connect(board.DB_PATH)
+    con.executemany('INSERT INTO concepts VALUES(?,?,?,?)',
+                    [('概念股', 'AI', c, 'x') for c in codes[:4]] + [('概念股', '機器人', c, 'x') for c in codes[2:]])
+    con.executemany('INSERT INTO issued VALUES(?,?,?)', [(c, 'x', 1000) for c in codes])
+    con.commit()
+    res = board.sector_ranking(5, 'concept')
+    by = {s['name']: s for s in res['sectors']}
+    assert by['AI']['count'] == 4 and by['機器人']['count'] == 4          # 第 3、4 檔同時屬於兩個概念
+    turn = {c: sum(series(board, c, 'close')[i] * series(board, c, 'volume')[i] for i in range(-5, 0)) / 1e5 for c in codes}
+    total = sum(turn.values())
+    assert by['AI']['share'] == round(sum(turn[c] for c in codes[:4]) / total * 100, 2)
+    inst_amt = sum(sum(inst(board, c, 'total_net')[i] * series(board, c, 'close')[i] for i in range(-5, 0)) * 1000 / 1e8 for c in codes[:4])
+    assert by['AI']['inst'] == round(inst_amt, 1)

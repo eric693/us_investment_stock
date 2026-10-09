@@ -188,7 +188,7 @@ table.q tbody tr:hover td:first-child { box-shadow: inset 3px 0 0 var(--accent);
 .warn-box { padding: 10px 14px; border-radius: 12px; background: rgba(251,191,36,.08); border: 1px solid rgba(251,191,36,.3); color: var(--text); font-size: .8rem; line-height: 1.7; margin-bottom: 14px; }
 /* 類股排行 */
 .sec-list { display: flex; flex-direction: column; gap: 2px; margin-top: 12px; }
-.sec-row { display: grid; grid-template-columns: 34px 120px minmax(160px, 1.4fr) 90px 150px 100px minmax(200px, 2fr); gap: 12px; align-items: center;
+.sec-row { display: grid; grid-template-columns: 34px 150px minmax(150px, 1.3fr) 80px 120px 130px 110px minmax(180px, 1.6fr); gap: 12px; align-items: center;
            padding: 9px 10px; border-radius: 11px; cursor: pointer; font-size: .84rem; transition: background .12s; }
 .sec-row:hover { background: var(--overlay-1); }
 .sec-row.head { cursor: default; font-size: .7rem; color: var(--text-dim); font-weight: 600; letter-spacing: .04em; }
@@ -208,7 +208,11 @@ table.q tbody tr:hover td:first-child { box-shadow: inset 3px 0 0 var(--accent);
 .chips { display: flex; gap: 6px; flex-wrap: wrap; }
 .chip-s { font-size: .74rem; padding: 2px 8px; border-radius: 7px; background: var(--overlay-1); border: 1px solid var(--line); white-space: nowrap; }
 .chip-s b { font-family: 'JetBrains Mono', monospace; font-weight: 600; margin-left: 4px; }
-@media (max-width: 1000px) { .sec-row { grid-template-columns: 28px 1fr 1.2fr 80px; } .sec-row > :nth-child(n+5) { display: none; } }
+.flow { font-family: 'JetBrains Mono', monospace; font-size: .8rem; }
+.flow small { display: block; font-size: .7rem; color: var(--text-dim); }
+.gf-chip { display: inline-flex; align-items: center; gap: 8px; height: 34px; padding: 0 12px; border-radius: 999px; background: rgba(109,93,252,.12); color: var(--accent); font-size: .82rem; font-weight: 600; }
+.gf-chip button { border: none; background: none; color: inherit; cursor: pointer; font-size: .9rem; }
+@media (max-width: 1100px) { .sec-row { grid-template-columns: 28px 1fr 1.2fr 90px; } .sec-row > :nth-child(n+5) { display: none; } .sec-row > .keep { display: block; } }
 /* 回測 */
 .bt { margin-top: 16px; border-top: 1px solid var(--line); padding-top: 14px; }
 .bt-head { display: flex; justify-content: space-between; align-items: baseline; flex-wrap: wrap; gap: 8px; margin-bottom: 10px; font-size: .8rem; color: var(--text-dim); }
@@ -288,6 +292,7 @@ table.q tbody tr:hover td:first-child { box-shadow: inset 3px 0 0 var(--accent);
         <input id="search" type="search" name="stock-filter" placeholder="搜尋代碼或名稱" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" data-lpignore="true" data-1p-ignore><kbd>/</kbd></label>
       <select class="sel" id="fMarket"><option value="">全部市場</option><option value="TSE">上市</option><option value="OTC">上櫃</option></select>
       <select class="sel" id="fInd"><option value="">全部產業</option></select>
+      <span class="gf-chip hidden" id="gfChip"></span>
       <label class="chip-toggle" id="etfWrap"><input type="checkbox" id="fEtf"><span class="sw"></span>含 ETF</label>
     </div>
   </div>
@@ -298,13 +303,15 @@ table.q tbody tr:hover td:first-child { box-shadow: inset 3px 0 0 var(--accent);
   <!-- 法人買賣超排行 -->
   <!-- 類股漲跌幅排行 -->
   <section class="panel hidden" id="sectorPanel">
-    <div class="panel-head"><h3>類股漲跌幅排行 <button class="help-btn" data-help="board.sector"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><circle cx="12" cy="12" r="9.5"/><path d="M9.3 9.2a2.8 2.8 0 0 1 5.4 1c0 1.9-2.7 2.4-2.7 4"/><path d="M12 17.3h.01"/></svg>說明</button></h3><span id="secInfo"></span></div>
+    <div class="panel-head"><h3>類股 / 概念股排行 <button class="help-btn" data-help="board.sector"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><circle cx="12" cy="12" r="9.5"/><path d="M9.3 9.2a2.8 2.8 0 0 1 5.4 1c0 1.9-2.7 2.4-2.7 4"/><path d="M12 17.3h.01"/></svg>說明</button></h3><span id="secInfo"></span></div>
     <div class="params">
+      <div class="param">分類 <span class="seg" id="secKind"><button data-v="industry" class="on">產業</button><button data-v="sub">細產業</button><button data-v="concept">概念股</button><button data-v="group">集團股</button></span></div>
       <div class="param">期間 <span class="seg" id="secDays"><button data-v="1" class="on">今日</button><button data-v="5">5日</button><button data-v="10">10日</button><button data-v="20">20日</button><button data-v="60">60日</button></span></div>
-      <div class="param">排序 <span class="seg" id="secBy"><button data-v="cap_ret" class="on">市值加權</button><button data-v="avg_ret">等權平均</button><button data-v="turnover">成交金額</button></span></div>
+      <div class="param">排序 <span class="seg" id="secBy"><button data-v="cap_ret" class="on">市值加權</button><button data-v="avg_ret">等權平均</button><button data-v="share_chg">資金流入</button><button data-v="inst">法人買超</button><button data-v="turnover">成交金額</button></span></div>
+      <label class="search" style="min-width:180px;height:34px"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg><input id="secSearch" type="search" placeholder="搜尋類股 / 概念" autocomplete="off"></label>
     </div>
     <div class="sec-list" id="secList"></div>
-    <div class="hint">市值加權 = 依各股市值計算的類股漲跌（與證交所類股指數同一種算法，大型股影響較大）；等權平均 = 類股內每檔股票漲跌幅的平均。點類股可看成分股。盤中依即時報價計算。</div>
+    <div class="hint">市值加權 = 依市值計算的漲跌（與證交所類股指數同算法）；等權平均 = 每檔一樣重。<b>資金流向</b> = 成交金額佔全市場的比重，與前一段同長度期間相比（今日則比前 5 日平均）的變化，比重上升代表資金流入。<b>法人</b> = 期間三大法人買賣超金額（盤中為最近一個已公布交易日）。細產業／概念股／集團股分類來自 Yahoo 股市，每週更新；一檔股票可能同時屬於多個概念。點名稱看成分股。</div>
   </section>
 
   <section class="panel hidden" id="rankPanel">
@@ -565,6 +572,7 @@ function currentRows() {
     (!q || r.code.toLowerCase().includes(q) || (r.name||'').toLowerCase().includes(q) || (IDX_ALIAS[r.code] || '').includes(q)) &&
     (!st.market || r.market === st.market) &&
     (!st.ind || r.industry === st.ind) &&
+    (st.tab !== 'all' || !st.gf || st.gf.codes.includes(r.code)) &&
     (st.tab !== 'all' || st.etf || r.kind === 'stock' || r.kind === 'index'));
   const k = st.sort, dir = st.dir;
   return rows.slice().sort((a, b) => {
@@ -604,6 +612,8 @@ function renderInner() {
   $('#tbl thead').innerHTML = '<tr>' + cols.map(([k, t, c='']) =>
     `<th class="${c}${st.sort===k?' sorted':''}" data-k="${k}">${t}<span class="arr">${st.sort===k ? (st.dir>0?'▲':'▼') : ''}</span></th>`).join('') + '</tr>';
   $('#groupBar').classList.toggle('hidden', st.tab !== 'watch');
+  $('#gfChip').classList.toggle('hidden', !(st.gf && st.tab === 'all'));
+  if (st.gf) $('#gfChip').innerHTML = `${esc(st.gf.name)}（${st.gf.codes.length} 檔）<button title="清除" onclick="st.gf=null;render()">✕</button>`;
   $('#tblHelp').dataset.help = {all: 'board.all', watch: 'board.watch', rank: 'board.rank', after: 'board.after', rt: 'board.rt'}[st.tab] || 'board.all';
   ROWS = rows; COLS = cols; shown = PAGE;
   $('#tbl tbody').innerHTML = rows.length ? rowsHtml(0, shown, maxVol) : `<tr><td colspan="${cols.length}" class="empty">${emptyText()}</td></tr>`;
@@ -665,7 +675,7 @@ $('.tbl-wrap').addEventListener('scroll', e => {
 
 let LOAD_ERR = '';
 function clearFilters() {
-  st.search = ''; st.market = ''; st.ind = '';
+  st.search = ''; st.market = ''; st.ind = ''; st.gf = null;
   $('#search').value = ''; $('#fMarket').value = ''; $('#fInd').value = '';
   render();
 }
@@ -684,7 +694,7 @@ function emptyText() {
   if (st.tab === 'rt') return icon + (RT ? '目前沒有符合條件的股票' : '選擇條件後按「開始選股」');
   if (LOAD_ERR) return icon + `行情載入失敗：${esc(LOAD_ERR)}<br><button class="clear-btn" onclick="retryLoad()">重新載入</button>`;
   if (!ALL.length) return icon + '資料載入中…';
-  const active = [st.search && `搜尋「${esc(st.search)}」`, st.market && (st.market === 'TSE' ? '上市' : '上櫃'), st.ind && `產業「${esc(st.ind)}」`].filter(Boolean);
+  const active = [st.gf && `類股「${esc(st.gf.name)}」`, st.search && `搜尋「${esc(st.search)}」`, st.market && (st.market === 'TSE' ? '上市' : '上櫃'), st.ind && `產業「${esc(st.ind)}」`].filter(Boolean);
   return icon + `沒有符合篩選的股票${active.length ? '（' + active.join('、') + '）' : ''}` +
     (active.length ? '<br><button class="clear-btn" onclick="clearFilters()">清除篩選，顯示全部股票</button>' : '');
 }
@@ -713,7 +723,7 @@ $('#tbl').addEventListener('click', async e => {
     return;
   }
   const go = e.target.closest('[data-go]');
-  if (go) openChart(go.dataset.go, currentRows(), {all:'全部行情', watch: curGroup().name, rank: '法人排行', after:'盤後選股', rt:'即時選股'}[st.tab]);
+  if (go) openChart(go.dataset.go, currentRows(), {all: st.gf ? st.gf.name : '全部行情', watch: curGroup().name, rank: '法人排行', after:'盤後選股', rt:'即時選股'}[st.tab]);
 });
 document.querySelector('.pulse').addEventListener('click', e => {
   const m = e.target.closest('[data-go]');
@@ -868,53 +878,64 @@ function renderBacktest(r) {
   $('#btBox').classList.remove('hidden');
 }
 
-// ── 類股排行 ──
+// ── 類股 / 概念股排行 ──
 let SECTORS = null;
-const sec = Object.assign({days: 1, by: 'cap_ret'}, ss.get('twSector', {}));
+const sec = Object.assign({days: 1, by: 'cap_ret', kind: 'industry', q: ''}, ss.get('twSector', {}));
+const KIND_NAME = {industry: '產業', sub: '細產業', concept: '概念股', group: '集團股'};
 async function loadSectors() {
   ss.set('twSector', sec);
-  document.querySelectorAll('#secDays button').forEach(b => b.classList.toggle('on', +b.dataset.v === sec.days));
-  document.querySelectorAll('#secBy button').forEach(b => b.classList.toggle('on', b.dataset.v === sec.by));
-  try { SECTORS = await api('/api/tw/board/sectors?days=' + sec.days); }
+  for (const [id, key] of [['#secDays', 'days'], ['#secBy', 'by'], ['#secKind', 'kind']])
+    document.querySelectorAll(id + ' button').forEach(b => b.classList.toggle('on', String(sec[key]) === b.dataset.v));
+  $('#secSearch').value = sec.q;
+  $('#secList').innerHTML = '<div class="empty">載入中…</div>';
+  try { SECTORS = await api(`/api/tw/board/sectors?days=${sec.days}&kind=${sec.kind}`); }
   catch (e) { $('#secList').innerHTML = `<div class="empty">${esc(e.message)}</div>`; return; }
   renderSectors();
 }
 function renderSectors() {
   if (!SECTORS) return;
-  const key = sec.by, list = SECTORS.sectors.slice().sort((a, b) => (b[key] ?? -1e9) - (a[key] ?? -1e9));
+  const key = sec.by, q = sec.q.trim().toLowerCase();
+  const list = SECTORS.sectors.filter(x => !q || x.name.toLowerCase().includes(q))
+    .sort((a, b) => (b[key] ?? -1e9) - (a[key] ?? -1e9));
   const val = x => key === 'avg_ret' ? x.avg_ret : (x.cap_ret ?? x.avg_ret);
   const maxAbs = Math.max(0.5, ...list.map(x => Math.abs(val(x))));
-  const sign = v => (v > 0 ? '+' : '') + fmt(v) + '%';
-  $('#secInfo').innerHTML = SECTORS.live ? `即時 <span class="num">${esc((SECTORS.ts || '').slice(11, 19))}</span>` :
-    (SECTORS.days === 1 ? `收盤 <span class="num">${SECTORS.date}</span>` : `<span class="num">${SECTORS.start} ～ ${SECTORS.date}</span>`);
-  $('#secList').innerHTML = `<div class="sec-row head"><span>#</span><span>類股</span><span>${key === 'avg_ret' ? '等權平均' : '市值加權'}漲跌幅</span><span>${key === 'avg_ret' ? '市值加權' : '等權平均'}</span><span>上漲 / 下跌家數</span><span>成交金額</span><span>領漲股</span></div>` +
-    list.map((x, i) => {
-      const v = val(x), other = key === 'avg_ret' ? x.cap_ret : x.avg_ret, w = Math.abs(v) / maxAbs * 50;
-      const tot = Math.max(1, x.up + x.down);
-      return `<div class="sec-row" data-ind="${esc(x.industry)}">
+  const sign = (v, d = 2) => v == null ? '-' : (v > 0 ? '+' : '') + fmt(v, d);
+  const period = SECTORS.days === 1 ? '今日' : SECTORS.days + '日';
+  $('#secInfo').innerHTML = (SECTORS.live ? `即時 <span class="num">${esc((SECTORS.ts || '').slice(11, 19))}</span>` :
+    (SECTORS.days === 1 ? `收盤 <span class="num">${SECTORS.date}</span>` : `<span class="num">${SECTORS.start} ～ ${SECTORS.date}</span>`)) +
+    `・${list.length} 個${KIND_NAME[SECTORS.kind]}・${esc(SECTORS.source)}`;
+  $('#secList').innerHTML = `<div class="sec-row head"><span>#</span><span>${KIND_NAME[SECTORS.kind]}</span><span>${key === 'avg_ret' ? '等權' : '市值加權'}漲跌</span><span>${key === 'avg_ret' ? '市值加權' : '等權'}</span><span>上漲 / 下跌</span><span>成交比重（變化）</span><span>法人買賣超</span><span>領漲股</span></div>` +
+    (list.length ? list.map((x, i) => {
+      const v = val(x), other = key === 'avg_ret' ? x.cap_ret : x.avg_ret, w = Math.abs(v) / maxAbs * 50, tot = Math.max(1, x.up + x.down);
+      const flowArrow = x.share_chg == null ? '' : x.share_chg > 0.05 ? '▲' : x.share_chg < -0.05 ? '▼' : '';
+      return `<div class="sec-row" data-name="${esc(x.name)}">
         <span class="num" style="color:${i < 3 ? 'var(--accent)' : 'var(--text-dim)'};font-weight:700">${i + 1}</span>
-        <span class="sec-name">${esc(x.industry)}<small>${x.count} 檔</small></span>
-        <span class="dcell"><b class="${cls(v)}">${sign(v)}</b><span class="dbar"><span class="mid"></span><i class="${v >= 0 ? 'up' : 'dn'}" style="width:${w}%"></i></span></span>
-        <span class="num ${cls(other)}" style="font-size:.8rem">${other == null ? '-' : sign(other)}</span>
+        <span class="sec-name">${esc(x.name)}<small>${x.count} 檔</small></span>
+        <span class="dcell"><b class="${cls(v)}">${sign(v)}%</b><span class="dbar"><span class="mid"></span><i class="${v >= 0 ? 'up' : 'dn'}" style="width:${w}%"></i></span></span>
+        <span class="num ${cls(other)}" style="font-size:.8rem">${sign(other)}%</span>
         <span><div class="adv"><i class="u" style="width:${x.up / tot * 100}%"></i><i class="d" style="width:${x.down / tot * 100}%"></i></div>
           <div class="adv-txt"><span class="up">${x.up}</span> / <span class="dn">${x.down}</span></div></span>
-        <span class="num" style="font-size:.8rem">${fmt(x.turnover, 1)} 億</span>
-        <span class="chips">${x.leaders.map(l => `<span class="chip-s" data-go="${esc(l.code)}">${esc(l.name)}<b class="${cls(l.ret)}">${sign(l.ret)}</b></span>`).join('')}</span>
+        <span class="flow">${x.share == null ? '-' : fmt(x.share) + '%'} <span class="${cls(x.share_chg)}">${flowArrow}${sign(x.share_chg)}</span><small>${fmt(x.turnover, 1)} 億</small></span>
+        <span class="flow ${cls(x.inst)}">${sign(x.inst, 1)} 億<small>外資 <span class="${cls(x.foreign)}">${sign(x.foreign, 1)}</span>・投信 <span class="${cls(x.trust)}">${sign(x.trust, 1)}</span></small></span>
+        <span class="chips">${x.leaders.map(l => `<span class="chip-s" data-go="${esc(l.code)}">${esc(l.name)}<b class="${cls(l.ret)}">${sign(l.ret)}%</b></span>`).join('')}</span>
       </div>`;
-    }).join('');
+    }).join('') : '<div class="empty">沒有符合的類股</div>');
 }
-$('#secDays').onclick = e => { const b = e.target.closest('button'); if (!b) return; sec.days = +b.dataset.v; loadSectors(); };
+for (const [id, key] of [['#secDays', 'days'], ['#secKind', 'kind']])
+  $(id).onclick = e => { const b = e.target.closest('button'); if (!b) return; sec[key] = key === 'days' ? +b.dataset.v : b.dataset.v; loadSectors(); };
 $('#secBy').onclick = e => { const b = e.target.closest('button'); if (!b) return; sec.by = b.dataset.v; ss.set('twSector', sec);
   document.querySelectorAll('#secBy button').forEach(x => x.classList.toggle('on', x === b)); renderSectors(); };
+$('#secSearch').oninput = e => { sec.q = e.target.value; ss.set('twSector', sec); renderSectors(); };
 $('#secList').addEventListener('click', e => {
+  const rowEl = e.target.closest('[data-name]');
+  if (!rowEl) return;
+  const g = SECTORS.sectors.find(x => x.name === rowEl.dataset.name);
+  const members = ALL.filter(r => g.codes.includes(r.code)).sort((a, b) => (b.chg_pct ?? -99) - (a.chg_pct ?? -99));
   const chip = e.target.closest('[data-go]');
-  if (chip) { const ind = e.target.closest('[data-ind]').dataset.ind;
-    return openChart(chip.dataset.go, ALL.filter(r => r.industry === ind && r.kind === 'stock').sort((a, b) => (b.chg_pct ?? -99) - (a.chg_pct ?? -99)), ind); }
-  const row = e.target.closest('[data-ind]');
-  if (!row) return;
-  // 看成分股：切到全部行情、篩選該類股、依漲跌幅排序
-  st.tab = 'all'; st.ind = row.dataset.ind; st.search = ''; st.market = ''; st.sort = 'chg_pct'; st.dir = -1;
-  $('#search').value = ''; $('#fMarket').value = ''; $('#fInd').value = st.ind;
+  if (chip) return openChart(chip.dataset.go, members, g.name);
+  // 看成分股：切到全部行情，只列這個類股 / 概念的股票，依漲跌幅排序
+  st.tab = 'all'; st.gf = {name: g.name, codes: g.codes}; st.ind = ''; st.search = ''; st.market = ''; st.sort = 'chg_pct'; st.dir = -1;
+  $('#search').value = ''; $('#fMarket').value = ''; $('#fInd').value = '';
   render(); window.scrollTo({top: document.querySelector('.bar-row').offsetTop - 70, behavior: 'smooth'});
 });
 

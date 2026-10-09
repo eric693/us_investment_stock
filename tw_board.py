@@ -95,6 +95,8 @@ def _init_db():
             dealer_net REAL, total_net REAL, PRIMARY KEY(code, date));
         CREATE TABLE IF NOT EXISTS foreign_hold(code TEXT PRIMARY KEY, date TEXT, lots REAL);
         CREATE TABLE IF NOT EXISTS issued(code TEXT PRIMARY KEY, date TEXT, lots REAL);   -- 發行股數（張）
+        CREATE TABLE IF NOT EXISTS concepts(label TEXT, name TEXT, code TEXT, updated TEXT,
+            PRIMARY KEY(label, name, code));   -- 細產業 / 概念股 / 集團股成分股（來源：Yahoo 股市）
         CREATE TABLE IF NOT EXISTS sync_log(date TEXT, source TEXT, status TEXT, ts TEXT,
             PRIMARY KEY(date, source));
         CREATE TABLE IF NOT EXISTS index_daily(code TEXT, date TEXT, open REAL, high REAL, low REAL,
@@ -412,6 +414,51 @@ def _sync_foreign_hold():
                 break
 
 
+CONCEPT_LABELS = {'sub': '電子產業', 'concept': '概念股', 'group': '集團股'}
+
+
+def _sync_concepts(force=False):
+    """細產業、概念股、集團股的成分股：每週從 Yahoo 股市更新一次（官方沒有概念股分類）。"""
+    with _db() as con:
+        last = con.execute('SELECT MAX(updated) FROM concepts').fetchone()[0]
+    if not force and last and last >= (_now() - pd.Timedelta(days=7)).strftime('%Y-%m-%d'):
+        return
+    import html as _html
+    import urllib.parse as up
+    hdr = dict(HDRS)
+    try:
+        page = requests.get('https://tw.stock.yahoo.com/class', headers=hdr, timeout=30).text
+    except Exception as e:
+        print(f'[tw_board] concepts index: {e}')
+        return
+    cats = []
+    for u in re.findall(r'href="(/class-quote\?category=[^"]+)"', page):
+        q = dict(up.parse_qsl(_html.unescape(u).split('?', 1)[1]))
+        if q.get('categoryLabel') in CONCEPT_LABELS.values() and (q['categoryLabel'], q['category']) not in cats:
+            cats.append((q['categoryLabel'], q['category']))
+    today = _now().strftime('%Y-%m-%d')
+    done = 0
+    for label, name in cats:
+        codes, offset = set(), 0
+        try:
+            while offset is not None and offset < 1000:
+                url = ('https://tw.stock.yahoo.com/_td-stock/api/resource/StockServices.getClassQuotes;'
+                       f'categoryName={up.quote(name, safe="")};offset={offset}')
+                js = _get_json(url, host_gap=0.8)
+                codes |= {x.get('systexId') for x in js.get('list') or [] if CODE_RE.match(str(x.get('systexId', '')))}
+                nxt = (js.get('pagination') or {}).get('nextOffset')
+                offset = int(nxt) if nxt not in (None, '') else None
+        except Exception as e:
+            print(f'[tw_board] concept {name}: {e}')
+            continue
+        if codes:
+            with _db() as con:
+                con.execute('DELETE FROM concepts WHERE label=? AND name=?', (label, name))
+                con.executemany('INSERT INTO concepts VALUES(?,?,?,?)', [(label, name, c, today) for c in codes])
+            done += 1
+    print(f'[tw_board] concepts updated: {done}/{len(cats)}')
+
+
 def _trading_days_loaded(source='twse_px'):
     with _db() as con:
         return con.execute("SELECT COUNT(*) FROM sync_log WHERE source=? AND status='ok'",
@@ -480,6 +527,10 @@ def run_sync():
         _write_status()
         _sync_day(d, today, ['twse_inst', 'tpex_inst', 'twse_mkt', 'tpex_mkt'])
     _sync_foreign_hold()
+    try:
+        _sync_concepts()
+    except Exception as e:
+        print(f'[tw_board] concepts: {e}')
     with _db() as con:
         need_meta = con.execute("SELECT COUNT(*) FROM stocks WHERE industry=''").fetchone()[0]
     if need_meta or _status.get('meta_day') != str(today):
@@ -588,7 +639,11 @@ def _poll_realtime_once(prev):
     if failed == len(chunks) and prev.get('ts'):
         # 整輪都失敗：不更新時間戳，畫面上看得出報價停在上一次
         return prev
-    snap = dict(ts=_now().strftime('%Y-%m-%d %H:%M:%S'), date=_now().strftime('%Y%m%d'),
+    # 快照日期用證交所回報的成交日期（休市日 MIS 仍會回傳上一個交易日的報價，不能當成今天的即時資料）
+    from collections import Counter
+    trade_dates = Counter(q.get('date') for q in quotes.values() if q.get('date'))
+    snap_date = trade_dates.most_common(1)[0][0] if trade_dates else _now().strftime('%Y%m%d')
+    snap = dict(ts=_now().strftime('%Y-%m-%d %H:%M:%S'), date=snap_date,
                 quotes=quotes, failed_chunks=failed, total_chunks=len(chunks))
     with open(RT_FILE + '.tmp', 'w') as f:
         json.dump(snap, f)
@@ -993,53 +1048,93 @@ def optimize_ratio(rules, days_list=(3, 5, 10, 20), th_list=(0.5, 1, 2, 3), hori
                 days_list=list(days_list), th_list=list(th_list), results=results)
 
 
-def sector_ranking(days=1):
-    """類股漲跌幅：市值加權（同官方類股指數的算法）與等權平均、上漲家數、成交金額、領漲／領跌股。
+def _group_map(kind, meta):
+    """代碼 → [群組]。kind = industry（官方產業）/ sub（細產業）/ concept（概念股）/ group（集團股）。"""
+    if kind == 'industry':
+        ind = meta['industry'].dropna()
+        ind = ind[~ind.isin(['', 'ETF', '管理股票', '存託憑證'])]
+        return {c: [g] for c, g in ind.items()}
+    with _db() as con:
+        rows = con.execute('SELECT code, name FROM concepts WHERE label=?', (CONCEPT_LABELS[kind],)).fetchall()
+    m = {}
+    for c, g in rows:
+        m.setdefault(c, []).append(g)
+    return m
 
-    盤中用即時報價當作最新價；days=1 為今日漲跌，其餘為與 days 個交易日前收盤相比。
+
+def sector_ranking(days=1, kind='industry'):
+    """類股（產業 / 細產業 / 概念股 / 集團股）漲跌與資金流向。
+
+    - 漲跌：市值加權（同官方類股指數算法）與等權平均；盤中用即時報價。
+    - 資金流向：期間成交金額佔全市場比重，與前一段同長度期間相比的變化（百分點）；
+      今日則與前 5 日平均比重相比。比重上升 = 資金流入。
+    - 法人：期間三大法人（外資、投信）買賣超金額（億）＝ 每日買賣超張數 × 當日收盤。
     """
-    f = _load_frames(max(days, 1) + 5)
+    f = _load_frames(max(days, 5) * 2 + 10)
     if f is None or len(f['dates']) <= days:
         return None
-    close = f['close']
-    now = close.iloc[-1].copy()
+    meta = f['meta']
+    close, vol = f['close'], f['volume']
     snap = _rt_today()
     today = _now().strftime('%Y-%m-%d')
     live = bool(snap and f['dates'][-1] < today)
+    turn = close * vol / 1e5                                    # 每檔每日成交金額（億）
     if live:
         q = pd.DataFrame(snap['quotes']).T
-        px = pd.to_numeric(q['price'], errors='coerce').reindex(close.columns)
-        now = px.fillna(now)
-        base = close.iloc[-days] if days > 1 else close.iloc[-1]     # 盤中：最後一個收盤日 = 昨天
-        vol = pd.to_numeric(q['volume'], errors='coerce').reindex(close.columns).fillna(0)
-    else:
-        base = close.iloc[-1 - days]
-        vol = f['volume'].iloc[-1]
+        px = pd.to_numeric(q['price'], errors='coerce').reindex(close.columns).fillna(close.iloc[-1])
+        lv = pd.to_numeric(q['volume'], errors='coerce').reindex(close.columns).fillna(0)
+        turn = pd.concat([turn, (px * lv / 1e5).to_frame(today).T])
+        close = pd.concat([close, px.to_frame(today).T])
+    now = close.iloc[-1]
+    base = close.iloc[-1 - days]
     ret = (now / base - 1) * 100
-    meta = f['meta']
-    df = pd.DataFrame({'ret': ret, 'now': now, 'base': base, 'vol': vol, 'issued': f['issued']})
-    df = df[df.index.isin(meta.index) & ~df.index.str.startswith('00')].dropna(subset=['ret'])
-    df['industry'] = meta.loc[df.index, 'industry']
-    df = df[df['industry'].notna() & ~df['industry'].isin(['', 'ETF', '管理股票', '存託憑證'])]
-    df['cap_now'] = df['now'] * df['issued']
-    df['cap_base'] = df['base'] * df['issued']
-    df['turnover'] = df['now'] * df['vol'] / 100000         # 億元（張 × 1000 股 × 價 ÷ 1e8）
+    cur_turn = turn.iloc[-days:].sum()
+    if days == 1:
+        prev_turn = turn.iloc[-6:-1]                            # 前 5 日
+        prev_tot = prev_turn.sum(axis=1)
+        prev_share_of = lambda cols: float((prev_turn[cols].sum(axis=1) / prev_tot).mean() * 100)
+    else:
+        prev_turn = turn.iloc[-2 * days:-days].sum()
+        prev_tot = prev_turn.sum()
+        prev_share_of = lambda cols: float(prev_turn[cols].sum() / prev_tot * 100) if prev_tot else None
+    tot = cur_turn.sum()
+    # 法人買賣超（盤中今天尚未公布，用最近一個已公布的期間）
+    inst_n = min(days, len(f['dates']))
+    px_inst = f['close'].iloc[-inst_n:]
+    inst_amt = {k: (f[k].iloc[-inst_n:] * px_inst * 1000).sum() / 1e8 for k in ('foreign_net', 'trust_net', 'total_net')}
+    gmap = _group_map(kind, meta)
+    members = {}
+    for code, groups in gmap.items():
+        if code in close.columns and not code.startswith('00') and pd.notna(ret.get(code)):
+            for g in groups:
+                members.setdefault(g, []).append(code)
+    issued = f['issued']
     out = []
-    for ind, g in df.groupby('industry'):
-        cap = g.dropna(subset=['cap_now', 'cap_base'])
-        cw = (cap['cap_now'].sum() / cap['cap_base'].sum() - 1) * 100 if len(cap) and cap['cap_base'].sum() else None
-        g2 = g.sort_values('ret')
-        pick = lambda r: dict(code=r.Index, name=meta.loc[r.Index, 'name'], ret=round(float(r.ret), 2))
-        out.append(dict(industry=ind, count=int(len(g)), cap_ret=round(float(cw), 2) if cw is not None else None,
-                        avg_ret=round(float(g['ret'].mean()), 2), up=int((g['ret'] > 0).sum()),
-                        down=int((g['ret'] < 0).sum()), turnover=round(float(g['turnover'].sum()), 1),
-                        leaders=[pick(r) for r in g2.iloc[::-1].head(3).itertuples()],
-                        laggards=[pick(r) for r in g2.head(3).itertuples()]))
+    for g, cols in members.items():
+        if len(cols) < 2:
+            continue
+        r = ret[cols]
+        cap_n, cap_b = (now[cols] * issued[cols]).sum(), (base[cols] * issued[cols]).sum()
+        cw = (cap_n / cap_b - 1) * 100 if cap_b else None
+        share = float(cur_turn[cols].sum() / tot * 100) if tot else None
+        ps = prev_share_of(cols)
+        order = r.sort_values()
+        pick = lambda c: dict(code=c, name=meta.loc[c, 'name'] if c in meta.index else c, ret=round(float(r[c]), 2))
+        out.append(dict(name=g, count=len(cols), cap_ret=round(float(cw), 2) if cw is not None and np.isfinite(cw) else None,
+                        avg_ret=round(float(r.mean()), 2), up=int((r > 0).sum()), down=int((r < 0).sum()),
+                        turnover=round(float(cur_turn[cols].sum()), 1), share=round(share, 2) if share is not None else None,
+                        share_chg=round(share - ps, 2) if share is not None and ps is not None else None,
+                        foreign=round(float(inst_amt['foreign_net'][cols].sum()), 1),
+                        trust=round(float(inst_amt['trust_net'][cols].sum()), 1),
+                        inst=round(float(inst_amt['total_net'][cols].sum()), 1),
+                        leaders=[pick(c) for c in order.index[::-1][:3]], laggards=[pick(c) for c in order.index[:3]],
+                        codes=sorted(cols)))
     out.sort(key=lambda x: -(x['cap_ret'] if x['cap_ret'] is not None else x['avg_ret']))
-    return dict(days=days, live=live, ts=(snap or {}).get('ts') if live else None,
-                date=today if live else f['dates'][-1],
-                start=f['dates'][-days] if live and days > 1 else f['dates'][-1 - days] if not live else f['dates'][-1],
-                sectors=out)
+    dates = list(f['dates']) + ([today] if live else [])
+    return dict(days=days, kind=kind, live=live, ts=(snap or {}).get('ts') if live else None,
+                date=dates[-1], start=dates[-1 - days] if days > 1 else dates[-1],
+                inst_range=[f['dates'][-inst_n], f['dates'][-1]],
+                source='Yahoo 股市分類' if kind != 'industry' else '證交所／櫃買中心產業別', sectors=out)
 
 
 # ── LINE 推播（即時選股訊號）─────────────────────────────────────────
@@ -1751,7 +1846,10 @@ def api_sectors():
         days = 1
     if days not in (1, 5, 10, 20, 60):
         return jsonify(error='days 必須是 1 / 5 / 10 / 20 / 60'), 400
-    res = sector_ranking(days)
+    kind = request.args.get('kind', 'industry')
+    if kind not in ('industry', 'sub', 'concept', 'group'):
+        return jsonify(error='kind 必須是 industry / sub / concept / group'), 400
+    res = sector_ranking(days, kind)
     if res is None:
         return jsonify(error='歷史資料尚未載入完成'), 503
     return jsonify(res)
