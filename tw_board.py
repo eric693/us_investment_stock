@@ -536,6 +536,10 @@ def run_sync():
     if need_meta or _status.get('meta_day') != str(today):
         _sync_meta()
         _status['meta_day'] = str(today)
+    try:
+        get_scorecard()
+    except Exception as e:
+        print(f'[tw_board] scorecard: {e}')
     if _now().hour >= 18 or _now().weekday() >= 5:
         try:
             _backup_db()
@@ -1135,6 +1139,152 @@ def sector_ranking(days=1, kind='industry'):
                 date=dates[-1], start=dates[-1 - days] if days > 1 else dates[-1],
                 inst_range=[f['dates'][-inst_n], f['dates'][-1]],
                 source='Yahoo 股市分類' if kind != 'industry' else '證交所／櫃買中心產業別', sectors=out)
+
+
+def screen_cobuy(days=5, threshold=0.3, ma_n=20, min_volume=0, include_etf=False, asof=None):
+    """外資投信同買：最近 days 天外資、投信持股比例都增加至少 threshold%，且收盤站上 ma_n 日均線。"""
+    f = _load_frames(max(days, ma_n) + 10, asof)
+    if f is None or len(f['dates']) < max(days, ma_n) + 1:
+        return None
+    fr = _ratio_change(f, 'foreign_net', days).iloc[-1]
+    tr = _ratio_change(f, 'trust_net', days).iloc[-1]
+    ma = f['close'].rolling(ma_n).mean().iloc[-1]
+    c = f['close'].iloc[-1]
+    hit = (fr >= threshold) & (tr >= threshold) & (c > ma) & (f['volume'].iloc[-1] >= min_volume)
+    meta = f['meta']
+    out = []
+    for code in hit[hit.fillna(False)].index:
+        if not include_etf and code.startswith('00'):
+            continue
+        row = _row_base(code, f, meta)
+        row.update(foreign_chg=round(float(fr[code]), 2), trust_chg=round(float(tr[code]), 2),
+                   ma=round(float(ma[code]), 2), above_ma=round(float((c[code] / ma[code] - 1) * 100), 2),
+                   signals=[dict(label='外資投信同買', side='buy')])
+        out.append(row)
+    return dict(date=f['dates'][-1], start=f['dates'][-days], days=days, threshold=threshold, ma_n=ma_n,
+                results=out)
+
+
+# ── 策略成績單：每種選股條件在歷史資料上的表現 ─────────────────────────
+def _strategies(f, cols):
+    """名稱 → (方向, 每日是否符合的 DataFrame)。與盤後 / 即時選股的條件一致。"""
+    C, H, L, V = (f[k][cols] for k in ('close', 'high', 'low', 'volume'))
+    k, d = calc_kd_frame(H, L, C, 9)
+    ma = {m: C.rolling(m).mean() for m in (5, 10, 20)}
+    vol_up = V > V.shift(1)
+    mx = np.maximum(np.maximum(ma[5], ma[10]), ma[20])
+    mn = np.minimum(np.minimum(ma[5], ma[10]), ma[20])
+    sub = {c: f[c][cols] for c in ('trust_net', 'foreign_net', 'dealer_net', 'total_net')}
+    sub['issued'] = f['issued'][cols]
+    st = {
+        'kdj_buy': ('即時', 'KDJ 買進（K 金叉 D、K<20、量增）', 'buy', _cross_up(k, d) & (k < 20) & vol_up),
+        'kdj_sell': ('即時', 'KDJ 賣出（K 死叉 D、K>80、量增）', 'sell', _cross_dn(k, d) & (k > 80) & vol_up),
+        'ma_squeeze': ('即時', '均線糾結突破（1%）', 'buy',
+                       (ma[20] > ma[20].shift(1)) & ((mx / mn - 1) * 100 <= 1) & _cross_up(C, ma[5]) & vol_up),
+        'cobuy': ('盤後', '外資投信同買（5 日各 +0.3%）且站上 MA20', 'buy',
+                  (_ratio_change(sub, 'foreign_net', 5) >= 0.3) & (_ratio_change(sub, 'trust_net', 5) >= 0.3) & (C > ma[20])),
+    }
+    for inv, col, label in (('trust', 'trust_net', '投信'), ('foreign', 'foreign_net', '外資'), ('total', 'total_net', '法人')):
+        hold = sub[col].cumsum()
+        m5 = hold.rolling(5).mean()
+        st[f'{inv}_ma_buy'] = ('盤後', f'{label}持股金叉 5 日均線', 'buy', _cross_up(hold, m5) & (hold > m5))
+        st[f'{inv}_ma_sell'] = ('盤後', f'{label}持股死叉 5 日均線', 'sell', _cross_dn(hold, m5) & (hold < m5))
+        st[f'{inv}_r20'] = ('盤後', f'{label}持股比例 20 日 +1%', 'buy', _ratio_change(sub, col, 20) >= 1)
+        st[f'{inv}_r5'] = ('盤後', f'{label}持股比例 5 日 +2%', 'buy', _ratio_change(sub, col, 5) >= 2)
+    return st
+
+
+SCORECARD_FILE = os.path.join(BASE_DIR, '.tw_scorecard.json')
+
+
+def build_scorecard(min_avg_vol=500):
+    """所有策略在歷史資料上的表現（分前、後兩段），以及今日符合的股票。
+
+    - 只看 20 日均量 ≥ min_avg_vol 張的股票（避免冷門股）。
+    - 訊號只算條件剛成立的那一天；報酬為之後 5／10／20 個交易日，未還原除權息。
+    - 超額 = 減去同一天全市場平均報酬；勝過大盤 = 超額為正的比例（SELL 為負）。
+    """
+    import warnings
+    f = _load_frames(BACKFILL_DAYS + 10)
+    if f is None or len(f['dates']) < 120:
+        return None
+    cols = [c for c in f['close'].columns if not c.startswith('00')]
+    C, V = f['close'][cols], f['volume'][cols]
+    liq = (V.rolling(20).mean() >= min_avg_vol)
+    n = len(C)
+    warm, half = 60, (60 + n) // 2
+    periods = {'first': (warm, half), 'second': (half, n), 'all': (warm, n)}
+    meta = f['meta']
+    out = dict(start=f['dates'][warm], split=f['dates'][half], end=f['dates'][-1], days=n - warm,
+               min_avg_vol=min_avg_vol, horizons={}, today={}, baseline={})
+    strategies = _strategies(f, cols)
+    with warnings.catch_warnings():
+        warnings.simplefilter('ignore', RuntimeWarning)
+        for h in (5, 10, 20):
+            fwd = (C.shift(-h) / C - 1).values
+            fwd_liq = np.where(liq.values, fwd, np.nan)
+            ex = fwd - np.nanmean(fwd_liq, axis=1, keepdims=True)
+            out['baseline'][h] = {}
+            for p, (a, b) in periods.items():
+                v = fwd_liq[a:b]
+                v = v[~np.isnan(v)]                      # 沒有未來報酬的不算
+                out['baseline'][h][p] = dict(win=round(float((v > 0).mean() * 100), 1), avg=round(float(v.mean() * 100), 2))
+            rows = []
+            for sid, (kind, name, side, sig) in strategies.items():
+                sig = sig.fillna(False).astype(bool) & liq
+                trig = (sig & ~sig.shift(1).fillna(False).astype(bool)).values
+                sgn = 1 if side == 'buy' else -1
+                stats = {}
+                for p, (a, b) in periods.items():
+                    m = trig.copy()
+                    m[:a] = False
+                    m[b:] = False
+                    r, x = fwd[m], ex[m]
+                    ok = ~np.isnan(r)
+                    r, x = r[ok], x[ok]
+                    stats[p] = None if not len(r) else dict(
+                        n=int(len(r)), win=round(float((r * sgn > 0).mean() * 100), 1),
+                        avg=round(float(r.mean() * 100), 2), excess=round(float(x.mean() * 100), 2),
+                        beat=round(float((x * sgn > 0).mean() * 100), 1))
+                good = lambda s: s is not None and (s['excess'] > 0 if side == 'buy' else s['excess'] < 0)
+                stable = good(stats['first']) and good(stats['second'])
+                worst = min((s['excess'] * sgn for s in (stats['first'], stats['second']) if s), default=-99)
+                rows.append(dict(id=sid, kind=kind, name=name, side=side, stats=stats, stable=stable,
+                                 score=round(worst, 2)))
+            rows.sort(key=lambda r: -r['score'])
+            out['horizons'][h] = rows
+        # 今日符合（條件目前成立，不限剛成立）
+        last_liq = liq.iloc[-1]
+        for sid, (kind, name, side, sig) in strategies.items():
+            today = sig.iloc[-1].fillna(False).astype(bool) & last_liq
+            codes = list(today[today].index)
+            codes.sort(key=lambda c: -float(V[c].iloc[-1]))
+            out['today'][sid] = dict(count=len(codes), stocks=[dict(code=c, name=meta.loc[c, 'name'] if c in meta.index else c,
+                                      close=round(float(C[c].iloc[-1]), 2),
+                                      chg_pct=round(float(f['chg'][c].iloc[-1] / (C[c].iloc[-1] - f['chg'][c].iloc[-1]) * 100), 2)
+                                      if pd.notna(f['chg'][c].iloc[-1]) and C[c].iloc[-1] != f['chg'][c].iloc[-1] else None,
+                                      volume=round(float(V[c].iloc[-1])))
+                                 for c in codes[:60]])
+    out['version'] = list(_data_version())
+    return out
+
+
+def get_scorecard():
+    """讀快取（資料版本相同就沿用），沒有或過期才重算並寫回檔案供其他 worker 共用。"""
+    ver = list(_data_version())
+    try:
+        with open(SCORECARD_FILE, encoding='utf-8') as fh:
+            cached = json.load(fh)
+        if cached.get('version') == ver:
+            return cached
+    except (OSError, ValueError):
+        pass
+    res = build_scorecard()
+    if res:
+        with open(SCORECARD_FILE + '.tmp', 'w', encoding='utf-8') as fh:
+            json.dump(res, fh, ensure_ascii=False)
+        os.replace(SCORECARD_FILE + '.tmp', SCORECARD_FILE)
+    return res
 
 
 # ── LINE 推播（即時選股訊號）─────────────────────────────────────────
@@ -1852,6 +2002,30 @@ def api_sectors():
     res = sector_ranking(days, kind)
     if res is None:
         return jsonify(error='歷史資料尚未載入完成'), 503
+    return jsonify(res)
+
+
+@bp.route('/api/tw/board/screen/cobuy', methods=['POST'])
+def api_screen_cobuy():
+    b = request.get_json(silent=True) or {}
+    try:
+        res = screen_cobuy(days=max(1, min(60, int(b.get('days', 5)))),
+                           threshold=max(0.01, min(20, float(b.get('threshold', 0.3)))),
+                           ma_n=max(2, min(120, int(b.get('ma_n', 20)))),
+                           min_volume=float(b.get('min_volume', 0) or 0),
+                           include_etf=bool(b.get('include_etf')), asof=b.get('asof') or None)
+    except (TypeError, ValueError) as e:
+        return jsonify(error=f'參數錯誤：{e}'), 400
+    if res is None:
+        return jsonify(error='歷史資料尚未載入完成'), 503
+    return jsonify(res)
+
+
+@bp.route('/api/tw/board/scorecard')
+def api_scorecard():
+    res = get_scorecard()
+    if res is None:
+        return jsonify(error='歷史資料不足（至少需要 120 個交易日）'), 503
     return jsonify(res)
 
 

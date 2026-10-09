@@ -180,7 +180,9 @@ table.q tbody tr:hover td:first-child { box-shadow: inset 3px 0 0 var(--accent);
 .gchip .n { font-family: 'JetBrains Mono', monospace; font-size: .7rem; color: var(--text-dim); }
 .gact { height: 34px; padding: 0 12px; border-radius: 999px; border: 1px dashed var(--card-bd2); background: none; color: var(--text-dim); font-size: .8rem; cursor: pointer; }
 .gact:hover { color: var(--text); border-color: var(--text-dim); }
-#afterPanel[data-mode="ma"] .ratio-only, #afterPanel[data-mode="ratio"] .ma-only { display: none !important; }
+#afterPanel[data-mode="ma"] .ratio-only, #afterPanel[data-mode="ratio"] .ma-only,
+#afterPanel:not([data-mode="cobuy"]) .cobuy-only, #afterPanel[data-mode="cobuy"] .not-cobuy,
+#afterPanel[data-mode="cobuy"] .ma-only, #afterPanel[data-mode="cobuy"] .ratio-only { display: none !important; }
 .opt-rule { margin-bottom: 18px; }
 .opt-rule h5 { font-size: .86rem; margin-bottom: 6px; display: flex; gap: 8px; align-items: center; }
 .apply-btn { height: 26px; padding: 0 10px; border-radius: 8px; border: 1px solid var(--card-bd2); background: var(--surface-1); color: var(--text); font-size: .74rem; cursor: pointer; }
@@ -213,6 +215,22 @@ table.q tbody tr:hover td:first-child { box-shadow: inset 3px 0 0 var(--accent);
 .gf-chip { display: inline-flex; align-items: center; gap: 8px; height: 34px; padding: 0 12px; border-radius: 999px; background: rgba(109,93,252,.12); color: var(--accent); font-size: .82rem; font-weight: 600; }
 .gf-chip button { border: none; background: none; color: inherit; cursor: pointer; font-size: .9rem; }
 @media (max-width: 1100px) { .sec-row { grid-template-columns: 28px 1fr 1.2fr 90px; } .sec-row > :nth-child(n+5) { display: none; } .sec-row > .keep { display: block; } }
+/* 策略成績單 */
+.sc-list { display: flex; flex-direction: column; gap: 8px; }
+.sc-card { border: 1px solid var(--card-bd); border-radius: 14px; background: var(--surface-1); overflow: hidden; }
+.sc-top { display: grid; grid-template-columns: 30px minmax(240px, 2fr) repeat(4, minmax(110px, 1fr)) 110px; gap: 12px; align-items: center; padding: 12px 14px; cursor: pointer; }
+.sc-top:hover { background: var(--overlay-1); }
+.sc-head { display: grid; grid-template-columns: 30px minmax(240px, 2fr) repeat(4, minmax(110px, 1fr)) 110px; gap: 12px; padding: 0 14px 4px; font-size: .7rem; color: var(--text-dim); font-weight: 600; }
+.sc-name { font-weight: 700; font-size: .9rem; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.sc-kind { font-size: .66rem; font-weight: 700; padding: 1px 7px; border-radius: 6px; background: var(--overlay-2); color: var(--text-mid); }
+.sc-stable { font-size: .68rem; font-weight: 700; padding: 2px 8px; border-radius: 999px; background: rgba(255,77,106,.14); color: var(--red); }
+.sc-weak { font-size: .68rem; font-weight: 700; padding: 2px 8px; border-radius: 999px; background: var(--overlay-2); color: var(--text-dim); }
+.sc-cell { font-family: 'JetBrains Mono', monospace; font-size: .8rem; line-height: 1.5; }
+.sc-cell small { display: block; font-size: .68rem; color: var(--text-dim); font-family: 'Inter', 'Noto Sans TC', sans-serif; }
+.sc-today { font-size: .82rem; font-weight: 700; text-align: right; }
+.sc-detail { display: none; padding: 4px 14px 14px; border-top: 1px dashed var(--line); }
+.sc-card.open .sc-detail { display: block; }
+@media (max-width: 1100px) { .sc-top, .sc-head { grid-template-columns: 24px 1fr 1fr 1fr 80px; } .sc-top > :nth-child(5), .sc-top > :nth-child(6), .sc-head > :nth-child(5), .sc-head > :nth-child(6) { display: none; } }
 /* 回測 */
 .bt { margin-top: 16px; border-top: 1px solid var(--line); padding-top: 14px; }
 .bt-head { display: flex; justify-content: space-between; align-items: baseline; flex-wrap: wrap; gap: 8px; margin-bottom: 10px; font-size: .8rem; color: var(--text-dim); }
@@ -282,6 +300,7 @@ table.q tbody tr:hover td:first-child { box-shadow: inset 3px 0 0 var(--accent);
     <div class="tabs">
       <button class="tab" data-tab="all"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3 3v18h18"/><path d="M7 14l4-4 3 3 5-6"/></svg>全部行情<span class="cnt" id="cntAll"></span></button>
       <button class="tab" data-tab="watch"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M12 3l2.8 5.7 6.2.9-4.5 4.4 1 6.2L12 17.3 6.5 20.2l1-6.2L3 9.6l6.2-.9z"/></svg>自選股<span class="cnt" id="cntWatch"></span></button>
+      <button class="tab" data-tab="score"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 21h8M12 17v4M7 4h10v5a5 5 0 0 1-10 0z"/><path d="M17 5h3v2a3 3 0 0 1-3 3M7 5H4v2a3 3 0 0 0 3 3"/></svg>策略成績單</button>
       <button class="tab" data-tab="sector"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="8" height="8" rx="1.5"/><rect x="13" y="3" width="8" height="5" rx="1.5"/><rect x="13" y="10" width="8" height="11" rx="1.5"/><rect x="3" y="13" width="8" height="8" rx="1.5"/></svg>類股排行</button>
       <button class="tab" data-tab="rank"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 20V10M12 20V4M18 20v-7"/></svg>法人排行</button>
       <button class="tab" data-tab="after"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg>盤後選股<span class="cnt" id="cntAfter"></span></button>
@@ -301,6 +320,17 @@ table.q tbody tr:hover td:first-child { box-shadow: inset 3px 0 0 var(--accent);
   <div class="groups hidden" id="groupBar"></div>
 
   <!-- 法人買賣超排行 -->
+  <!-- 策略成績單 -->
+  <section class="panel hidden" id="scorePanel">
+    <div class="panel-head"><h3>策略成績單 <button class="help-btn" data-help="board.score"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><circle cx="12" cy="12" r="9.5"/><path d="M9.3 9.2a2.8 2.8 0 0 1 5.4 1c0 1.9-2.7 2.4-2.7 4"/><path d="M12 17.3h.01"/></svg>說明</button></h3><span id="scInfo"></span></div>
+    <div class="params">
+      <div class="param">看之後 <span class="seg" id="scH"><button data-v="5">5 日</button><button data-v="10" class="on">10 日</button><button data-v="20">20 日</button></span></div>
+      <div class="param">顯示 <span class="seg" id="scShow"><button data-v="all" class="on">全部策略</button><button data-v="stable">只看穩定</button></span></div>
+    </div>
+    <div id="scBase" class="warn-box" style="margin-top:12px"></div>
+    <div class="sc-list" id="scList"></div>
+  </section>
+
   <!-- 類股漲跌幅排行 -->
   <section class="panel hidden" id="sectorPanel">
     <div class="panel-head"><h3>類股 / 概念股排行 <button class="help-btn" data-help="board.sector"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><circle cx="12" cy="12" r="9.5"/><path d="M9.3 9.2a2.8 2.8 0 0 1 5.4 1c0 1.9-2.7 2.4-2.7 4"/><path d="M12 17.3h.01"/></svg>說明</button></h3><span id="secInfo"></span></div>
@@ -329,8 +359,13 @@ table.q tbody tr:hover td:first-child { box-shadow: inset 3px 0 0 var(--accent);
 
   <!-- 盤後選股 -->
   <section class="panel hidden" id="afterPanel">
-    <div class="panel-head"><h3><span class="seg" id="afterMode" style="font-size:.9rem"><button data-v="ma">持股均線交叉</button><button data-v="ratio">持股比例變化</button></span> <button class="help-btn" data-help="board.after"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><circle cx="12" cy="12" r="9.5"/><path d="M9.3 9.2a2.8 2.8 0 0 1 5.4 1c0 1.9-2.7 2.4-2.7 4"/><path d="M12 17.3h.01"/></svg>說明</button></h3><span>法人買賣超於盤後公布・多個條件之間為「或」</span></div>
-    <div class="rules" id="afterRules"></div>
+    <div class="panel-head"><h3><span class="seg" id="afterMode" style="font-size:.9rem"><button data-v="ma">持股均線交叉</button><button data-v="ratio">持股比例變化</button><button data-v="cobuy">外資投信同買</button></span> <button class="help-btn" data-help="board.after"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><circle cx="12" cy="12" r="9.5"/><path d="M9.3 9.2a2.8 2.8 0 0 1 5.4 1c0 1.9-2.7 2.4-2.7 4"/><path d="M12 17.3h.01"/></svg>說明</button></h3><span>法人買賣超於盤後公布・多個條件之間為「或」</span></div>
+    <div class="rules not-cobuy" id="afterRules"></div>
+    <div class="params cobuy-only">
+      <div class="param">最近 <input class="num-in" id="cbDays" type="number" min="1" max="60" value="5"> 天</div>
+      <div class="param">外資、投信持股比例各增加 ≥ <input class="num-in" id="cbTh" type="number" min="0.05" max="20" step="0.05" value="0.3"> %</div>
+      <div class="param">且收盤站上 <input class="num-in" id="cbMa" type="number" min="2" max="120" value="20"> 日均線</div>
+    </div>
     <div class="params ratio-only">
       <div class="param">最近
         <span class="seg" id="rDaysSeg"><button data-v="5">5</button><button data-v="10">10</button><button data-v="20">20</button></span>
@@ -361,6 +396,7 @@ table.q tbody tr:hover td:first-child { box-shadow: inset 3px 0 0 var(--accent);
     <div class="bt hidden" id="optBox"></div>
     <div class="param ma-only" style="margin-top:10px">回測比較的持股均線 <input class="txt-in" id="btMa" value="3,5,10" style="flex:0;min-width:110px" title="用逗號分隔，最多 4 個"></div>
     <div class="bt hidden ma-only" id="btBox"></div>
+    <div class="hint cobuy-only">外資與投信在同一段期間都明顯買進（持股比例各增加 X% 以上），且股價站上均線。依過去兩年回測，這是兩段期間都穩定贏大盤的條件之一（詳見「策略成績單」）。</div>
     <div class="hint ratio-only">持股比例變化 = 最近 N 天的法人買賣超張數合計 ÷ 發行張數（百分點）。例如發行 10 萬張、5 天買超 2,000 張 = +2%。這個算法與「目前實際持股多少」無關，投信／自營商也是精確值。</div>
     <div class="hint ma-only">金叉：法人持股線由下往上穿越其 N 日均線；死叉：由上往下跌破。結果表中的 K、D 僅供參考，不列入條件。投信／自營商沒有公開的逐日持股，持股線以「累計買賣超(張)」表示（交叉判斷不受影響）；外資以證交所／櫃買中心公布的實際持股張數為基準。</div>
   </section>
@@ -429,6 +465,7 @@ const BASE_COLS = [
   ['open','開盤','hide-sm'], ['high','最高','hide-sm'], ['low','最低','hide-sm'], ['prev','昨收','hide-sm'],
 ];
 const SCREEN_COLS = [['signals','訊號','l'], ['k','K'], ['d','D']];
+const COBUY_COLS = [['signals','訊號','l'], ['foreign_chg','外資比例'], ['trust_chg','投信比例'], ['above_ma','距均線']];
 const RT_COLS = [['signals','訊號','l'], ['k','K'], ['d','D'], ['ma_spread','均線差','hide-sm']];
 const RATIO_COLS = [['signals','訊號','l'], ['ratio_chg','比例變化'], ['foreign_ratio','外資持股%']];
 const RANK_COLS = [['rank','#','l'], ['star','','l'], ['code','代碼','l'], ['name','名稱','l'], ['industry','產業','l hide-sm'],
@@ -601,12 +638,14 @@ function renderInner() {
   $('#etfWrap').classList.toggle('hidden', st.tab !== 'all');
   $('#rankPanel').classList.toggle('hidden', st.tab !== 'rank');
   $('#sectorPanel').classList.toggle('hidden', st.tab !== 'sector');
-  document.querySelector('.table-card').classList.toggle('hidden', st.tab === 'sector');
-  $('.filters').classList.toggle('hidden', st.tab === 'sector');
+  $('#scorePanel').classList.toggle('hidden', st.tab !== 'score');
+  document.querySelector('.table-card').classList.toggle('hidden', st.tab === 'sector' || st.tab === 'score');
+  $('.filters').classList.toggle('hidden', st.tab === 'sector' || st.tab === 'score');
   if (st.tab === 'sector') { if (!SECTORS) loadSectors(); return; }
+  if (st.tab === 'score') { if (!SCORE) loadScore(); return; }
   if (st.tab === 'rank' && !RANK) loadRank();
   const screen = st.tab === 'after' || st.tab === 'rt';
-  const cols = st.tab === 'rank' ? RANK_COLS : screen ? BASE_COLS.slice(0, 9).concat(st.tab === 'after' && AFTER?.mode === 'ratio' ? RATIO_COLS : st.tab === 'rt' ? RT_COLS : SCREEN_COLS) : BASE_COLS;
+  const cols = st.tab === 'rank' ? RANK_COLS : screen ? BASE_COLS.slice(0, 9).concat(st.tab === 'after' && AFTER?.mode === 'ratio' ? RATIO_COLS : st.tab === 'after' && AFTER?.mode === 'cobuy' ? COBUY_COLS : st.tab === 'rt' ? RT_COLS : SCREEN_COLS) : BASE_COLS;
   const rows = currentRows();
   const maxVol = Math.max(1, ...rows.slice(0, 300).map(r => r.volume || 0));
   $('#tbl thead').innerHTML = '<tr>' + cols.map(([k, t, c='']) =>
@@ -619,7 +658,9 @@ function renderInner() {
   $('#tbl tbody').innerHTML = rows.length ? rowsHtml(0, shown, maxVol) : `<tr><td colspan="${cols.length}" class="empty">${emptyText()}</td></tr>`;
   let meta = `<b class="num" style="color:var(--text)">${rows.length}</b> 檔`;
   if (st.tab === 'rank' && RANK) meta += `・${RANK.label}${RANK.side === 'buy' ? '買超' : '賣超'}・${RANK.days === 1 ? RANK.date : RANK.start + ' ～ ' + RANK.date}`;
-  if (st.tab === 'after' && AFTER) meta += AFTER.mode === 'ratio'
+  if (st.tab === 'after' && AFTER) meta += AFTER.mode === 'cobuy'
+    ? `・${AFTER.start} ～ ${AFTER.date}（${AFTER.days} 天）外資、投信各 ≥ ${AFTER.threshold}% 且站上 MA${AFTER.ma_n}`
+    : AFTER.mode === 'ratio'
     ? `・${AFTER.start} ～ ${AFTER.date}（${AFTER.days} 天）持股比例變化 ≥ ${AFTER.threshold}%`
     : `・資料日 <span class="num">${AFTER.date}</span>（${AFTER.days} 個交易日）`;
   if (st.tab === 'rt' && RT) meta += RT.source === 'realtime' ? `・即時 <span class="num">${RT.ts?.slice(11,19)||''}</span>` : `・收盤資料 <span class="num">${RT.date}</span>`;
@@ -652,6 +693,7 @@ function rowsHtml(from, to, maxVol) {
       case 'signals': return `<td class="l">${(v||[]).map(s => `<span class="tag ${s.side}">${esc(s.label.split('：')[0])}${st.tab==='after'?(s.side==='buy'?' BUY':' SELL'):''}</span>`).join('')}</td>`;
       case 'k': case 'd': return `<td>${fmt(v,1)}</td>`;
       case 'ma_spread': return `<td class="${c}" style="color:var(--text-mid)">${v == null ? '-' : fmt(v) + '%'}</td>`;
+      case 'foreign_chg': case 'trust_chg': case 'above_ma': return `<td class="${cls(v)}">${v == null ? '-' : (v > 0 ? '+' : '') + fmt(v) + '%'}</td>`;
       case 'ratio_chg': return `<td class="${cls(v)}" style="font-weight:700">${v == null ? '-' : (v > 0 ? '+' : '') + fmt(v) + '%'}</td>`;
       case 'foreign_ratio': return `<td style="color:var(--text-mid)">${v == null ? '-' : fmt(v) + '%'}</td>`;
       case 'rank': return `<td class="l"><b class="num" style="color:${v <= 3 ? 'var(--accent)' : 'var(--text-dim)'}">${v}</b></td>`;
@@ -723,7 +765,7 @@ $('#tbl').addEventListener('click', async e => {
     return;
   }
   const go = e.target.closest('[data-go]');
-  if (go) openChart(go.dataset.go, currentRows(), {all: st.gf ? st.gf.name : '全部行情', watch: curGroup().name, rank: '法人排行', after:'盤後選股', rt:'即時選股'}[st.tab]);
+  if (go) openChart(go.dataset.go, currentRows(), {all: st.gf ? st.gf.name : '全部行情', score: '策略成績單', watch: curGroup().name, rank: '法人排行', after:'盤後選股', rt:'即時選股'}[st.tab]);
 });
 document.querySelector('.pulse').addEventListener('click', e => {
   const m = e.target.closest('[data-go]');
@@ -791,7 +833,11 @@ $('#runAfter').onclick = async () => {
   ss.set('twAfterRules', rules.map(r => r.investor + ':' + r.side));
   const btn = $('#runAfter'); btn.disabled = true;
   try {
-    AFTER = afterMode === 'ratio'
+    AFTER = afterMode === 'cobuy'
+      ? await api('/api/tw/board/screen/cobuy', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({
+          days: +$('#cbDays').value, threshold: +$('#cbTh').value, ma_n: +$('#cbMa').value,
+          min_volume: +$('#minVol').value, include_etf: $('#afterEtf').checked, asof: $('#asof').value || null})})
+      : afterMode === 'ratio'
       ? await api('/api/tw/board/screen/ratio', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({
           rules, days: +$('#rDays').value, threshold: +$('#rTh').value,
           min_volume: +$('#minVol').value, include_etf: $('#afterEtf').checked, asof: $('#asof').value || null})})
@@ -800,7 +846,8 @@ $('#runAfter').onclick = async () => {
           min_volume: +$('#minVol').value, include_etf: $('#afterEtf').checked, asof: $('#asof').value || null})});
     AFTER.mode = afterMode;
     $('#cntAfter').textContent = AFTER.results.length;
-    if (afterMode === 'ratio') { st.sort = 'ratio_chg'; st.dir = rules.every(r => r.side === 'sell') ? 1 : -1; }
+    if (afterMode === 'cobuy') { st.sort = 'trust_chg'; st.dir = -1; }
+    else if (afterMode === 'ratio') { st.sort = 'ratio_chg'; st.dir = rules.every(r => r.side === 'sell') ? 1 : -1; }
     else { st.sort = 'volume'; st.dir = -1; }
     render();
   } catch (e) { alert(e.message); }
@@ -877,6 +924,55 @@ function renderBacktest(r) {
   <div class="hint">勝率：BUY 為之後上漲的比例，SELL 為之後下跌的比例。紫色底 = 該條件下平均報酬表現最好的均線天數。訊號比全市場平均好越多，條件越有參考價值。</div>`;
   $('#btBox').classList.remove('hidden');
 }
+
+// ── 策略成績單 ──
+let SCORE = null;
+const sc = Object.assign({h: 10, show: 'all'}, ss.get('twScore', {}));
+async function loadScore() {
+  $('#scList').innerHTML = '<div class="empty">計算中…（第一次約 20 秒，之後每天收盤更新）</div>';
+  try { SCORE = await api('/api/tw/board/scorecard'); } catch (e) { $('#scList').innerHTML = `<div class="empty">${esc(e.message)}</div>`; return; }
+  renderScore();
+}
+function renderScore() {
+  if (!SCORE) return;
+  ss.set('twScore', sc);
+  document.querySelectorAll('#scH button').forEach(b => b.classList.toggle('on', +b.dataset.v === sc.h));
+  document.querySelectorAll('#scShow button').forEach(b => b.classList.toggle('on', b.dataset.v === sc.show));
+  const rows = SCORE.horizons[sc.h].filter(r => sc.show === 'all' || r.stable), b = SCORE.baseline[sc.h];
+  const pct = v => v == null ? '-' : `<span class="${v > 0 ? 'up' : v < 0 ? 'dn' : ''}">${v > 0 ? '+' : ''}${v.toFixed(2)}%</span>`;
+  $('#scInfo').innerHTML = `資料 <span class="num">${SCORE.start} ～ ${SCORE.end}</span>（${SCORE.days} 個交易日）`;
+  $('#scBase').innerHTML = `回測對象：20 日均量 ≥ ${SCORE.min_avg_vol} 張的股票，訊號只算條件剛成立那天，看之後 ${sc.h} 個交易日。期間分成<b>前段</b>（${SCORE.start} ～ ${SCORE.split}）與<b>後段</b>（${SCORE.split} ～ ${SCORE.end}）。
+    全市場平均：前段上漲機率 ${b.first.win}%、報酬 ${pct(b.first.avg)}；後段 ${b.second.win}%、${pct(b.second.avg)}。
+    <b>「穩定」</b> = 前後兩段都贏大盤（賣出訊號則是兩段都輸大盤）。排序依兩段中表現較差那一段的超額報酬，越上面越穩定。`;
+  const cell = (s, side) => s ? `<div class="sc-cell">${pct(s.excess)}<small>勝率 ${s.win}%・${s.n} 次</small></div>` : '<div class="sc-cell">-</div>';
+  $('#scList').innerHTML = `<div class="sc-head"><span>#</span><span>策略</span><span>前段 超額報酬</span><span>後段 超額報酬</span><span>前段 平均報酬</span><span>後段 平均報酬</span><span style="text-align:right">今日符合</span></div>` +
+    rows.map((r, i) => {
+      const t = SCORE.today[r.id];
+      return `<div class="sc-card" data-id="${r.id}">
+      <div class="sc-top">
+        <span class="num" style="color:${i < 3 ? 'var(--accent)' : 'var(--text-dim)'};font-weight:700">${i + 1}</span>
+        <span class="sc-name"><span class="side ${r.side}">${r.side === 'buy' ? 'BUY' : 'SELL'}</span>${esc(r.name)}<span class="sc-kind">${r.kind}選股</span>${r.stable ? '<span class="sc-stable">穩定</span>' : '<span class="sc-weak">不穩定</span>'}</span>
+        ${cell(r.stats.first, r.side)}${cell(r.stats.second, r.side)}
+        <div class="sc-cell">${pct(r.stats.first?.avg)}<small>贏大盤 ${r.stats.first?.beat ?? '-'}%</small></div>
+        <div class="sc-cell">${pct(r.stats.second?.avg)}<small>贏大盤 ${r.stats.second?.beat ?? '-'}%</small></div>
+        <span class="sc-today">${t.count} 檔 ▾</span>
+      </div>
+      <div class="sc-detail"><div class="chips" style="margin-top:8px">${t.stocks.length ? t.stocks.map(x => `<span class="chip-s" data-go="${esc(x.code)}">${esc(x.code)} ${esc(x.name)}<b class="${cls(x.chg_pct)}">${x.chg_pct == null ? '' : (x.chg_pct > 0 ? '+' : '') + fmt(x.chg_pct) + '%'}</b></span>`).join('') : '<span class="hint">今天沒有符合的股票</span>'}</div>
+        ${t.count > t.stocks.length ? `<div class="hint">依成交量列出前 ${t.stocks.length} 檔（共 ${t.count} 檔）</div>` : ''}</div>
+    </div>`;
+    }).join('');
+}
+$('#scH').onclick = e => { const b = e.target.closest('button'); if (b) { sc.h = +b.dataset.v; renderScore(); } };
+$('#scShow').onclick = e => { const b = e.target.closest('button'); if (b) { sc.show = b.dataset.v; renderScore(); } };
+$('#scList').addEventListener('click', e => {
+  const card = e.target.closest('.sc-card'); if (!card) return;
+  const chip = e.target.closest('[data-go]');
+  if (chip) {
+    const r = SCORE.horizons[sc.h].find(x => x.id === card.dataset.id);
+    return openChart(chip.dataset.go, SCORE.today[card.dataset.id].stocks, r.name);
+  }
+  if (e.target.closest('.sc-top')) card.classList.toggle('open');
+});
 
 // ── 類股 / 概念股排行 ──
 let SECTORS = null;

@@ -314,3 +314,41 @@ def test_sector_ranking_concepts_and_flow(board):
     assert by['AI']['share'] == round(sum(turn[c] for c in codes[:4]) / total * 100, 2)
     inst_amt = sum(sum(inst(board, c, 'total_net')[i] * series(board, c, 'close')[i] for i in range(-5, 0)) * 1000 / 1e8 for c in codes[:4])
     assert by['AI']['inst'] == round(inst_amt, 1)
+
+
+def test_cobuy_screen_matches_reference(board):
+    dates, codes = make_market(board, n_days=40, n_codes=60, seed=13)
+    _add_issued(board, codes, lots=20000)
+    res = board.screen_cobuy(days=5, threshold=0.2, ma_n=20)
+    want = set()
+    for c in codes:
+        f = sum(inst(board, c, 'foreign_net')[-5:]) / 20000 * 100
+        t = sum(inst(board, c, 'trust_net')[-5:]) / 20000 * 100
+        cl = series(board, c, 'close')
+        if f >= 0.2 and t >= 0.2 and cl[-1] > sum(cl[-20:]) / 20:
+            want.add(c)
+    assert {r['code'] for r in res['results']} == want and want
+
+
+def test_scorecard_counts_and_stability(board):
+    dates, codes = make_market(board, n_days=160, n_codes=30, seed=17)
+    _add_issued(board, codes, lots=20000)
+    sc = board.build_scorecard(min_avg_vol=0)
+    rows = {r['id']: r for r in sc['horizons'][10]}
+    assert set(rows) >= {'kdj_buy', 'ma_squeeze', 'cobuy', 'trust_r5', 'foreign_ma_buy'}
+    # 參考：投信持股金叉 5 日均線，只算剛成立的那天
+    n = len(dates)
+    warm, half = 60, (60 + n) // 2
+    want = 0
+    for c in codes:
+        hold = list(np.cumsum(inst(board, c, 'trust_net')))
+        m5 = [None if i < 4 else sum(hold[i - 4:i + 1]) / 5 for i in range(n)]
+        sig = [i > 0 and m5[i] is not None and m5[i - 1] is not None and hold[i - 1] <= m5[i - 1] and hold[i] > m5[i]
+               for i in range(n)]
+        want += sum(1 for i in range(warm, half) if sig[i] and not sig[i - 1])
+    assert rows['trust_ma_buy']['stats']['first']['n'] == want
+    for r in rows.values():                           # 穩定 = 兩段都贏大盤（賣出則兩段都輸）
+        f, s = r['stats']['first'], r['stats']['second']
+        ok = lambda x: x is not None and (x['excess'] > 0 if r['side'] == 'buy' else x['excess'] < 0)
+        assert r['stable'] == (ok(f) and ok(s))
+    assert all('count' in v and 'stocks' in v for v in sc['today'].values())
