@@ -1722,6 +1722,69 @@ def _daily_bars(code, market, long=False):
     return bars, source
 
 
+_live_cache = {}
+
+
+def _live_quote(code, market):
+    """盤中單檔即時報價：優先用背景輪詢的快照，沒有就直接問證交所 MIS（15 秒快取）。"""
+    snap = _rt_today()
+    q = (snap or {}).get('quotes', {}).get(code)
+    if q and q.get('price'):
+        return q
+    if not _market_open():
+        return None
+    hit = _live_cache.get(code)
+    if hit and time.time() - hit[0] < 15:
+        return hit[1]
+    q = None
+    try:
+        key = f"{'tse' if market == 'TSE' else 'otc'}_{code}.tw"
+        m = (requests.get('https://mis.twse.com.tw/stock/api/getStockInfo.jsp?json=1&delay=0&ex_ch=' + key,
+                          headers=HDRS, timeout=6).json().get('msgArray') or [None])[0]
+        if m and m.get('d') == _now().strftime('%Y%m%d'):
+            z = _num(m.get('z')) or _num((m.get('b') or '').split('_')[0]) or _num(m.get('y'))
+            q = dict(price=z, prev=_num(m.get('y')), open=_num(m.get('o')), high=_num(m.get('h')),
+                     low=_num(m.get('l')), volume=_num(m.get('v')))
+    except Exception as e:
+        print(f'[tw_board] live {code}: {e}')
+    _live_cache[code] = (time.time(), q)
+    return q
+
+
+_PERIOD_DAYS = {'1d': 1, '2d': 2, '5d': 5, '1mo': 31, '3mo': 92, '6mo': 183, '1y': 366, '2y': 731,
+                '5y': 1827, '10y': 3653}
+
+
+def history_df(ticker, period='1y'):
+    """台股日線（與 yfinance history() 相同格式：Open/High/Low/Close/Volume[股]、台北時區索引）。
+
+    以證交所／櫃買中心官方資料為主，更早的歷史由 yfinance 補，盤中接上今天的即時 K 棒。
+    不是台股代碼（.TW / .TWO）時回傳 None，由呼叫端改用 yfinance。
+    """
+    m = re.match(r'^(\d{4,6}[A-Z]?)\.(TW|TWO)$', str(ticker).upper())
+    if not m:
+        return None
+    code, market = m.group(1), 'TSE' if m.group(2) == 'TW' else 'OTC'
+    days = _PERIOD_DAYS.get(period)
+    bars, _ = _daily_bars(code, market, long=days is None or days > 1830)
+    today = _now().strftime('%Y-%m-%d')
+    if (not bars or bars[-1]['day'] < today) and _market_open():
+        q = _live_quote(code, market)
+        if q and q.get('price'):
+            o, h, l, c = (q.get(k) or q['price'] for k in ('open', 'high', 'low', 'price'))
+            bars = bars + [dict(day=today, open=o, high=max(h, c), low=min(l, c), close=c, volume=q.get('volume') or 0)]
+    if not bars:
+        return None
+    df = pd.DataFrame(bars)
+    df.index = pd.DatetimeIndex(pd.to_datetime(df['day'])).tz_localize('Asia/Taipei')
+    df = df.rename(columns={'open': 'Open', 'high': 'High', 'low': 'Low', 'close': 'Close', 'volume': 'Volume'})
+    df = df[['Open', 'High', 'Low', 'Close', 'Volume']].astype(float)
+    df['Volume'] = df['Volume'] * 1000                       # 張 → 股（與 yfinance 相同單位）
+    if days:
+        df = df[df.index >= (_now().normalize() - pd.Timedelta(days=days))]
+    return df
+
+
 def _db_bars(code):
     with _db() as con:
         rows = con.execute('SELECT date, open, high, low, close, volume FROM daily WHERE code=? '

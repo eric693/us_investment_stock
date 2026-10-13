@@ -178,6 +178,23 @@ def _server_scan_loop():
 
 threading.Thread(target=_server_scan_loop, daemon=True).start()
 
+import tw_board
+
+
+def _hist(stock, period='1y', interval='1d', **kw):
+    """日線歷史：台股用證交所／櫃買中心官方資料（yfinance 常漏交易日），其他照舊用 yfinance。"""
+    if not isinstance(stock, yf.Ticker):
+        stock = yf.Ticker(stock)
+    if interval == '1d':
+        try:
+            df = tw_board.history_df(stock.ticker, period)
+            if df is not None and len(df):
+                return df
+        except Exception as e:
+            print(f'[hist] {stock.ticker}: {e}')
+    return stock.history(period=period, interval=interval, **kw)
+
+
 # ── TTL Cache ─────────────────────────────────────────────────────────
 _CACHE = {}
 
@@ -307,7 +324,7 @@ def _aggressive_signal(stock, ticker, price, name):
 
 def _steady_signal(stock, ticker, price, name):
     """穩健保守型：日K GMMA 支撐 + MACD 底部轉強"""
-    hist = stock.history(period='6mo', interval='1d')
+    hist = _hist(stock, period='6mo', interval='1d')
     if hist.empty or len(hist) < 60:
         return _signal_wait(ticker, name, price, 'steady', '歷史資料不足，無法判斷')
 
@@ -861,7 +878,7 @@ def get_market():
     result = {}
     for key, sym in syms.items():
         try:
-            h = yf.Ticker(sym).history(period='2d')
+            h = _hist(yf.Ticker(sym), period='2d')
             if len(h) >= 2:
                 cur  = safe_float(h['Close'].iloc[-1])
                 prev = safe_float(h['Close'].iloc[-2])
@@ -990,7 +1007,7 @@ def get_stock(ticker):
     try:
         stock  = yf.Ticker(ticker)
         info   = stock.info
-        hist   = stock.history(period='1y')
+        hist   = _hist(stock, period='1y')
 
         if hist.empty:
             return jsonify({'error': f'找不到股票 {ticker}，請確認代碼是否正確'}), 404
@@ -1583,7 +1600,7 @@ def compare_stocks():
             t = tw_normalize(ticker) if is_tw else ticker
             stock = yf.Ticker(t)
             info  = stock.info
-            hist  = stock.history(period='6mo')
+            hist  = _hist(stock, period='6mo')
             if hist.empty:
                 return {'ticker': ticker, 'error': '找不到資料'}
 
@@ -1696,7 +1713,7 @@ def get_tw_market():
         syms['twii'] = '^TWII'
     for key, sym in syms.items():
         try:
-            h = yf.Ticker(sym).history(period='2d')
+            h = _hist(yf.Ticker(sym), period='2d')
             if len(h) >= 2:
                 cur  = safe_float(h['Close'].iloc[-1])
                 prev = safe_float(h['Close'].iloc[-2])
@@ -1729,14 +1746,14 @@ def get_tw_stock(ticker):
     try:
         stock = yf.Ticker(ticker)
         info  = stock.info
-        hist  = stock.history(period='1y')
+        hist  = _hist(stock, period='1y')
 
         # Fallback .TWO
         if hist.empty and ticker.endswith('.TW'):
             alt   = ticker.replace('.TW', '.TWO')
             stock = yf.Ticker(alt)
             info  = stock.info
-            hist  = stock.history(period='1y')
+            hist  = _hist(stock, period='1y')
             if not hist.empty:
                 ticker = alt
 
@@ -2806,7 +2823,7 @@ def get_tw_screener():
     for ticker in SCAN_LIST:
         try:
             stock = yf.Ticker(ticker)
-            hist  = stock.history(period='3mo')
+            hist  = _hist(stock, period='3mo')
             if hist is None or len(hist) < 30:
                 continue
             close  = hist['Close']
@@ -2931,7 +2948,7 @@ def get_tw_peers(ticker):
     results = []
     for t in all_tickers:
         try:
-            hist = yf.Ticker(t).history(period='1mo')
+            hist = _hist(yf.Ticker(t), period='1mo')
             if hist is None or len(hist) < 5:
                 continue
             close = hist['Close']
@@ -3009,7 +3026,7 @@ def get_screener():
     for ticker in SCAN_LIST:
         try:
             stock = yf.Ticker(ticker)
-            hist  = stock.history(period='3mo')
+            hist  = _hist(stock, period='3mo')
             if hist is None or len(hist) < 20:
                 continue
             close  = hist['Close']
@@ -3102,7 +3119,7 @@ def get_peers(ticker):
     results = []
     for t in all_tickers:
         try:
-            hist = yf.Ticker(t).history(period='1mo')
+            hist = _hist(yf.Ticker(t), period='1mo')
             if hist is None or len(hist) < 5:
                 continue
             close = hist['Close']
@@ -3258,7 +3275,7 @@ def get_tw_intraday(ticker):
 def _quick_signal(stock, ticker, price, name, profile='steady'):
     """Lightweight daily-bar signal for monitor scanning."""
     try:
-        hist = stock.history(period='3mo', interval='1d')
+        hist = _hist(stock, period='3mo', interval='1d')
         if hist.empty or len(hist) < 15:
             return {'action': 'WAIT', 'actionCn': '資料不足', 'confidence': '-',
                     'reason': '歷史資料不足，無法分析', 'stopLoss': 0}
@@ -3325,7 +3342,7 @@ def monitor_scan():
             info   = stock.info
             price  = safe_float(info.get('currentPrice', info.get('regularMarketPrice', 0)))
             if price == 0:
-                h2 = stock.history(period='2d')
+                h2 = _hist(stock, period='2d')
                 if not h2.empty: price = safe_float(h2['Close'].iloc[-1])
             prev    = safe_float(info.get('previousClose', info.get('regularMarketPreviousClose', 0)))
             change  = price - prev
@@ -3649,7 +3666,7 @@ def _scan_ticker(ticker, conditions, is_tw, period='1y'):
     try:
         stock = yf.Ticker(ticker)
         info  = stock.info
-        hist  = stock.history(period=period)
+        hist  = _hist(stock, period=period)
         if hist.empty or len(hist) < 20:
             return None
         price = last_valid(hist['Close'])
@@ -3833,7 +3850,7 @@ def _check_exit_alerts(stock, ticker, price, entry):
 
     triggered = []
     try:
-        hist = stock.history(period='3mo')
+        hist = _hist(stock, period='3mo')
         if hist.empty or len(hist) < 5:
             return []
         info = stock.info
@@ -3898,7 +3915,6 @@ import sys
 sys.modules[__name__].__dict__['_run_server_scan'] = _run_server_scan_with_exit
 
 
-import tw_board
 tw_board.init(app, login_required)
 
 
