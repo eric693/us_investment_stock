@@ -1691,8 +1691,35 @@ def _yf_bars_symbol(sym, period):
 _bar_cache = {}
 # 週期 → (yfinance period, interval, 快取秒數)
 PERIODS = {'1': ('7d', '1m', 30), '15': ('60d', '15m', 60), '60': ('2y', '60m', 120),
-           'D': ('5y', '1d', 600), 'W': ('15y', '1d', 1800), 'M': ('max', '1d', 3600)}
+           'D': ('5y', '1d', 600), 'W': ('15y', '1d', 1800), 'M': ('max', '1d', 3600),
+           'DL': ('max', '1d', 3600)}   # DL：週／月線用的長期日線歷史
 INTRADAY = ('1', '15', '60')
+
+
+def _daily_bars(code, market, long=False):
+    """日 K：證交所／櫃買中心的官方日資料為主（約兩年），更早的歷史用 yfinance 補；
+    盤中再把即時報價接成今天這根。yfinance 常漏掉個別交易日，不能當主要來源。"""
+    db = _db_bars(code)
+    yfb = []
+    try:
+        yfb = _yf_bars(code, market, 'DL' if long else 'D')
+    except Exception as e:
+        print(f'[tw_board] yf {code}: {e}')
+    first = db[0]['day'] if db else '9999'
+    bars = [b for b in yfb if b['day'] < first] + db
+    source = 'official' if db else 'yfinance'
+    if not db:
+        bars = yfb
+    # 盤中：今天還沒收盤，用即時報價做出今天的 K 棒
+    snap = _rt_today()
+    q = (snap or {}).get('quotes', {}).get(code)
+    today = _now().strftime('%Y-%m-%d')
+    if q and q.get('price') and (not bars or bars[-1]['day'] < today):
+        o, h, l, c = (q.get(k) or q['price'] for k in ('open', 'high', 'low', 'price'))
+        bars.append(dict(time=today, day=today, open=o, high=max(h, c), low=min(l, c), close=c,
+                         volume=round(q.get('volume') or 0)))
+        source += '+realtime'
+    return bars, source
 
 
 def _db_bars(code):
@@ -1752,7 +1779,7 @@ def _index_chart(code, period):
 @bp.route('/api/tw/board/chart/<code>')
 def api_chart(code):
     period = request.args.get('period', 'D')
-    if period not in PERIODS:
+    if period not in PERIODS or period == 'DL':
         return jsonify(error='period 必須是 1 / 15 / 60 / D / W / M'), 400
     if code in INDEX_META:
         res, err = _index_chart(code, period)
@@ -1768,14 +1795,16 @@ def api_chart(code):
         iss = con.execute('SELECT lots FROM issued WHERE code=?', (code,)).fetchone()
     if not meta:
         return jsonify(error='查無此代碼'), 404
-    try:
-        bars = _yf_bars(code, meta[1], period)
-    except Exception as e:
-        print(f'[tw_board] yf {code}: {e}')
-        bars = []
-    source = 'yfinance'
-    if not bars and period == 'D':
-        bars, source = _db_bars(code), 'db'
+    if period in INTRADAY:
+        try:
+            bars = _yf_bars(code, meta[1], period)
+        except Exception as e:
+            print(f'[tw_board] yf {code}: {e}')
+            bars = []
+        source = 'yfinance'
+    else:
+        bars, source = _daily_bars(code, meta[1], long=period in ('W', 'M'))
+        bars = _resample(bars, period)
 
     # 法人持股(張)：按交易日補 0 後累計
     by_day = {r[0]: r[1:] for r in inst}

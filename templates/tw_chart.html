@@ -454,7 +454,7 @@ async function load() {
     if (seq !== loadSeq) return;
     DATA = d;
     document.title = `${d.code} ${d.name} — 技術分析`;
-    $('#srcNote').textContent = d.source === 'db' ? '（K 線來源：證交所／櫃買中心日資料）' : '';
+    $('#srcNote').textContent = String(d.source).startsWith('official') ? '日 K 以證交所／櫃買中心官方資料為主' + (String(d.source).includes('realtime') ? '，今日為盤中即時報價。' : '。') : '';
     build();
     $('#loading').style.display = 'none';
   } catch (e) {

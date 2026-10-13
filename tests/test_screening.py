@@ -352,3 +352,22 @@ def test_scorecard_counts_and_stability(board):
         ok = lambda x: x is not None and (x['excess'] > 0 if r['side'] == 'buy' else x['excess'] < 0)
         assert r['stable'] == (ok(f) and ok(s))
     assert all('count' in v and 'stocks' in v for v in sc['today'].values())
+
+
+def test_daily_bars_prefer_official_and_add_live_bar(board, monkeypatch):
+    """yfinance 漏掉的交易日要由官方資料補上；盤中接上今天的即時 K 棒。"""
+    dates, codes = make_market(board, n_days=10, n_codes=1, seed=2)
+    code = codes[0]
+    old = [dict(time='2020-01-02', day='2020-01-02', open=1, high=1, low=1, close=1, volume=1)]
+    yf_missing = old + [dict(time=d, day=d, open=9, high=9, low=9, close=9, volume=9) for d in dates[:-3]]  # 少最後 3 天
+    monkeypatch.setattr(board, '_yf_bars', lambda c, m, p: yf_missing)
+    today = '2099-01-05'
+    monkeypatch.setattr(board, '_now', lambda: pd.Timestamp(today + ' 10:30', tz='Asia/Taipei'))
+    monkeypatch.setattr(board, '_rt_today', lambda: {'ts': 't', 'date': '20990105', 'quotes': {
+        code: dict(price=55.0, prev=50.0, open=51.0, high=56.0, low=50.5, volume=1234.0)}})
+    bars, src = board._daily_bars(code, 'TSE')
+    days = [b['day'] for b in bars]
+    assert days == ['2020-01-02'] + dates + [today]                       # 舊歷史 + 官方每一天 + 今天
+    assert bars[1]['close'] == series(board, code, 'close')[0]            # 重疊期間用官方數字
+    assert bars[-1] == dict(time=today, day=today, open=51.0, high=56.0, low=50.5, close=55.0, volume=1234)
+    assert src == 'official+realtime'
