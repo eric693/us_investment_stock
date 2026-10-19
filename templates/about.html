@@ -8,7 +8,7 @@
 <meta property="og:title" content="StockLens — 看懂籌碼，早一步出手">
 <meta property="og:description" content="台股即時看盤、三大法人籌碼、盤後與盤中選股、美股分析、策略選股與投資組合管理。">
 <meta property="og:type" content="website">
-<link rel="stylesheet" href="/static/css/style.css?v=5">
+<link rel="stylesheet" href="/static/css/style.css?v=6">
 {% include "_head.html" %}
 <style>
 body { min-height: 100vh; overflow-x: hidden; }
@@ -31,7 +31,7 @@ body { min-height: 100vh; overflow-x: hidden; }
 .btn:active { transform: scale(.98); }
 
 /* 主視覺 */
-.hero { position: relative; padding: 72px 0 64px; }
+.hero { position: relative; padding: 72px 0 64px; overflow: hidden; }
 .blob { position: absolute; border-radius: 50%; filter: blur(70px); opacity: .45; pointer-events: none; z-index: 0;
         animation: drift 18s ease-in-out infinite alternate; }
 .blob.a { width: 520px; height: 520px; left: -200px; top: -160px; background: radial-gradient(circle, #6d5dfc, transparent 65%); }

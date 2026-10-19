@@ -28,6 +28,7 @@ import yfinance as yf
 from flask import Blueprint, jsonify, request, render_template
 
 import userdata
+import notify
 
 bp = Blueprint('tw_board', __name__)
 
@@ -1304,24 +1305,6 @@ def _save_alerts(user, cfg):
     userdata.put(user, 'tw_alerts', cfg)
 
 
-def _line_creds(user):
-    c = userdata.get(user, 'line') or {}
-    return c.get('token', ''), c.get('user_id', '')
-
-
-def _push_line(text, user):
-    token, uid = _line_creds(user)
-    if not token or not uid:
-        return False, '尚未設定 LINE Channel Token 與 User ID'
-    try:
-        r = requests.post('https://api.line.me/v2/bot/message/push', timeout=10,
-                          headers={'Authorization': f'Bearer {token}'},
-                          json={'to': uid, 'messages': [{'type': 'text', 'text': text[:4900]}]})
-        return r.ok, ('' if r.ok else f'LINE 回應 {r.status_code}：{r.text[:200]}')
-    except Exception as e:
-        return False, str(e)
-
-
 def _scope_codes(scope, user):
     if scope == 'all':
         return None
@@ -1342,7 +1325,7 @@ def _check_alerts():
 
 
 def _check_alerts_user(user):
-    """新出現的訊號推播到這個帳號的 LINE（同一檔同一條件一天只推一次）。"""
+    """新出現的訊號推播到這個帳號的 LINE／手機通知（同一檔同一條件一天只推一次）。"""
     with _alert_lock:
         cfg = _load_alerts(user)
         if not cfg.get('enabled'):
@@ -1372,7 +1355,10 @@ def _check_alerts_user(user):
                          f" K{r['k']} D{r['d']}")
         if len(new) > 30:
             lines.append(f"…另有 {len(new) - 30} 檔")
-        ok, err = _push_line('\n'.join(lines), user)
+        if not notify.ready(user):
+            ok, err = False, '尚未設定通知管道（LINE 或手機通知）'
+        else:
+            ok, err = notify.send(user, '\n'.join(lines), url='/tw/board')
         cfg['sent'] = {today: sorted(sent)}
         log = cfg.get('log', [])
         for r, sig in new:
@@ -2135,15 +2121,17 @@ def api_alerts():
                              if k in ('kd_n', 'k_low', 'k_high', 'ma_band')}
             cfg['include_etf'] = bool(b.get('include_etf'))
             _save_alerts(user, cfg)
-    token, uid = _line_creds(user)
     out = {k: v for k, v in cfg.items() if k != 'sent'}
-    out['line_ready'] = bool(token and uid)
+    out['line_ready'] = notify.ready(user)
     return jsonify(out)
 
 
 @bp.route('/api/tw/board/alerts/test', methods=['POST'])
 def api_alerts_test():
-    ok, err = _push_line(f'【StockLens】LINE 推播測試成功 {_now():%Y-%m-%d %H:%M}', userdata.current())
+    user = userdata.current()
+    if not notify.ready(user):
+        return jsonify(error='尚未設定 LINE 或手機通知'), 400
+    ok, err = notify.send(user, f'【StockLens】推播測試成功\n{_now():%Y-%m-%d %H:%M}', url='/tw/board')
     return (jsonify(ok=True), 200) if ok else (jsonify(error=err), 400)
 
 

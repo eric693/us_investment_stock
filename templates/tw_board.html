@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>台股看盤</title>
-<link rel="stylesheet" href="/static/css/style.css?v=5">
+<link rel="stylesheet" href="/static/css/style.css?v=6">
 {% include "_head.html" %}
 <style>
 .wrap { max-width: 1680px; margin: 0 auto; padding: 22px 22px 40px; }
@@ -417,7 +417,7 @@ table.q tbody tr:hover td:first-child { box-shadow: inset 3px 0 0 var(--accent);
     <div class="alert-box">
       <div>
         <h4>LINE 即時推播 <span class="pill no" id="alertState">未啟用</span> <button class="help-btn" data-help="board.line"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><circle cx="12" cy="12" r="9.5"/><path d="M9.3 9.2a2.8 2.8 0 0 1 5.4 1c0 1.9-2.7 2.4-2.7 4"/><path d="M12 17.3h.01"/></svg>設定教學</button></h4>
-        <div class="row">盤中每次更新報價就用上面的條件與參數選股，新出現的訊號推播到 LINE（同一檔同一條件每天只推一次）。不必開著網頁。</div>
+        <div class="row">盤中每次更新報價就用上面的條件與參數選股，新出現的訊號推播到 LINE 和手機通知（同一輪的訊號合併成一則，同一檔同一條件每天只推一次）。不必開著網頁。手機通知請到 <a href="/account#notify" style="color:var(--accent2)">帳號設定 → 通知設定</a> 開啟。</div>
         <div class="row">
           <label class="chip-toggle"><input type="checkbox" id="alertOn"><span class="sw"></span>啟用推播</label>
           範圍 <select class="sel" id="alertScope" style="height:34px"></select>
@@ -1068,7 +1068,7 @@ async function loadAlerts() {
     $('#alertScope').innerHTML = `<option value="watch">全部自選股</option>` + WGROUPS.map(g => `<option value="${esc(g.name)}">群組：${esc(g.name)}</option>`).join('') + `<option value="all">全部上市櫃</option>`;
     $('#alertScope').value = a.scope || 'watch';
     $('#alertState').className = 'pill ' + (a.enabled && a.line_ready ? 'ok' : 'no');
-    $('#alertState').textContent = a.enabled ? (a.line_ready ? '推播中' : '待設定 LINE') : '未啟用';
+    $('#alertState').textContent = a.enabled ? (a.line_ready ? '推播中' : '待設定通知') : '未啟用';
     $('#alertErr').textContent = a.last_error || '';
     const log = (a.log || []).slice(-15).reverse();
     $('#alertLog').innerHTML = log.length ? log.map(x => `<div><span class="t">${esc(x.ts.slice(5))}</span><span class="side ${x.side}">${x.side === 'buy' ? 'BUY' : 'SELL'}</span><span>${esc(x.code)} ${esc(x.name)}</span><span class="num">${x.price}</span>${x.pushed ? '' : '<span style="color:var(--red)">未送出</span>'}</div>`).join('') : '<span style="color:var(--text-dim)">尚無紀錄</span>';
@@ -1087,10 +1087,13 @@ $('#alertSave').onclick = async () => {
   } catch (e) { alert(e.message); }
 };
 $('#lineSave').onclick = async () => {
-  const lc = await api('/api/tw/line/config');
-  await api('/api/tw/line/config', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({
-    line_token: $('#lineToken').value.trim() || lc.line_token, line_user_id: $('#lineUser').value.trim()})});
-  $('#lineToken').value = ''; loadAlerts();
+  try {
+    const lc = await api('/api/tw/line/config');
+    await api('/api/tw/line/config', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({
+      line_token: $('#lineToken').value.trim() || lc.line_token, line_user_id: $('#lineUser').value.trim()})});
+    $('#lineToken').value = ''; $('#alertErr').textContent = ''; loadAlerts();
+    alert('LINE 金鑰驗證成功，已儲存');
+  } catch (e) { $('#alertErr').textContent = e.message; }
 };
 $('#lineTest').onclick = async () => {
   try { await api('/api/tw/board/alerts/test', {method: 'POST'}); alert('已傳送測試訊息，請檢查 LINE'); } catch (e) { alert(e.message); }

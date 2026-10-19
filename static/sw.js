@@ -1,4 +1,5 @@
 /* PWA service worker：只快取 /static/ 與 Google 字型（先回快取、背景更新）。
+ * 也負責顯示推播通知（push / notificationclick）。
  * 頁面、/api/ 一律走網路，不會看到舊報價；離線時頁面改回一張簡短的離線提示。
  * 改了快取策略就把 CACHE 版本號 +1，舊快取會在啟用時清掉。
  */
@@ -43,5 +44,29 @@ self.addEventListener('fetch', function (e) {
       if (hit) { e.waitUntil(net.catch(function () {})); return hit; }
       return net;
     });
+  }));
+});
+
+// ── 推播通知（Web Push）──
+self.addEventListener('push', function (e) {
+  var d = {};
+  try { d = e.data ? e.data.json() : {}; } catch (err) { d = {body: e.data && e.data.text()}; }
+  e.waitUntil(self.registration.showNotification(d.title || 'StockLens', {
+    body: d.body || '',
+    icon: '/static/icons/icon-192.png',
+    data: {url: d.url || '/tw/board'}
+  }));
+});
+
+self.addEventListener('notificationclick', function (e) {
+  e.notification.close();
+  var url = new URL((e.notification.data && e.notification.data.url) || '/tw/board', self.location.origin).href;
+  e.waitUntil(self.clients.matchAll({type: 'window', includeUncontrolled: true}).then(function (wins) {
+    for (var i = 0; i < wins.length; i++) {
+      if (new URL(wins[i].url).origin === self.location.origin && 'focus' in wins[i]) {
+        return wins[i].focus().then(function (w) { return w.navigate ? w.navigate(url) : w; });
+      }
+    }
+    return self.clients.openWindow(url);
   }));
 });

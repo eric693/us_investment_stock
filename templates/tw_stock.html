@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>台股投資分析儀表板</title>
 <script src="https://cdn.plot.ly/plotly-2.26.0.min.js"></script>
-<link rel="stylesheet" href="/static/css/style.css?v=5">
+<link rel="stylesheet" href="/static/css/style.css?v=6">
 {% include "_head.html" %}
 <style>
 /* ── ETF Panel ─────────────────────────────────────────────────── */
@@ -1461,15 +1461,21 @@ function _formatLineMsg(sig) {
 async function saveLineToken() {
   const tok = ($('lineTokenInput').value || '').trim();
   const uid = ($('lineUserIdInput').value || '').trim();
-  // Save locally AND to server so any browser gets the settings
-  UserStore.setItem('line_channel_token', tok);
-  UserStore.setItem('line_user_id', uid);
+  // 伺服器會先向 LINE 驗證金鑰，驗證不過就不儲存
+  let err = '';
   try {
-    await fetch('/api/tw/line/config', {
+    const r = await fetch('/api/tw/line/config', {
       method: 'POST', headers: {'Content-Type':'application/json'},
       body: JSON.stringify({ line_token: tok, line_user_id: uid }),
     });
-  } catch(e) { console.warn('line config save failed', e); }
+    if (!r.ok) err = (await r.json()).error || '儲存失敗';
+  } catch(e) { err = '連不到伺服器，請稍後再試'; }
+  if (err) {
+    setHTML('lineStatusMsg', '<span style="color:var(--red)">' + err.replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])) + '</span>');
+    return;
+  }
+  UserStore.setItem('line_channel_token', tok);
+  UserStore.setItem('line_user_id', uid);
   if (_monitorMode === 'auto') await _serverRegister();
   setHTML('lineStatusMsg', (tok && uid)
     ? '<span style="color:var(--green)">設定已儲存（伺服器同步完成）</span>'

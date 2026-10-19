@@ -15,3 +15,5 @@ tw_alerts.json
 user_data.db*
 .userdata_migrate.lock
 *.migrated
+.vapid.json
+.vapid.json.lock

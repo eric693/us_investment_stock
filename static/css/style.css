@@ -1267,3 +1267,14 @@ a.mkt-chip:hover { border-color: var(--accent); }
 .mkt-chip .idx-q:empty { display: none; }
 .mkt-chip .idx-q.up { color: var(--red); } .mkt-chip .idx-q.dn { color: var(--green); }
 @media (max-width: 860px) { .mkt-chip b { display: none; } }
+
+/* 手機：頁面連結換到第二排（可左右滑）；第一排右側的大盤小卡空間不夠時自動截斷 */
+@media (max-width: 860px) {
+  .appbar { flex-wrap: wrap; height: auto; padding: 8px 12px 0; row-gap: 4px; }
+  .appbar-links { order: 3; flex: 0 0 calc(100% + 24px); margin: 0 -12px; padding: 0 8px 6px; }
+  .appbar-right { flex: 1 1 0; min-width: 0; justify-content: flex-end; gap: 8px; }
+  .mkt-chip { min-width: 0; flex: 0 1 auto; overflow: hidden; }
+  .mkt-chip .idx-q { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .appbar-right > .icon-btn, .appbar-right > .user-menu { flex-shrink: 0; }
+  .user-chip > svg { display: none; }
+}

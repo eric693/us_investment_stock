@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>帳號設定</title>
-<link rel="stylesheet" href="/static/css/style.css?v=5">
+<link rel="stylesheet" href="/static/css/style.css?v=6">
 {% include "_head.html" %}
 </head>
 <body data-help-page="account">
@@ -22,6 +22,117 @@
     <div class="frow"><span></span><div><button class="fbtn" type="submit">更新密碼</button></div></div>
     <p style="font-size:.78rem;color:var(--text-dim)">更新後，其他裝置上的登入會自動失效。</p>
   </form>
+
+  <section class="fcard" id="notify">
+    <h2>通知設定</h2>
+    <p class="nhint">即時選股、智慧盯盤、策略選股出場提醒觸發時，會送到下面開啟的每個管道。同一輪掃描的訊號會合併成一則。</p>
+    <div class="fmsg err" id="nErr" style="white-space:pre-line" hidden></div>
+
+    <h3 class="nsub">手機／瀏覽器通知 <span class="nstate" id="webState">讀取中…</span></h3>
+    <p class="nhint" id="webHint">不用 LINE、不佔額度。每台手機或電腦要各自開啟一次。</p>
+    <div class="nrow">
+      <button class="fbtn" type="button" id="webOn">在這台裝置開啟通知</button>
+      <button class="fbtn ghost" type="button" id="webOff" hidden>關閉這台裝置的通知</button>
+    </div>
+
+    <h3 class="nsub">LINE 推播 <span class="nstate" id="lineState">讀取中…</span></h3>
+    <div class="frow"><label for="nToken">Channel access token</label><input class="finput" id="nToken" type="password" autocomplete="new-password" data-lpignore="true" data-1p-ignore placeholder="LINE Developers → Messaging API → Channel access token (long-lived)"></div>
+    <div class="frow"><label for="nUid">User ID</label><input class="finput" id="nUid" autocomplete="off" data-lpignore="true" data-1p-ignore placeholder="Basic settings 最下方的 Your user ID（U 開頭，33 字）"></div>
+    <div class="frow"><span></span><div class="nrow" style="margin:0">
+      <button class="fbtn" type="button" id="lineSave">驗證並儲存</button>
+      <button class="fbtn ghost" type="button" id="lineClear">清除 LINE 設定</button>
+    </div></div>
+    <p class="nhint">記得用手機 LINE 加這個官方帳號為好友，否則收不到。免費方案每月訊息有上限，建議推播範圍選自選股。</p>
+
+    <div class="nrow" style="margin-top:18px;border-top:1px solid var(--line);padding-top:16px">
+      <button class="fbtn ghost" type="button" id="nTest">傳送測試通知</button>
+      <span id="nTestMsg" class="nhint" style="margin:0"></span>
+    </div>
+  </section>
 </main>
+<style>
+.nsub { font-size: .9rem; margin: 20px 0 8px; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.nhint { font-size: .8rem; color: var(--text-dim); line-height: 1.7; margin: 0 0 10px; }
+.nrow { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; margin-bottom: 10px; }
+.nstate { font-size: .72rem; font-weight: 600; padding: 3px 9px; border-radius: 999px; border: 1px solid var(--card-bd2); color: var(--text-mid); }
+.nstate.ok { color: var(--green); border-color: rgba(18,209,142,.35); }
+.nstate.bad { color: var(--red); border-color: var(--red-line); }
+@media (max-width: 620px) { .frow { grid-template-columns: 1fr; } }
+</style>
+<script>
+(function () {
+  const $ = s => document.querySelector(s);
+  function state(el, text, cls) { el.textContent = text; el.className = 'nstate' + (cls ? ' ' + cls : ''); }
+  function showErr(msg) { $('#nErr').hidden = !msg; $('#nErr').textContent = msg || ''; }
+  function busy(btn, on) { btn.disabled = on; btn.style.opacity = on ? .6 : ''; }
+
+  async function refresh() {
+    const N = window.StockNotify;
+    let st;
+    try { st = await N.refreshBell(); } catch (e) {}
+    if (!st) return;
+    showErr((st.errors || []).join('\n'));
+    const L = st.line;
+    if (!L.configured) state($('#lineState'), '未設定');
+    else if (L.ok === false) state($('#lineState'), '發送失敗', 'bad');
+    else state($('#lineState'), L.ts ? '正常・上次發送 ' + L.ts.slice(5) : '已設定', 'ok');
+    $('#nToken').placeholder = L.configured ? '已設定（貼上新的 token 可更新）' : $('#nToken').placeholder;
+
+    const sub = await N.deviceSub().catch(() => null);
+    const on = !!sub && Notification.permission === 'granted';
+    const n = st.web.devices || 0;
+    state($('#webState'), on ? '這台已開啟' + (n > 1 ? `・共 ${n} 台裝置` : '') : (n ? `其他 ${n} 台裝置已開啟` : '未開啟'), on ? 'ok' : '');
+    $('#webOn').hidden = on; $('#webOff').hidden = !on;
+    if (on) N.enableDevice().catch(() => {});      // 確保伺服器有這台的訂閱
+    if (!N.supported) {
+      $('#webHint').textContent = N.isIOS && !N.standalone
+        ? 'iPhone／iPad：先用 Safari 打開本站 → 分享 →「加入主畫面」，再從主畫面的 StockLens 圖示打開這一頁開啟通知（需 iOS 16.4 以上）。'
+        : '這個瀏覽器不支援推播通知，請改用 Chrome、Edge、Safari 或手機上安裝的 StockLens App。';
+      $('#webOn').hidden = true;
+    }
+  }
+
+  function wait() { return new Promise(r => { if (window.StockNotify) r(); else addEventListener('load', r); }); }
+
+  wait().then(() => {
+    const N = window.StockNotify;
+    $('#webOn').onclick = async e => {
+      busy(e.target, true);
+      try { await N.enableDevice(); showErr(''); await refresh(); } catch (err) { showErr(err.message); }
+      busy(e.target, false);
+    };
+    $('#webOff').onclick = async e => {
+      busy(e.target, true);
+      try { await N.disableDevice(); await refresh(); } catch (err) { showErr(err.message); }
+      busy(e.target, false);
+    };
+    $('#lineSave').onclick = async e => {
+      const uid = $('#nUid').value.trim(), tok = $('#nToken').value.trim();
+      busy(e.target, true);
+      try {
+        const cur = await fetch('/api/tw/line/config').then(r => r.json());
+        await N.saveLine(tok || cur.line_token || '', uid);
+        $('#nToken').value = ''; showErr(''); $('#nTestMsg').textContent = 'LINE 金鑰驗證成功，已儲存';
+        await refresh();
+      } catch (err) { showErr(err.message); }
+      busy(e.target, false);
+    };
+    $('#lineClear').onclick = async () => {
+      if (!confirm('確定清除 LINE 設定？之後只會送手機／瀏覽器通知。')) return;
+      try { await N.saveLine('', ''); $('#nUid').value = ''; await refresh(); } catch (err) { showErr(err.message); }
+    };
+    $('#nTest').onclick = async e => {
+      busy(e.target, true); $('#nTestMsg').textContent = '傳送中…';
+      try {
+        const r = await N.test();
+        $('#nTestMsg').textContent = '已送出，請檢查手機' + (r.warning ? '（部分失敗：' + r.warning + '）' : '');
+      } catch (err) { $('#nTestMsg').textContent = ''; showErr(err.message); }
+      busy(e.target, false); refresh();
+    };
+    fetch('/api/tw/line/config').then(r => r.json()).then(c => { $('#nUid').value = c.line_user_id || ''; }).catch(() => {});
+    refresh();
+  });
+})();
+</script>
 </body>
 </html>

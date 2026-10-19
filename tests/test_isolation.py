@@ -20,7 +20,9 @@ def test_watchlist_is_per_user(client):
     assert amy.get('/api/tw/board/watchlist').json['groups'][0]['codes'] == ['2330']
 
 
-def test_alerts_and_line_are_per_user(client):
+def test_alerts_and_line_are_per_user(client, monkeypatch):
+    import notify
+    monkeypatch.setattr(notify, 'check_line', lambda token, uid: '')    # 不真的打 LINE 驗證
     amy, boss = two_clients(client)
     amy.post('/api/tw/line/config', json={'line_token': 'amy-token', 'line_user_id': 'Uamy'})
     amy.post('/api/tw/board/alerts', json={'enabled': True, 'scope': 'all'})

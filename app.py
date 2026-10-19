@@ -18,6 +18,7 @@ app = Flask(__name__)
 # ── 登入（帳號 + 密碼）：見 auth.py ─────────────────────────────────────
 from auth import init_auth, login_required, load_users as _load_users, USERS_FILE   # noqa: F401
 import userdata
+import notify
 
 _BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 init_auth(app)
@@ -80,27 +81,21 @@ def _mon_key(user, ticker):
     return f'{user}|{ticker}'
 
 
-def _entry_line(entry):
-    """盯盤推播用的 LINE：以該筆擁有者帳號的設定為準。"""
-    c = userdata.get(entry.get('owner', ''), 'line') or {}
-    return (c.get('token') or entry.get('line_token', ''),
-            c.get('user_id') or entry.get('line_user_id', ''))
+def _flush_outbox(outbox):
+    """同一輪掃描產生的通知，每個帳號合併成一則送出（省 LINE 額度）。"""
+    for user, msgs in outbox.items():
+        if len(msgs) == 1:
+            text = msgs[0]
+        else:
+            text = (f"【StockLens 盯盤通知】{pd.Timestamp.now(tz='Asia/Taipei'):%H:%M}　共 {len(msgs)} 則\n\n"
+                    + '\n\n'.join(msgs))
+        ok, err = notify.send(user, text, url='/tw')
+        if not ok:
+            print(f'[Monitor] notify {user}: {err}')
 
 def _save_monitor_cfg(cfg):
     with open(MONITOR_FILE, 'w', encoding='utf-8') as f:
         json.dump(cfg, f, ensure_ascii=False, indent=2)
-
-def _push_line_msg(token, user_id, text):
-    try:
-        _requests.post(
-            'https://api.line.me/v2/bot/message/push',
-            headers={'Content-Type': 'application/json',
-                     'Authorization': f'Bearer {token}'},
-            json={'to': user_id, 'messages': [{'type': 'text', 'text': text}]},
-            timeout=10,
-        )
-    except Exception as e:
-        print(f'[Monitor] LINE error: {e}')
 
 def _build_line_text(sig):
     return (
@@ -112,7 +107,9 @@ def _build_line_text(sig):
         f"停損: {sig.get('trailingStop','')[:80]}"
     )
 
-def _run_server_scan():
+def _run_server_scan(outbox=None):
+    own_outbox = outbox is None
+    outbox = {} if own_outbox else outbox
     with _monitor_lock:
         cfg = _load_monitor_cfg()
     tickers_cfg = cfg.get('tickers', {})
@@ -143,19 +140,18 @@ def _run_server_scan():
                 cfg2['tickers'][key]['last_signal'] = result
                 cfg2['tickers'][key]['last_scan'] = now_str
                 entry        = cfg2['tickers'][key]
-                line_token, line_user_id = _entry_line(entry)
                 last_notify  = entry.get('last_notify_time', '')
                 cooldown_ok  = (not last_notify or
                     (pd.Timestamp.now(tz='Asia/Taipei') -
                      pd.Timestamp(last_notify, tz='Asia/Taipei')).total_seconds() > 1800)
-                if action == 'BUY' and line_token and line_user_id and cooldown_ok:
+                if action == 'BUY' and cooldown_ok and notify.ready(entry['owner']):
                     cfg2['tickers'][key]['last_notify_time'] = now_str
-                    _save_monitor_cfg(cfg2)
-                    _push_line_msg(line_token, line_user_id, _build_line_text(result))
-                else:
-                    _save_monitor_cfg(cfg2)
+                    outbox.setdefault(entry['owner'], []).append(_build_line_text(result))
+                _save_monitor_cfg(cfg2)
         except Exception as e:
             print(f'[Monitor] scan {ticker}: {e}')
+    if own_outbox:
+        _flush_outbox(outbox)
 
 def _server_scan_loop():
     # 多個 gunicorn worker 只讓拿到檔案鎖的那一個跑監控，避免 LINE 重複推播
@@ -2297,9 +2293,8 @@ def line_config():
     user = userdata.current()
     if request.method == 'POST':
         data = request.json or {}
-        userdata.put(user, 'line', {'token': data.get('line_token', '').strip(),
-                                    'user_id': data.get('line_user_id', '').strip()})
-        return jsonify({'ok': True})
+        err = notify.save_line(user, data.get('line_token', ''), data.get('line_user_id', ''))
+        return (jsonify({'error': err}), 400) if err else jsonify({'ok': True})
     c = userdata.get(user, 'line') or {}
     return jsonify({'line_token': c.get('token', ''), 'line_user_id': c.get('user_id', '')})
 
@@ -3868,7 +3863,15 @@ def _check_exit_alerts(stock, ticker, price, entry):
 _orig_run_server_scan = _run_server_scan
 
 def _run_server_scan_with_exit():
-    _orig_run_server_scan()
+    outbox = {}
+    try:
+        _orig_run_server_scan(outbox)
+        _check_all_exit_alerts(outbox)
+    finally:
+        _flush_outbox(outbox)
+
+
+def _check_all_exit_alerts(outbox):
     # Check exit alerts
     with _monitor_lock:
         cfg = _load_monitor_cfg()
@@ -3878,7 +3881,7 @@ def _run_server_scan_with_exit():
         ticker = entry.get('ticker') or mkey.split('|')[-1]
         if entry.get('owner') not in users:
             continue
-        if not entry.get('exit_conditions'):
+        if not entry.get('exit_conditions') or not notify.ready(entry['owner']):
             continue
         try:
             stock = yf.Ticker(ticker)
@@ -3891,17 +3894,16 @@ def _run_server_scan_with_exit():
                 continue
             # Cooldown: don't spam same exit alert within 4 hours
             last_alerts = entry.get('exit_last_alert', {})
-            line_token, line_user_id = _entry_line(entry)
             for alert_text in alerts:
                 key = alert_text[:40]
                 last_t = last_alerts.get(key, '')
                 cooldown_ok = not last_t or (
                     pd.Timestamp.now(tz='Asia/Taipei') -
                     pd.Timestamp(last_t, tz='Asia/Taipei')).total_seconds() > 14400
-                if cooldown_ok and line_token and line_user_id:
+                if cooldown_ok:
                     name = info.get('shortName', ticker)
                     msg  = f'【{name}】{alert_text}\n現價: {price}\n時間: {now_str}'
-                    _push_line_msg(line_token, line_user_id, msg)
+                    outbox.setdefault(entry['owner'], []).append(msg)
                     with _monitor_lock:
                         cfg2 = _load_monitor_cfg()
                         if mkey in cfg2['tickers']:
@@ -3916,6 +3918,7 @@ sys.modules[__name__].__dict__['_run_server_scan'] = _run_server_scan_with_exit
 
 
 tw_board.init(app, login_required)
+app.register_blueprint(notify.bp)
 
 
 if __name__ == '__main__':
