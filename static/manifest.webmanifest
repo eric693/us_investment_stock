@@ -1,0 +1,24 @@
+{
+  "name": "StockLens 台股・美股分析",
+  "short_name": "StockLens",
+  "description": "台股即時看盤、三大法人籌碼、盤後與盤中選股、美股分析與投資組合管理。",
+  "id": "/",
+  "start_url": "/tw/board",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#07080d",
+  "theme_color": "#07080d",
+  "lang": "zh-Hant",
+  "icons": [
+    {"src": "/static/icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any"},
+    {"src": "/static/icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any"},
+    {"src": "/static/icons/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable"}
+  ],
+  "shortcuts": [
+    {"name": "台股看盤", "url": "/tw/board"},
+    {"name": "台股分析", "url": "/tw"},
+    {"name": "美股分析", "url": "/"},
+    {"name": "策略選股", "url": "/screener"}
+  ]
+}

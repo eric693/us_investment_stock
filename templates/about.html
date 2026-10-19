@@ -1,0 +1,234 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>StockLens — 台股・美股分析平台</title>
+<meta name="description" content="StockLens：台股即時看盤、三大法人籌碼、盤後與盤中選股、美股分析、策略選股與投資組合管理。">
+<meta property="og:title" content="StockLens — 看懂籌碼，早一步出手">
+<meta property="og:description" content="台股即時看盤、三大法人籌碼、盤後與盤中選股、美股分析、策略選股與投資組合管理。">
+<meta property="og:type" content="website">
+<link rel="stylesheet" href="/static/css/style.css?v=5">
+{% include "_head.html" %}
+<style>
+body { min-height: 100vh; overflow-x: hidden; }
+.wrap { max-width: 1120px; margin: 0 auto; padding: 0 24px; }
+
+/* 頂端列 */
+.topbar { display: flex; align-items: center; justify-content: space-between; padding: 20px 0; }
+.lg-brand { display: flex; align-items: center; gap: 12px; text-decoration: none; color: var(--text); }
+.lg-brand .logo { width: 38px; height: 38px; border-radius: 11px; display: grid; place-items: center; background: var(--accent-grad); box-shadow: var(--glow); }
+.lg-brand .logo svg { width: 21px; height: 21px; }
+.lg-brand b { font-family: 'Space Grotesk', sans-serif; font-size: 1.3rem; letter-spacing: -.02em; }
+.top-actions { display: flex; align-items: center; gap: 10px; }
+
+.btn { display: inline-flex; align-items: center; justify-content: center; gap: 8px; height: 44px; padding: 0 22px; border-radius: 12px;
+       font-weight: 700; font-size: .95rem; text-decoration: none; letter-spacing: .02em; transition: background-position .4s, transform .1s, border-color .15s; }
+.btn-primary { background: var(--accent-grad); background-size: 160% 100%; color: #fff; box-shadow: var(--glow); }
+.btn-primary:hover { background-position: 100% 0; }
+.btn-ghost { border: 1px solid var(--card-bd2); color: var(--text); background: var(--card-bg); }
+.btn-ghost:hover { border-color: var(--accent); }
+.btn:active { transform: scale(.98); }
+
+/* 主視覺 */
+.hero { position: relative; padding: 72px 0 64px; }
+.blob { position: absolute; border-radius: 50%; filter: blur(70px); opacity: .45; pointer-events: none; z-index: 0;
+        animation: drift 18s ease-in-out infinite alternate; }
+.blob.a { width: 520px; height: 520px; left: -200px; top: -160px; background: radial-gradient(circle, #6d5dfc, transparent 65%); }
+.blob.b { width: 460px; height: 460px; right: -180px; top: 40px; background: radial-gradient(circle, #22d3ee, transparent 65%); animation-delay: -6s; }
+:root[data-theme="light"] .blob { opacity: .22; }
+@keyframes drift { to { transform: translate(60px, 40px) scale(1.12); } }
+.hero > .wrap { position: relative; z-index: 1; }
+.eyebrow { display: inline-block; padding: 6px 12px; border-radius: 999px; background: var(--overlay-1); border: 1px solid var(--line);
+           font-size: .78rem; color: var(--text-mid); letter-spacing: .04em; }
+.headline { margin-top: 20px; font-family: 'Space Grotesk', 'Noto Sans TC', sans-serif; font-weight: 700;
+            font-size: clamp(2.3rem, 5.4vw, 4.4rem); line-height: 1.06; letter-spacing: -.035em; }
+.headline em { font-style: normal; background: var(--accent-grad); -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent; }
+.lede { margin-top: 20px; color: var(--text-mid); max-width: 56ch; font-size: 1.05rem; line-height: 1.8; }
+.hero-cta { display: flex; gap: 12px; flex-wrap: wrap; margin-top: 32px; }
+.spark { display: block; margin-top: 48px; width: 100%; height: 140px; }
+.spark .ln { stroke-dasharray: 1400; stroke-dashoffset: 1400; animation: draw 2.4s .3s ease-out forwards; }
+@keyframes draw { to { stroke-dashoffset: 0; } }
+
+/* 區塊 */
+section.block { padding: 56px 0; border-top: 1px solid var(--line); }
+.block h2 { font-family: 'Space Grotesk', 'Noto Sans TC', sans-serif; font-size: clamp(1.5rem, 2.6vw, 2rem); letter-spacing: -.02em; }
+.block .sub { margin-top: 8px; color: var(--text-mid); max-width: 60ch; line-height: 1.7; }
+
+.grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin-top: 32px; }
+.card { padding: 22px; border-radius: 16px; background: var(--card-bg); border: 1px solid var(--card-bd); }
+.card .ic { width: 38px; height: 38px; border-radius: 11px; display: grid; place-items: center; margin-bottom: 14px;
+            background: var(--overlay-1); border: 1px solid var(--card-bd2); color: var(--accent2); }
+.card .ic svg { width: 19px; height: 19px; }
+.card h3 { font-size: 1.05rem; font-weight: 700; }
+.card p { margin-top: 8px; color: var(--text-mid); font-size: .9rem; line-height: 1.7; }
+.card ul { margin: 10px 0 0; padding-left: 18px; color: var(--text-mid); font-size: .88rem; line-height: 1.8; }
+
+.steps { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin-top: 32px; counter-reset: s; }
+.step { padding: 22px; border-radius: 16px; border: 1px dashed var(--card-bd2); }
+.step::before { counter-increment: s; content: counter(s, decimal-leading-zero); font-family: 'JetBrains Mono', monospace;
+                font-size: .8rem; font-weight: 600; color: var(--accent2); }
+.step h3 { margin-top: 8px; font-size: 1rem; font-weight: 700; }
+.step p { margin-top: 6px; color: var(--text-mid); font-size: .88rem; line-height: 1.7; }
+
+.cta-box { margin-top: 8px; padding: 36px; border-radius: 20px; background: var(--card-bg); border: 1px solid var(--card-bd2);
+           display: flex; align-items: center; justify-content: space-between; gap: 24px; flex-wrap: wrap; }
+.cta-box h2 { font-size: 1.5rem; }
+.cta-box p { margin-top: 6px; color: var(--text-mid); font-size: .92rem; }
+
+footer { padding: 32px 0 48px; color: var(--text-dim); font-size: .78rem; line-height: 1.8; }
+
+@media (max-width: 900px) {
+  .grid, .steps { grid-template-columns: 1fr 1fr; }
+}
+@media (max-width: 620px) {
+  .wrap { padding: 0 16px; }
+  .grid, .steps { grid-template-columns: 1fr; }
+  .hero { padding: 40px 0 40px; }
+  .top-actions .btn { padding: 0 16px; height: 40px; }
+  .cta-box { padding: 24px; }
+}
+</style>
+</head>
+<body>
+<div class="wrap topbar">
+  <a class="lg-brand" href="/about">
+    <span class="logo"><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M3 17l6-6 4 4 8-9"/><path d="M15 6h6v6"/></svg></span>
+    <b>StockLens</b>
+  </a>
+  <div class="top-actions">
+    <button class="icon-btn theme-toggle" data-theme-toggle title="切換亮色 / 暗色" aria-label="切換亮色 / 暗色">
+      <svg class="moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg>
+      <svg class="sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="4.5"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>
+    </button>
+    {% if current_user %}
+    <a class="btn btn-primary" href="/tw/board">進入系統</a>
+    {% else %}
+    <a class="btn btn-primary" href="/login">登入</a>
+    {% endif %}
+  </div>
+</div>
+
+<header class="hero">
+  <div class="blob a"></div><div class="blob b"></div>
+  <div class="wrap">
+    <span class="eyebrow">台股 ・ 美股 ・ 籌碼 ・ 選股</span>
+    <h1 class="headline">看懂籌碼，<br><em>早一步</em>出手。</h1>
+    <p class="lede">StockLens 把上市櫃即時行情、三大法人持股動向、技術指標與選股工具放在同一個地方。盤後用法人籌碼找訊號，盤中用 KD 與均線即時選股，符合條件還能用 LINE 通知你。</p>
+    <div class="hero-cta">
+      {% if current_user %}
+      <a class="btn btn-primary" href="/tw/board">進入系統</a>
+      {% else %}
+      <a class="btn btn-primary" href="/login">登入使用</a>
+      {% endif %}
+      <a class="btn btn-ghost" href="#features">看看有哪些功能</a>
+    </div>
+    <svg class="spark" viewBox="0 0 1072 140" preserveAspectRatio="none" fill="none" aria-hidden="true">
+      <defs>
+        <linearGradient id="sg" x1="0" x2="1"><stop offset="0" stop-color="#6d5dfc"/><stop offset=".5" stop-color="#8b5cf6"/><stop offset="1" stop-color="#22d3ee"/></linearGradient>
+        <linearGradient id="sf" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#6d5dfc" stop-opacity=".25"/><stop offset="1" stop-color="#6d5dfc" stop-opacity="0"/></linearGradient>
+      </defs>
+      <path d="M0 118 L80 106 L160 112 L240 90 L320 96 L400 70 L480 78 L560 58 L640 66 L720 42 L800 50 L880 28 L960 34 L1072 12 L1072 140 L0 140 Z" fill="url(#sf)"/>
+      <path class="ln" d="M0 118 L80 106 L160 112 L240 90 L320 96 L400 70 L480 78 L560 58 L640 66 L720 42 L800 50 L880 28 L960 34 L1072 12" stroke="url(#sg)" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" vector-effect="non-scaling-stroke"/>
+    </svg>
+  </div>
+</header>
+
+<main>
+  <section class="block" id="features">
+    <div class="wrap">
+      <h2>功能一覽</h2>
+      <p class="sub">從大盤到個股、從籌碼到技術面，一個畫面看完，再用選股工具把值得看的股票挑出來。</p>
+      <div class="grid">
+        <div class="card">
+          <div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2.5"/><path d="M7 15l3-3 3 2 4-5"/></svg></div>
+          <h3>台股看盤</h3>
+          <p>加權、櫃買指數與全部上市櫃報價，盤中約每 20 秒更新。</p>
+          <ul><li>漲跌家數、漲跌幅與成交量排行</li><li>產業、細產業、概念股、集團股的資金流向</li><li>自選股群組，換裝置登入也看得到</li></ul>
+        </div>
+        <div class="card">
+          <div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3.5"/><path d="M3 20c.8-3.4 3.2-5 6-5s5.2 1.6 6 5"/><path d="M16 4.5a3.5 3.5 0 0 1 0 7M18 15c1.6.6 2.6 2.2 3 5"/></svg></div>
+          <h3>三大法人籌碼</h3>
+          <p>外資、投信、自營商的買賣超排行與持股變化。</p>
+          <ul><li>1～20 日買賣超，依張數或金額排序</li><li>連續買超天數、佔成交量比例</li><li>K 線副圖直接疊上法人持股線</li></ul>
+        </div>
+        <div class="card">
+          <div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 5h16l-6 7.5V19l-4 2v-8.5z"/></svg></div>
+          <h3>盤後選股</h3>
+          <p>依收盤後公布的法人資料找訊號。</p>
+          <ul><li>法人持股線與均線金叉、死叉</li><li>持股比例在 N 天內增減超過門檻</li><li>外資與投信同步買進且站上均線</li><li>歷史回測與參數最佳化</li></ul>
+        </div>
+        <div class="card">
+          <div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2L4 14h7l-1 8 9-12h-7z"/></svg></div>
+          <h3>盤中即時選股 + LINE 推播</h3>
+          <p>依 KD 與均線條件在盤中自動篩選，每 60 秒可自動重跑。</p>
+          <ul><li>可自訂 K 值高低檔、均線糾結範圍</li><li>符合條件時用 LINE 通知，同一檔一天只推一次</li></ul>
+        </div>
+        <div class="card">
+          <div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg></div>
+          <h3>技術分析圖</h3>
+          <p>1 分、15 分、60 分、日、週、月 K 線。</p>
+          <ul><li>MA5～MA240、布林通道</li><li>KDJ、RSI、MACD、成交量副圖</li><li>滾輪或方向鍵一檔一檔往下看</li></ul>
+        </div>
+        <div class="card">
+          <div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c2.5 2.8 3.8 5.8 3.8 9s-1.3 6.2-3.8 9c-2.5-2.8-3.8-5.8-3.8-9S9.5 5.8 12 3z"/></svg></div>
+          <h3>個股分析（台股・美股）</h3>
+          <p>輸入代碼，一頁看完一檔股票。</p>
+          <ul><li>投資結論、財務健康、營收趨勢</li><li>關鍵價位、風險與策略建議</li><li>台股另有融資融券、券商分點；美股另有即時監控與新聞</li></ul>
+        </div>
+        <div class="card">
+          <div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg></div>
+          <h3>策略選股</h3>
+          <p>台股、美股都能用均線、KD、MACD 等條件組合掃描。</p>
+          <ul><li>每個條件可調參數</li><li>常用的條件組合存成策略，一鍵載入</li></ul>
+        </div>
+        <div class="card">
+          <div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v9l7.8 4.5"/><circle cx="12" cy="12" r="9"/></svg></div>
+          <h3>投資組合</h3>
+          <p>記錄持股、成本與日期，算出未實現損益。</p>
+          <ul><li>自選群組整理追蹤標的</li><li>多檔股票報酬走勢比較</li></ul>
+        </div>
+        <div class="card">
+          <div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg></div>
+          <h3>智慧盯盤</h3>
+          <p>伺服器每 5 分鐘自動掃描你盯的台股。</p>
+          <ul><li>可選激進或穩健的策略性格</li><li>出現買進訊號時用 LINE 推播</li></ul>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="block">
+    <div class="wrap">
+      <h2>怎麼用</h2>
+      <div class="steps">
+        <div class="step"><h3>看大盤與資金流向</h3><p>在「台股看盤」先看指數、漲跌家數，再看哪些類股、概念股有資金流入。</p></div>
+        <div class="step"><h3>用籌碼與技術面選股</h3><p>盤後跑法人持股選股，盤中開即時選股，把結果加入自選股。</p></div>
+        <div class="step"><h3>逐檔看圖、持續追蹤</h3><p>在技術圖用滾輪一檔一檔看下去，設好 LINE 推播與智慧盯盤，訊號出現時就會通知你。</p></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="block">
+    <div class="wrap">
+      <div class="cta-box">
+        <div>
+          <h2>開始使用 StockLens</h2>
+          <p>目前只開放授權帳號使用。需要帳號請聯絡管理員。</p>
+        </div>
+        {% if current_user %}
+        <a class="btn btn-primary" href="/tw/board">進入系統</a>
+        {% else %}
+        <a class="btn btn-primary" href="/login">登入</a>
+        {% endif %}
+      </div>
+    </div>
+  </section>
+</main>
+
+<footer class="wrap">
+  © StockLens ・ 資料來源：臺灣證券交易所、櫃買中心、Yahoo 股市<br>
+  本站內容僅供參考，不構成任何投資建議，投資前請自行判斷並承擔風險。
+</footer>
+</body>
+</html>

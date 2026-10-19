@@ -14,15 +14,16 @@ from datetime import timedelta
 from functools import wraps
 
 from flask import (Blueprint, jsonify, redirect, render_template, request, session, url_for,
-                   abort)
+                   abort, send_from_directory)
 from werkzeug.security import check_password_hash, generate_password_hash
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 USERS_FILE = os.path.join(BASE_DIR, 'users.json')
+STATIC_DIR = os.path.join(BASE_DIR, 'static')
 SECRET_FILE = os.path.join(BASE_DIR, '.secret_key')
 FAIL_FILE = os.path.join(BASE_DIR, '.login_fail.json')
 MAX_FAILS, FAIL_WINDOW = 10, 900          # 15 分鐘內錯 10 次就暫停
-PUBLIC_ENDPOINTS = {'auth.login', 'static'}
+PUBLIC_ENDPOINTS = {'auth.login', 'auth.about', 'auth.service_worker', 'auth.manifest', 'static'}
 
 bp = Blueprint('auth', __name__)
 
@@ -123,6 +124,25 @@ def admin_required(f):
 
 
 # ── 路由 ──────────────────────────────────────────────────────────────
+@bp.route('/sw.js')
+def service_worker():
+    # 放在根目錄，service worker 的範圍才能涵蓋整個網站
+    resp = send_from_directory(STATIC_DIR, 'sw.js', mimetype='application/javascript', max_age=0)
+    resp.headers['Cache-Control'] = 'no-cache'
+    return resp
+
+
+@bp.route('/manifest.webmanifest')
+def manifest():
+    return send_from_directory(STATIC_DIR, 'manifest.webmanifest', mimetype='application/manifest+json', max_age=3600)
+
+
+@bp.route('/about')
+def about():
+    # 公開介紹頁，不需登入
+    return render_template('about.html')
+
+
 @bp.route('/login', methods=['GET', 'POST'])
 def login():
     error = None
