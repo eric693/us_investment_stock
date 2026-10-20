@@ -7,6 +7,7 @@
 <script src="https://cdn.plot.ly/plotly-2.26.0.min.js"></script>
 <link rel="stylesheet" href="/static/css/style.css?v=6">
 {% include "_head.html" %}
+<script src="/static/js/pickcard.js?v=1" defer></script>
 <style>
 /* ── ETF Panel ─────────────────────────────────────────────────── */
 .etf-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(160px,1fr)); gap:10px; }
@@ -478,6 +479,12 @@
   <div class="card" id="investValueCard">
     <div class="card-title">投資核心價值</div>
     <div id="investValuePanel"></div>
+  </div>
+
+  <!-- 1c. 潛力股評分（多因子回測） -->
+  <div class="card hidden" id="pickCard">
+    <div class="card-title">潛力股評分 <span style="font-size:.74rem;font-weight:500;color:var(--text-dim);margin-left:6px">多因子模型・歷史回測驗證</span></div>
+    <div id="pickPanel"></div>
   </div>
 
   <!-- ETF Panel (只對ETF顯示) -->
@@ -1134,6 +1141,7 @@ function renderDashboard(d) {
   renderMonitorPanel(d);
   renderConclusions(d);
   renderInvestValue(d);
+  if (window.loadPickCard) loadPickCard('tw', d.ticker);
   renderETF(d);
   renderTradingView(d);
   renderPerf(d);

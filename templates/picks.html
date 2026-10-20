@@ -1,0 +1,355 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>潛力股</title>
+<link rel="stylesheet" href="/static/css/style.css?v=6">
+{% include "_head.html" %}
+<style>
+.wrap { max-width: 1400px; margin: 0 auto; padding: 22px 22px 40px; }
+@media (max-width: 640px) { .wrap { padding: 16px 16px 32px; } }
+.page-head { display: flex; align-items: flex-end; justify-content: space-between; gap: 16px; flex-wrap: wrap; margin-bottom: 18px; }
+.eyebrow { font-size: .72rem; font-weight: 700; letter-spacing: .18em; text-transform: uppercase; color: var(--text-dim); }
+.page-title { font-family: 'Space Grotesk', 'Noto Sans TC', sans-serif; font-size: clamp(1.7rem, 2.6vw, 2.3rem); font-weight: 700; letter-spacing: -.03em; line-height: 1.15; margin-top: 4px; }
+.page-title em { font-style: normal; background: var(--accent-grad); -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent; }
+.head-right { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; font-size: .76rem; color: var(--text-dim); }
+
+.seg { display: inline-flex; padding: 3px; border-radius: 10px; background: var(--surface-1); border: 1px solid var(--card-bd); }
+.seg button { border: none; background: none; color: var(--text-mid); padding: 6px 13px; border-radius: 7px; font-size: .8rem; font-weight: 600; cursor: pointer; }
+.seg button.on { background: var(--card-bg); color: var(--text); box-shadow: 0 1px 4px rgba(0,0,0,.18); }
+.seg.big button { padding: 8px 18px; font-size: .9rem; }
+
+.panel { background: var(--card-bg); border: 1px solid var(--card-bd); border-radius: 18px; padding: 18px 20px; margin-bottom: 14px; box-shadow: var(--shadow); min-width: 0; }
+@media (max-width: 640px) { .panel { padding: 14px; } }
+.panel-head { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; flex-wrap: wrap; margin-bottom: 14px; }
+.panel-head h3 { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; font-family: 'Space Grotesk', 'Noto Sans TC', sans-serif; font-size: 1.08rem; }
+.panel-head > span { font-size: .78rem; color: var(--text-dim); }
+.hint { font-size: .76rem; color: var(--text-dim); line-height: 1.7; }
+.warn-box { padding: 10px 14px; border-radius: 12px; background: rgba(251,191,36,.08); border: 1px solid rgba(251,191,36,.3); color: var(--text); font-size: .8rem; line-height: 1.7; margin-bottom: 14px; }
+.up { color: var(--red); } .dn { color: var(--green); }
+.empty { padding: 50px 20px; text-align: center; color: var(--text-dim); }
+
+/* KPI */
+.kpis { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; margin-bottom: 14px; }
+@media (max-width: 1000px) { .kpis { grid-template-columns: 1fr 1fr; } }
+@media (max-width: 480px) { .kpis { grid-template-columns: 1fr; } }
+.kpi { background: var(--card-bg); border: 1px solid var(--card-bd); border-radius: 18px; padding: 16px 18px; box-shadow: var(--shadow); }
+.kpi-label { font-size: .74rem; font-weight: 700; color: var(--text-dim); margin-bottom: 8px; }
+.kpi-val { font-family: 'JetBrains Mono', monospace; font-size: 1.7rem; font-weight: 700; letter-spacing: -.03em; line-height: 1.1; }
+.kpi-sub { font-size: .74rem; color: var(--text-mid); margin-top: 6px; line-height: 1.5; }
+
+/* 回測 */
+.bt-grid { display: grid; grid-template-columns: 1.35fr 1fr; gap: 18px; }
+@media (max-width: 1000px) { .bt-grid { grid-template-columns: 1fr; } }
+.chart-title { font-size: .82rem; font-weight: 700; margin-bottom: 4px; display: flex; justify-content: space-between; gap: 8px; flex-wrap: wrap; }
+.legend { display: flex; gap: 14px; font-size: .74rem; color: var(--text-mid); }
+.legend i { display: inline-block; width: 14px; height: 3px; border-radius: 2px; vertical-align: middle; margin-right: 5px; }
+.chart-box { position: relative; }
+.chart-box svg { width: 100%; display: block; overflow: visible; }
+.tip { position: absolute; pointer-events: none; background: var(--surface-2); border: 1px solid var(--card-bd2); border-radius: 10px; padding: 7px 10px; font-size: .74rem; line-height: 1.6; box-shadow: var(--shadow); white-space: nowrap; display: none; z-index: 5; }
+.tip b { font-family: 'JetBrains Mono', monospace; }
+.stat-tbl { width: 100%; border-collapse: collapse; font-size: .8rem; margin-top: 14px; }
+.stat-tbl th, .stat-tbl td { padding: 7px 8px; border-bottom: 1px solid var(--line); text-align: right; }
+.stat-tbl th:first-child, .stat-tbl td:first-child { text-align: left; }
+.stat-tbl th { color: var(--text-dim); font-weight: 600; font-size: .74rem; }
+.stat-tbl td { font-family: 'JetBrains Mono', monospace; }
+.stat-tbl td:first-child { font-family: inherit; color: var(--text-mid); }
+.tbl-scroll { overflow-x: auto; }
+
+/* 因子 */
+.fac { display: grid; grid-template-columns: minmax(150px, 1.1fr) 2fr 90px 90px 70px; gap: 10px; align-items: center; padding: 10px 4px; border-bottom: 1px solid var(--line); font-size: .82rem; }
+.fac.head { color: var(--text-dim); font-size: .72rem; font-weight: 700; padding-top: 0; }
+.fac .nm { font-weight: 700; }
+.fac .ds { color: var(--text-mid); font-size: .76rem; line-height: 1.5; }
+.fac .ic { font-family: 'JetBrains Mono', monospace; text-align: right; }
+.fac.total { background: var(--overlay-1); border-radius: 10px; }
+.tag { display: inline-block; font-size: .68rem; font-weight: 700; padding: 2px 8px; border-radius: 6px; white-space: nowrap; }
+.tag.ok { background: rgba(109,93,252,.12); color: var(--accent); }
+.tag.no { background: var(--overlay-2); color: var(--text-dim); }
+@media (max-width: 760px) {
+  .fac { grid-template-columns: 1fr 70px 70px; }
+  .fac .ds { grid-column: 1 / -1; grid-row: 2; }
+  .fac .st { display: none; }
+}
+
+/* 名單 */
+.filters { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; margin-bottom: 12px; }
+.inp { height: 36px; padding: 0 12px; border-radius: 10px; border: 1px solid var(--card-bd); background: var(--surface-1); color: var(--text); font-size: .84rem; min-width: 0; }
+.inp:focus { outline: none; border-color: var(--accent); }
+.tgl { display: inline-flex; align-items: center; gap: 6px; font-size: .8rem; color: var(--text-mid); cursor: pointer; user-select: none; }
+.tgl input { accent-color: var(--accent); }
+.groups-note { font-size: .78rem; color: var(--text-mid); margin-bottom: 12px; display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+.groups-note .g { padding: 2px 8px; border-radius: 7px; background: var(--overlay-1); border: 1px solid var(--line); }
+
+.pk { display: grid; grid-template-columns: 34px minmax(150px, 1.2fr) 92px minmax(120px, .9fr) minmax(220px, 2fr) 150px; gap: 14px; align-items: center;
+      padding: 13px 6px; border-bottom: 1px solid var(--line); }
+.pk.head { font-size: .72rem; color: var(--text-dim); font-weight: 700; padding-top: 0; }
+.pk.hl { background: rgba(109,93,252,.08); border-radius: 12px; }
+.pk .rk { font-family: 'JetBrains Mono', monospace; font-weight: 700; color: var(--text-dim); }
+.pk .rk.t { color: var(--accent); }
+.pk .who a { color: var(--text); text-decoration: none; font-weight: 700; }
+.pk .who a:hover { color: var(--accent); }
+.pk .who .cd { font-family: 'JetBrains Mono', monospace; font-size: .78rem; color: var(--text-mid); margin-right: 6px; }
+.pk .who small { display: block; font-size: .72rem; color: var(--text-dim); margin-top: 2px; }
+.pk .who .links { display: inline-flex; gap: 8px; margin-top: 3px; font-size: .72rem; }
+.pk .who .links a { color: var(--text-dim); font-weight: 600; }
+.pk .px { font-family: 'JetBrains Mono', monospace; text-align: right; font-size: .84rem; }
+.pk .px small { display: block; font-size: .74rem; }
+.score { display: flex; align-items: center; gap: 8px; }
+.score b { font-family: 'JetBrains Mono', monospace; font-size: 1.05rem; width: 40px; }
+.score .bar { flex: 1; height: 6px; border-radius: 6px; background: var(--overlay-2); overflow: hidden; }
+.score .bar i { display: block; height: 100%; border-radius: 6px; background: var(--accent-grad); }
+.fbars { display: grid; grid-template-columns: repeat(auto-fill, minmax(84px, 1fr)); gap: 4px 10px; margin-top: 6px; }
+.fb { font-size: .66rem; color: var(--text-dim); }
+.fb span { display: block; height: 4px; border-radius: 4px; background: var(--overlay-2); margin-top: 2px; overflow: hidden; }
+.fb span i { display: block; height: 100%; background: var(--accent); opacity: .75; border-radius: 4px; }
+.reasons { display: flex; gap: 5px; flex-wrap: wrap; }
+.rs { font-size: .72rem; padding: 2px 8px; border-radius: 7px; white-space: nowrap; }
+.rs.why { background: rgba(109,93,252,.1); color: var(--text); border: 1px solid rgba(109,93,252,.25); }
+.rs.risk { background: rgba(251,191,36,.1); color: var(--text); border: 1px solid rgba(251,191,36,.35); }
+.rs.risk::before { content: '⚠ '; }
+.exp { font-size: .74rem; color: var(--text-mid); line-height: 1.6; text-align: right; }
+.exp b { font-family: 'JetBrains Mono', monospace; color: var(--text); }
+.more { display: block; margin: 14px auto 0; height: 36px; padding: 0 18px; border-radius: 10px; border: 1px solid var(--card-bd2); background: var(--surface-1); color: var(--text); cursor: pointer; font-weight: 600; }
+.more:hover { border-color: var(--accent); color: var(--accent); }
+@media (max-width: 1100px) {
+  .pk { grid-template-columns: 30px 1fr 86px; gap: 8px 12px; }
+  .pk.head { display: none; }
+  .pk .sc-cell { grid-column: 2 / -1; }
+  .pk .why-cell { grid-column: 2 / -1; }
+  .pk .exp { grid-column: 2 / -1; text-align: left; }
+}
+.help-btn { display: inline-flex; align-items: center; gap: 5px; height: 30px; padding: 0 12px; border-radius: 999px; border: 1px solid var(--card-bd2);
+            background: var(--surface-1); color: var(--text-mid); font-size: .76rem; font-weight: 600; cursor: pointer; white-space: nowrap; }
+.help-btn:hover { color: var(--accent); border-color: var(--accent); }
+.disclaimer { font-size: .74rem; color: var(--text-dim); line-height: 1.8; margin-top: 8px; }
+</style>
+</head>
+<body data-help-page="picks">
+{% include "_appbar.html" %}
+<main class="wrap">
+  <div class="page-head">
+    <div>
+      <div class="eyebrow">Multi-factor model・歷史回測驗證</div>
+      <h1 class="page-title">潛力股 <em>評分</em></h1>
+    </div>
+    <div class="head-right">
+      <span id="asof"></span>
+      <span class="seg big" id="mkt"><button data-v="tw">台股</button><button data-v="us">美股</button></span>
+      <button class="help-btn" data-help="picks.main"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><circle cx="12" cy="12" r="9.5"/><path d="M9.3 9.2a2.8 2.8 0 0 1 5.4 1c0 1.9-2.7 2.4-2.7 4"/><path d="M12 17.3h.01"/></svg>說明</button>
+    </div>
+  </div>
+
+  <div id="root"><div class="panel"><div class="empty">計算中…</div></div></div>
+</main>
+
+<script>
+const $ = s => document.querySelector(s);
+const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const fmt = (v, d = 2) => v == null || isNaN(v) ? '-' : Number(v).toLocaleString('zh-TW', {minimumFractionDigits: d, maximumFractionDigits: d});
+const sgn = (v, d = 2) => v == null ? '-' : `<span class="${v > 0 ? 'up' : v < 0 ? 'dn' : ''}">${v > 0 ? '+' : ''}${fmt(v, d)}%</span>`;
+async function api(url) {
+  const r = await fetch(url);
+  if (r.status === 401) { location.href = '/login?next=' + encodeURIComponent(location.pathname + location.search); throw new Error('未登入'); }
+  const j = await r.json();
+  if (!r.ok) throw new Error(j.error || r.statusText);
+  return j;
+}
+const store = {get(k, d) { try { return JSON.parse(localStorage.getItem(k)) ?? d; } catch (e) { return d; } }, set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) {} }};
+
+const qs = new URLSearchParams(location.search);
+const st = Object.assign({market: 'tw', h: 20, q: '', group: '', clean: false, rev: false, show: 50}, store.get('picks', {}));
+if (qs.get('market') === 'us' || qs.get('market') === 'tw') st.market = qs.get('market');
+const DATA = {};
+
+function chartUrl(code) { return st.market === 'tw' ? '/tw/board/chart?code=' + encodeURIComponent(code) : '/?ticker=' + encodeURIComponent(code); }
+function analysisUrl(code) { return st.market === 'tw' ? '/tw?ticker=' + encodeURIComponent(code) : '/?ticker=' + encodeURIComponent(code); }
+
+async function load() {
+  store.set('picks', {market: st.market, h: st.h, clean: st.clean, rev: st.rev});
+  document.querySelectorAll('#mkt button').forEach(b => b.classList.toggle('on', b.dataset.v === st.market));
+  history.replaceState(null, '', '/picks?market=' + st.market);
+  if (!DATA[st.market]) {
+    $('#root').innerHTML = '<div class="panel"><div class="empty">計算中…（第一次約 30 秒，之後每天收盤後自動更新）</div></div>';
+    try { DATA[st.market] = await api('/api/picks/' + st.market); }
+    catch (e) { $('#root').innerHTML = `<div class="panel"><div class="empty">${esc(e.message)}</div></div>`; return; }
+  }
+  render();
+}
+
+function render() {
+  const D = DATA[st.market], H = D.horizons[st.h], T = H.top, isTw = st.market === 'tw';
+  const total = D.factors.find(f => f.id === '_score');
+  const dTop = H.deciles[9].all, dBot = H.deciles[0].all;
+  $('#asof').innerHTML = `資料至 <b class="num">${esc(D.end)}</b>・評分 ${D.universe} 檔`;
+  const pctTxt = v => v == null ? '-' : fmt(v, 1) + '%';
+  $('#root').innerHTML = `
+  <section class="kpis">
+    <div class="kpi"><div class="kpi-label">前 ${D.top_n} 名・之後 ${st.h} 日平均報酬</div><div class="kpi-val">${sgn(T.all?.avg)}</div>
+      <div class="kpi-sub">同期全體平均 ${sgn(H.market.all.avg)}・超額 ${sgn(T.all?.excess)}</div></div>
+    <div class="kpi"><div class="kpi-label">最高分組 vs 最低分組（${st.h} 日超額）</div><div class="kpi-val">${sgn(dTop)}</div>
+      <div class="kpi-sub">最低分組 ${sgn(dBot)}・價差 ${sgn(dTop - dBot)}</div></div>
+    <div class="kpi"><div class="kpi-label">綜合分數 IC（20 日）</div><div class="kpi-val num">${fmt(total.ic_first, 3)} / ${fmt(total.ic_second, 3)}</div>
+      <div class="kpi-sub">前段 / 後段，兩段皆正 = 有預測力；0.03 以上在實務上算有用</div></div>
+    <div class="kpi"><div class="kpi-label">前 ${D.top_n} 名・單檔上漲機率</div><div class="kpi-val num">${pctTxt(T.all?.win)}</div>
+      <div class="kpi-sub">全體 ${pctTxt(H.market.all.win)}・單檔贏大盤 ${pctTxt(T.all?.beat)}</div></div>
+  </section>
+
+  <section class="panel">
+    <div class="panel-head"><h3>回測證據 <span class="seg" id="hSeg">${[5, 10, 20].map(h => `<button data-v="${h}" class="${h === st.h ? 'on' : ''}">${h} 日</button>`).join('')}</span></h3>
+      <span><span class="num">${D.start} ～ ${D.end}</span>（${D.days} 個交易日）・前段至 <span class="num">${D.split}</span></span></div>
+    ${T.all && T.all.beat < 50 ? `<div class="warn-box">前 ${D.top_n} 名的<b>平均</b>報酬贏大盤，但<b>單一檔</b>贏大盤的機率只有 ${pctTxt(T.all.beat)}：獲利集中在少數大漲股。實務上要<b>分散持有多檔</b>，只挑一兩檔的結果和回測會差很多。</div>` : ''}
+    <div class="bt-grid">
+      <div>
+        <div class="chart-title"><span>每 ${st.h} 日換股：持有前 ${D.top_n} 名 vs 全體等權（累積報酬）</span>
+          <span class="legend"><span><i style="background:var(--accent)"></i>前 ${D.top_n} 名（扣成本 ${D.cost}%/次）</span><span><i style="background:var(--text-dim)"></i>全體等權</span></span></div>
+        <div class="chart-box" id="curveBox"></div>
+      </div>
+      <div>
+        <div class="chart-title"><span>依分數分 10 組：之後 ${st.h} 日平均超額報酬</span></div>
+        <div class="chart-box" id="decBox"></div>
+        <div class="hint">第 10 組 = 分數最高的 10%。由低到高越往右上升，代表分數越高、之後表現越好。</div>
+      </div>
+    </div>
+    <div class="tbl-scroll"><table class="stat-tbl">
+      <tr><th>前 ${D.top_n} 名</th><th>平均報酬</th><th>超額報酬</th><th>上漲機率</th><th>贏大盤機率</th><th>全體平均</th></tr>
+      ${[['first', '前段'], ['second', '後段'], ['all', '全期']].map(([p, l]) => `<tr><td>${l}</td><td>${sgn(T[p]?.avg)}</td><td>${sgn(T[p]?.excess)}</td><td>${pctTxt(T[p]?.win)}</td><td>${pctTxt(T[p]?.beat)}</td><td>${sgn(H.market[p].avg)}</td></tr>`).join('')}
+    </table></div>
+    <div class="hint" style="margin-top:10px">報酬以收盤價計算${isTw ? '，未還原除權息' : '（還原股價）'}；超額 = 減去同一天全體股票的平均。回測對象為${isTw ? `20 日均量 ≥ ${D.min_liq} 張的上市櫃普通股` : 'S&P 500 + Nasdaq-100 中 20 日均成交額 ≥ 2,000 萬美元的股票'}。${isTw ? '' : '<b>美股用的是目前的成分股</b>，已被剔除的股票不在樣本內（倖存者偏差），實際表現通常會比回測差一些。'}</div>
+  </section>
+
+  <section class="panel">
+    <div class="panel-head"><h3>使用的指標</h3><span>IC = 每天「指標排名」和「之後 20 日報酬排名」的相關係數，取平均</span></div>
+    <div class="fac head"><span>指標</span><span>說明</span><span class="ic">前段 IC</span><span class="ic">後段 IC</span><span class="st">穩定</span></div>
+    ${D.factors.map(f => `<div class="fac${f.id === '_score' ? ' total' : ''}"><span class="nm">${esc(f.name)}</span><span class="ds">${esc(f.desc)}</span>
+      <span class="ic ${f.ic_first > 0 ? 'up' : 'dn'}">${f.ic_first > 0 ? '+' : ''}${fmt(f.ic_first, 3)}</span><span class="ic ${f.ic_second > 0 ? 'up' : 'dn'}">${f.ic_second > 0 ? '+' : ''}${fmt(f.ic_second, 3)}</span>
+      <span class="st"><span class="tag ${f.stable ? 'ok' : 'no'}">${f.stable ? '穩定' : '不穩定'}</span></span></div>`).join('')}
+    <div class="hint" style="margin-top:10px">指標與方向只用<b>前段</b>資料決定，<b>後段</b>是沒參與挑選的驗證資料；綜合分數 = 各指標排名等權平均，不做權重最佳化，避免把過去的雜訊當成規律。
+      ${isTw ? '月營收以次月 11 日起才採用（法定公布期限為 10 日），回測不會用到當時還沒公布的數字。本益比、殖利率只用來提示風險，不計入分數。' : '美股沒有法人買賣超與月營收這類公開資料，因此只用價格相關指標。'}</div>
+  </section>
+
+  <section class="panel">
+    <div class="panel-head"><h3>今日潛力股</h3><span>依綜合分數排序・點名稱看技術圖</span></div>
+    <div class="filters">
+      <input class="inp" id="q" placeholder="查代碼 / 名稱（也可查任一檔的分數）" value="${esc(st.q)}" style="width:min(280px,100%)">
+      <select class="inp" id="grp"><option value="">全部${isTw ? '產業' : '產業類別'}</option>${[...new Set(D.stocks.map(s => s.group).filter(Boolean))].sort().map(g => `<option ${g === st.group ? 'selected' : ''}>${esc(g)}</option>`).join('')}</select>
+      <label class="tgl"><input type="checkbox" id="clean" ${st.clean ? 'checked' : ''}>排除有風險提示的</label>
+      ${isTw ? `<label class="tgl"><input type="checkbox" id="rev" ${st.rev ? 'checked' : ''}>只看營收成長</label>` : ''}
+    </div>
+    <div class="groups-note">前 ${D.top_n} 名產業分布：${D.top_groups.map(([g, k]) => `<span class="g">${esc(g)} ${k}</span>`).join('')}
+      ${D.top_groups[0] && D.top_groups[0][1] >= D.top_n / 2 ? `<span style="color:var(--yellow)">⚠ 過半集中在同一產業，該產業反轉時會一起下跌，建議跨產業分散</span>` : ''}</div>
+    <div id="list"></div>
+  </section>
+
+  <p class="disclaimer">本頁是依歷史資料統計的量化評分，不是投資建議。過去有效的指標未來可能失效；分數高代表「歷史上同類型的股票之後平均表現較好」，不代表這一檔一定會漲。停損參考 = 收盤價 − 2 × ATR(14)，僅供設定風險的起點。</p>`;
+
+  drawCurve(H.curve);
+  drawDeciles(H.deciles);
+  renderList();
+  $('#hSeg').onclick = e => { const b = e.target.closest('button'); if (b) { st.h = +b.dataset.v; store.set('picks', {market: st.market, h: st.h, clean: st.clean, rev: st.rev}); render(); } };
+  $('#q').oninput = e => { st.q = e.target.value; st.show = 50; renderList(); };
+  $('#grp').onchange = e => { st.group = e.target.value; st.show = 50; renderList(); };
+  $('#clean').onchange = e => { st.clean = e.target.checked; st.show = 50; renderList(); store.set('picks', {market: st.market, h: st.h, clean: st.clean, rev: st.rev}); };
+  if (isTw) $('#rev').onchange = e => { st.rev = e.target.checked; st.show = 50; renderList(); store.set('picks', {market: st.market, h: st.h, clean: st.clean, rev: st.rev}); };
+}
+
+function renderList() {
+  const D = DATA[st.market], q = st.q.trim().toLowerCase(), names = Object.fromEntries(D.factors.map(f => [f.id, f.name]));
+  let rows = D.stocks.filter(s => (!q || s.code.toLowerCase().includes(q) || String(s.name).toLowerCase().includes(q))
+    && (!st.group || s.group === st.group) && (!st.clean || !s.risk.length) && (!st.rev || st.market !== 'tw' || (s.info.rev_yoy3 ?? -1) > 0));
+  const all = rows.length;
+  rows = rows.slice(0, st.show);
+  if (!rows.length) {
+    $('#list').innerHTML = `<div class="empty">${q ? '找不到：可能流動性不足（20 日均量太低）、上市不滿半年，或不在股票池內' : '沒有符合條件的股票'}</div>`;
+    return;
+  }
+  const exact = q && rows.length === 1;
+  $('#list').innerHTML = `<div class="pk head"><span>#</span><span>股票</span><span style="text-align:right">收盤</span><span>分數</span><span>理由 / 風險</span><span style="text-align:right">同分組歷史表現</span></div>` +
+    rows.map(s => `<div class="pk${exact ? ' hl' : ''}">
+      <span class="rk${s.rank <= D.top_n ? ' t' : ''}">${s.rank}</span>
+      <span class="who"><a href="${chartUrl(s.code)}"><span class="cd">${esc(s.code)}</span>${esc(s.name)}</a><small>${esc(s.group || '')}</small>
+        <span class="links"><a href="${analysisUrl(s.code)}">完整分析 →</a></span></span>
+      <span class="px">${fmt(s.close)}<small class="${s.chg_pct > 0 ? 'up' : s.chg_pct < 0 ? 'dn' : ''}">${s.chg_pct == null ? '' : (s.chg_pct > 0 ? '+' : '') + fmt(s.chg_pct) + '%'}</small></span>
+      <span class="sc-cell"><span class="score"><b>${fmt(s.score, 0)}</b><span class="bar"><i style="width:${s.score}%"></i></span></span>
+        <span class="fbars">${Object.entries(s.f).map(([k, v]) => `<span class="fb" title="${esc(names[k])}：在全體排第 ${v ?? '-'} 百分位">${esc(names[k].replace('（反向）', ''))} ${v ?? '-'}<span><i style="width:${v ?? 0}%"></i></span></span>`).join('')}</span></span>
+      <span class="why-cell reasons">${s.why.map(x => `<span class="rs why">${esc(x)}</span>`).join('')}${s.risk.map(x => `<span class="rs risk">${esc(x)}</span>`).join('')}${!s.why.length && !s.risk.length ? '<span class="hint">—</span>' : ''}</span>
+      <span class="exp">第 ${s.decile} 組・20 日超額 ${sgn(s.exp20)}<br>上漲機率 <b>${fmt(s.win20, 0)}%</b>・贏大盤 <b>${fmt(s.beat20, 0)}%</b>${s.stop ? `<br>停損參考 <b>${fmt(s.stop)}</b>` : ''}</span>
+    </div>`).join('') +
+    (all > rows.length ? `<button class="more" id="more">顯示更多（共 ${all} 檔）</button>` : '');
+  const m = $('#more'); if (m) m.onclick = () => { st.show += 50; renderList(); };
+}
+
+// ── 圖表 ──
+function svgEl(w, h, inner) { return `<svg viewBox="0 0 ${w} ${h}" preserveAspectRatio="none" style="height:${h}px">${inner}</svg>`; }
+function niceTicks(lo, hi, n = 4) {
+  const span = hi - lo || 1, step0 = span / n, mag = 10 ** Math.floor(Math.log10(step0));
+  const step = [1, 2, 2.5, 5, 10].map(x => x * mag).find(x => span / x <= n) || mag * 10;
+  const out = []; for (let v = Math.ceil(lo / step) * step; v <= hi + 1e-9; v += step) out.push(+v.toFixed(6)); return out;
+}
+function drawCurve(curve) {
+  const box = $('#curveBox'), W = Math.max(280, box.clientWidth), Hh = 250, L = 44, R = 12, T = 24, B = 24;
+  const ys = curve.flatMap(p => [p[1], p[2]]), lo = Math.min(0, ...ys), hi = Math.max(0, ...ys);
+  const ticks = niceTicks(lo, hi), y0 = Math.min(lo, ticks[0]), y1 = Math.max(hi, ticks[ticks.length - 1]);
+  const x = i => L + (W - L - R) * (curve.length > 1 ? i / (curve.length - 1) : 0), y = v => T + (Hh - T - B) * (1 - (v - y0) / (y1 - y0 || 1));
+  const path = k => curve.map((p, i) => `${i ? 'L' : 'M'}${x(i).toFixed(1)},${y(p[k]).toFixed(1)}`).join('');
+  const grid = ticks.map(t => `<line x1="${L}" x2="${W - R}" y1="${y(t)}" y2="${y(t)}" stroke="var(--grid)" ${t === 0 ? 'stroke="var(--card-bd2)"' : ''}/><text x="${L - 6}" y="${y(t) + 4}" text-anchor="end" font-size="10" fill="var(--text-dim)">${t > 0 ? '+' : ''}${t}%</text>`).join('');
+  const lab = [0, Math.floor((curve.length - 1) / 2), curve.length - 1].map(i => `<text x="${x(i)}" y="${Hh - 6}" text-anchor="${i === 0 ? 'start' : i === curve.length - 1 ? 'end' : 'middle'}" font-size="10" fill="var(--text-dim)">${curve[i][0]}</text>`).join('');
+  const last = curve[curve.length - 1];
+  box.innerHTML = svgEl(W, Hh, grid + lab +
+    `<line x1="${L}" x2="${W - R}" y1="${y(0)}" y2="${y(0)}" stroke="var(--card-bd2)"/>` +
+    `<path d="${path(2)}" fill="none" stroke="var(--text-dim)" stroke-width="2" stroke-linejoin="round"/>` +
+    `<path d="${path(1)}" fill="none" stroke="var(--accent)" stroke-width="2" stroke-linejoin="round"/>` +
+    `<text x="${W - R}" y="${y(last[1]) - 6}" text-anchor="end" font-size="11" font-weight="700" fill="var(--text)">${last[1] > 0 ? '+' : ''}${fmt(last[1], 0)}%</text>` +
+    `<text x="${W - R}" y="${y(last[2]) + 14}" text-anchor="end" font-size="11" fill="var(--text-mid)">${last[2] > 0 ? '+' : ''}${fmt(last[2], 0)}%</text>` +
+    `<line id="cx" y1="${T}" y2="${Hh - B}" stroke="var(--text-dim)" stroke-dasharray="3 3" style="display:none"/>` +
+    `<circle id="cd1" r="4" fill="var(--accent)" stroke="var(--card-bg)" stroke-width="2" style="display:none"/><circle id="cd2" r="4" fill="var(--text-dim)" stroke="var(--card-bg)" stroke-width="2" style="display:none"/>` +
+    `<rect x="${L}" y="${T}" width="${W - L - R}" height="${Hh - T - B}" fill="transparent" id="chit"/>`) + '<div class="tip" id="ctip"></div>';
+  const svg = box.querySelector('svg'), tip = $('#ctip');
+  const hide = () => { ['#cx', '#cd1', '#cd2'].forEach(s => box.querySelector(s).style.display = 'none'); tip.style.display = 'none'; };
+  box.querySelector('#chit').addEventListener('pointermove', e => {
+    const r = svg.getBoundingClientRect(), px = (e.clientX - r.left) / r.width * W;
+    const i = Math.max(0, Math.min(curve.length - 1, Math.round((px - L) / ((W - L - R) / Math.max(1, curve.length - 1))))), p = curve[i];
+    const cx = box.querySelector('#cx'); cx.setAttribute('x1', x(i)); cx.setAttribute('x2', x(i)); cx.style.display = '';
+    [['#cd1', 1], ['#cd2', 2]].forEach(([s, k]) => { const c = box.querySelector(s); c.setAttribute('cx', x(i)); c.setAttribute('cy', y(p[k])); c.style.display = ''; });
+    tip.innerHTML = `${p[0]}<br>前 ${DATA[st.market].top_n} 名 <b>${p[1] > 0 ? '+' : ''}${fmt(p[1], 1)}%</b><br>全體等權 <b>${p[2] > 0 ? '+' : ''}${fmt(p[2], 1)}%</b>`;
+    tip.style.display = 'block';
+    const left = x(i) / W * r.width; tip.style.left = Math.min(r.width - tip.offsetWidth, Math.max(0, left + 12)) + 'px'; tip.style.top = '8px';
+  });
+  box.querySelector('#chit').addEventListener('pointerleave', hide);
+}
+function drawDeciles(dec) {
+  const box = $('#decBox'), W = Math.max(260, box.clientWidth), Hh = 220, L = 40, R = 8, T = 10, B = 24;
+  const vals = dec.map(d => d.all ?? 0), lo = Math.min(0, ...vals), hi = Math.max(0, ...vals);
+  const ticks = niceTicks(lo, hi), y0 = Math.min(lo, ticks[0]), y1 = Math.max(hi, ticks[ticks.length - 1]);
+  const y = v => T + (Hh - T - B) * (1 - (v - y0) / (y1 - y0 || 1)), bw = (W - L - R) / 10;
+  const grid = ticks.map(t => `<line x1="${L}" x2="${W - R}" y1="${y(t)}" y2="${y(t)}" stroke="var(--grid)"/><text x="${L - 6}" y="${y(t) + 4}" text-anchor="end" font-size="10" fill="var(--text-dim)">${t > 0 ? '+' : ''}${t}%</text>`).join('');
+  const bars = dec.map((d, i) => {
+    const v = d.all ?? 0, top = y(Math.max(v, 0)), h = Math.max(1, Math.abs(y(v) - y(0))), bx = L + i * bw + 3, w = bw - 6;
+    const rr = Math.min(4, w / 2, h);
+    const p = v >= 0 ? `M${bx},${top + h}V${top + rr}Q${bx},${top} ${bx + rr},${top}H${bx + w - rr}Q${bx + w},${top} ${bx + w},${top + rr}V${top + h}Z`
+                     : `M${bx},${top}V${top + h - rr}Q${bx},${top + h} ${bx + rr},${top + h}H${bx + w - rr}Q${bx + w},${top + h} ${bx + w},${top + h - rr}V${top}Z`;
+    return `<path d="${p}" fill="${v >= 0 ? 'var(--red)' : 'var(--green)'}" opacity="${i === 9 ? 1 : .55}"/>` +
+      `<text x="${bx + w / 2}" y="${Hh - 6}" text-anchor="middle" font-size="10" fill="var(--text-dim)">${d.d}</text>` +
+      `<rect x="${L + i * bw}" y="${T}" width="${bw}" height="${Hh - T - B}" fill="transparent" data-i="${i}"/>`;
+  }).join('');
+  const t9 = dec[9];
+  box.innerHTML = svgEl(W, Hh, grid + `<line x1="${L}" x2="${W - R}" y1="${y(0)}" y2="${y(0)}" stroke="var(--card-bd2)"/>` + bars +
+    `<text x="${L + 9 * bw + bw / 2}" y="${y(Math.max(t9.all, 0)) - 5}" text-anchor="middle" font-size="11" font-weight="700" fill="var(--text)">${t9.all > 0 ? '+' : ''}${fmt(t9.all, 1)}%</text>`) + '<div class="tip" id="dtip"></div>';
+  const svg = box.querySelector('svg'), tip = $('#dtip');
+  svg.addEventListener('pointermove', e => {
+    const i = e.target.dataset?.i; if (i == null) { tip.style.display = 'none'; return; }
+    const d = dec[+i], r = svg.getBoundingClientRect();
+    tip.innerHTML = `第 ${d.d} 組${d.d === 10 ? '（最高分）' : d.d === 1 ? '（最低分）' : ''}<br>全期超額 <b>${d.all > 0 ? '+' : ''}${fmt(d.all)}%</b><br>前段 <b>${fmt(d.first)}%</b>・後段 <b>${fmt(d.second)}%</b><br>上漲機率 <b>${fmt(d.win, 0)}%</b>・贏大盤 <b>${fmt(d.beat, 0)}%</b>`;
+    tip.style.display = 'block';
+    const left = (L + (+i + .5) * bw) / W * r.width; tip.style.left = Math.min(r.width - tip.offsetWidth, Math.max(0, left - tip.offsetWidth / 2)) + 'px'; tip.style.top = '4px';
+  });
+  svg.addEventListener('pointerleave', () => tip.style.display = 'none');
+}
+
+$('#mkt').onclick = e => { const b = e.target.closest('button'); if (b && b.dataset.v !== st.market) { st.market = b.dataset.v; st.q = ''; st.group = ''; st.show = 50; load(); } };
+let rsT; addEventListener('resize', () => { clearTimeout(rsT); rsT = setTimeout(() => { if (DATA[st.market]) { const H = DATA[st.market].horizons[st.h]; drawCurve(H.curve); drawDeciles(H.deciles); } }, 150); });
+load();
+</script>
+</body>
+</html>

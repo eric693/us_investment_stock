@@ -17,3 +17,5 @@ user_data.db*
 *.migrated
 .vapid.json
 .vapid.json.lock
+us_market.db*
+.picks_*
