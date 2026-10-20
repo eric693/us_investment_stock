@@ -4,9 +4,9 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>StockLens — 台股・美股分析平台</title>
-<meta name="description" content="StockLens：台股即時看盤、三大法人籌碼、盤後與盤中選股、美股分析、策略選股與投資組合管理。">
+<meta name="description" content="StockLens：台股即時看盤、三大法人籌碼、盤後與盤中選股、經回測驗證的潛力股評分、美股分析、策略選股與投資組合管理。">
 <meta property="og:title" content="StockLens — 看懂籌碼，早一步出手">
-<meta property="og:description" content="台股即時看盤、三大法人籌碼、盤後與盤中選股、美股分析、策略選股與投資組合管理。">
+<meta property="og:description" content="台股即時看盤、三大法人籌碼、盤後與盤中選股、經回測驗證的潛力股評分、美股分析、策略選股與投資組合管理。">
 <meta property="og:type" content="website">
 <link rel="stylesheet" href="/static/css/style.css?v=6">
 {% include "_head.html" %}
@@ -56,6 +56,9 @@ section.block { padding: 56px 0; border-top: 1px solid var(--line); }
 .block .sub { margin-top: 8px; color: var(--text-mid); max-width: 60ch; line-height: 1.7; }
 
 .grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin-top: 32px; }
+.card.wide { grid-column: 1 / -1; }
+.card.wide ul { columns: 2; column-gap: 32px; }
+@media (max-width: 640px) { .card.wide ul { columns: 1; } }
 .card { padding: 22px; border-radius: 16px; background: var(--card-bg); border: 1px solid var(--card-bd); }
 .card .ic { width: 38px; height: 38px; border-radius: 11px; display: grid; place-items: center; margin-bottom: 14px;
             background: var(--overlay-1); border: 1px solid var(--card-bd2); color: var(--accent2); }
@@ -140,6 +143,14 @@ footer { padding: 32px 0 48px; color: var(--text-dim); font-size: .78rem; line-h
       <h2>功能一覽</h2>
       <p class="sub">從大盤到個股、從籌碼到技術面，一個畫面看完，再用選股工具把值得看的股票挑出來。</p>
       <div class="grid">
+        <div class="card wide">
+          <div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 21h8M12 17v4M7 4h10v5a5 5 0 0 1-10 0z"/><path d="M17 5h3v2a3 3 0 0 1-3 3M7 5H4v2a3 3 0 0 0 3 3"/></svg></div>
+          <h3>潛力股評分（台股・美股）</h3>
+          <p>用經過兩年歷史回測驗證的指標替每檔股票打 0～100 分，找出統計上比較可能走強的股票。</p>
+          <ul><li>台股：月營收成長、外資買超、突破高點、站上月線、投信籌碼是否擁擠</li><li>美股（S&amp;P 500 + Nasdaq-100）：12 個月動能、長期趨勢、強勢股拉回</li>
+            <li>指標先用前段資料挑選、再用後段驗證，兩段都有效才採用</li><li>公開回測：分數前 20 名 vs 全體的累積報酬、依分數分組的報酬</li>
+            <li>每檔附上理由與風險提示（追高、過熱、本益比偏高、營收衰退）</li><li>個股分析頁直接顯示該股分數與停損參考</li></ul>
+        </div>
         <div class="card">
           <div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2.5"/><path d="M7 15l3-3 3 2 4-5"/></svg></div>
           <h3>台股看盤</h3>
@@ -174,7 +185,7 @@ footer { padding: 32px 0 48px; color: var(--text-dim); font-size: .78rem; line-h
           <div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c2.5 2.8 3.8 5.8 3.8 9s-1.3 6.2-3.8 9c-2.5-2.8-3.8-5.8-3.8-9S9.5 5.8 12 3z"/></svg></div>
           <h3>個股分析（台股・美股）</h3>
           <p>輸入代碼，一頁看完一檔股票。</p>
-          <ul><li>投資結論、財務健康、營收趨勢</li><li>關鍵價位、風險與策略建議</li><li>台股另有融資融券、券商分點；美股另有即時監控與新聞</li></ul>
+          <ul><li>投資結論、財務健康、營收趨勢、潛力股評分</li><li>關鍵價位、風險與策略建議</li><li>台股另有融資融券、券商分點；美股另有即時監控與新聞</li></ul>
         </div>
         <div class="card">
           <div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg></div>
@@ -203,7 +214,7 @@ footer { padding: 32px 0 48px; color: var(--text-dim); font-size: .78rem; line-h
       <h2>怎麼用</h2>
       <div class="steps">
         <div class="step"><h3>看大盤與資金流向</h3><p>在「台股看盤」先看指數、漲跌家數，再看哪些類股、概念股有資金流入。</p></div>
-        <div class="step"><h3>用籌碼與技術面選股</h3><p>盤後跑法人持股選股，盤中開即時選股，把結果加入自選股。</p></div>
+        <div class="step"><h3>用籌碼與技術面選股</h3><p>先看「潛力股」排行找出分數高的股票，再用盤後法人選股、盤中即時選股確認時機，把結果加入自選股。</p></div>
         <div class="step"><h3>逐檔看圖、持續追蹤</h3><p>在技術圖用滾輪一檔一檔看下去，設好 LINE 推播與智慧盯盤，訊號出現時就會通知你。</p></div>
       </div>
     </div>
