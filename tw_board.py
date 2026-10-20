@@ -1604,6 +1604,67 @@ def api_list():
                         rows=out))
 
 
+_esb_cache = [0.0, {}]
+_esb_lock = threading.Lock()
+
+
+def _esb_quotes():
+    """興櫃：不在每日同步的資料庫裡，改抓櫃買中心的興櫃行情表（每分鐘更新；盤中快取 60 秒、盤後 10 分鐘）。
+    興櫃沒有收盤價，漲跌以前日均價為基準。"""
+    ttl = 60 if _market_open() else 600
+    if time.time() - _esb_cache[0] < ttl:
+        return _esb_cache[1]
+    with _esb_lock:   # 櫃買中心回應慢，同時進來的請求共用同一次抓取
+        if time.time() - _esb_cache[0] < ttl:
+            return _esb_cache[1]
+        return _fetch_esb()
+
+
+def _fetch_esb():
+    out = {}
+    try:
+        js = _get_json('https://www.tpex.org.tw/www/zh-tw/emerging/latest?response=json', host_gap=0)
+        t = (js.get('tables') or [{}])[0]
+        m = re.match(r'(\d+)年(\d+)月(\d+)日', t.get('date') or '')
+        day = f'{int(m[1]) + 1911}-{int(m[2]):02d}-{int(m[3]):02d}' if m else None
+        for r in t.get('data') or []:
+            vol = _num(r[13])
+            out[str(r[0]).strip()] = dict(name=str(r[1]).strip(), prev=_num(r[2]), high=_num(r[7]),
+                                          low=_num(r[8]), avg=_num(r[9]), price=_num(r[10]),
+                                          volume=round(vol / 1000) if vol is not None else None, date=day)
+    except Exception as e:
+        print(f'[tw_board] esb: {e}')
+        if _esb_cache[1]:
+            return _esb_cache[1]
+    _esb_cache[:] = [time.time(), out]
+    return out
+
+
+def stock_name(code):
+    """中文簡稱：上市櫃查資料庫，興櫃查興櫃行情表。"""
+    with _db() as con:
+        r = con.execute('SELECT name FROM stocks WHERE code=?', (code,)).fetchone()
+    if r:
+        return r[0]
+    q = _esb_quotes().get(code)
+    return q['name'] if q else None
+
+
+def _esb_quote(code):
+    q = _esb_quotes().get(code)
+    if not q:
+        return None
+    res = dict(code=code, name=q['name'], market='ESB', industry='', realtime=False, open=None,
+               high=q['high'], low=q['low'], price=q['price'], prev=q['prev'], volume=q['volume'],
+               date=q['date'], chg=None)
+    if q['price'] is not None and q['prev']:
+        res['chg'] = round(q['price'] - q['prev'], 2)
+        res['chg_pct'] = round(res['chg'] / q['prev'] * 100, 2)
+    if q['date'] == _now().strftime('%Y-%m-%d') and _market_open():
+        res.update(realtime=True, time=_now().strftime('%H:%M'))
+    return res
+
+
 @bp.route('/api/tw/board/quote/<code>')
 def api_quote(code):
     _touch_active()
@@ -1615,7 +1676,8 @@ def api_quote(code):
         last = con.execute('SELECT date, open, high, low, close, chg, volume FROM daily '
                            'WHERE code=? ORDER BY date DESC LIMIT 1', (code,)).fetchone()
     if not meta:
-        return jsonify(error='查無此代碼'), 404
+        esb = _esb_quote(code)
+        return jsonify(esb) if esb else (jsonify(error='查無此代碼'), 404)
     res = dict(code=code, name=meta[1], market=meta[2], industry=meta[3], realtime=False)
     if last:
         prev = last[4] - last[5] if last[5] is not None else None
@@ -1843,7 +1905,19 @@ def api_chart(code):
         fh = con.execute('SELECT date, lots FROM foreign_hold WHERE code=?', (code,)).fetchone()
         iss = con.execute('SELECT lots FROM issued WHERE code=?', (code,)).fetchone()
     if not meta:
-        return jsonify(error='查無此代碼'), 404
+        esb = _esb_quotes().get(code)
+        if not esb:
+            return jsonify(error='查無此代碼'), 404
+        # 興櫃：沒有官方日 K 與法人資料，K 線用 yfinance
+        try:
+            bars = _yf_bars_symbol(f'{code}.TWO', period)
+        except Exception as e:
+            print(f'[tw_board] yf {code}: {e}')
+            bars = []
+        empty = {k: [] for k in ('foreign', 'trust', 'dealer', 'total')}
+        return jsonify(dict(code=code, name=esb['name'], market='ESB', period=period, source='yfinance',
+                            bars=bars, issued=None,
+                            inst=dict(days=[], hold=empty, net=dict(empty), foreign_anchor=False)))
     if period in INTRADAY:
         try:
             bars = _yf_bars(code, meta[1], period)

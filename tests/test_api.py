@@ -83,3 +83,20 @@ def test_index_chart_and_quote(client, board):
     assert client.get('/api/tw/board/chart/TPEX?period=60').status_code == 400   # 櫃買沒有盤中歷史
     idx = client.get('/api/tw/board/indices').json
     assert [x['code'] for x in idx] == ['TAIEX', 'TPEX'] and len(idx[0]['spark']) == min(60, len(days))
+
+
+def test_emerging_quote_and_chart(client, board, monkeypatch):
+    # 興櫃不在資料庫：報價取自興櫃行情表，K 線走 yfinance 的 .TWO
+    esb = {'7719': dict(name='碳基', prev=43.13, high=43.35, low=42.45, avg=42.75, price=42.85,
+                        volume=77, date='2026-10-20')}
+    monkeypatch.setattr(board, '_esb_quotes', lambda: esb)
+    seen = []
+    monkeypatch.setattr(board, '_yf_bars_symbol', lambda sym, period: seen.append(sym) or
+                        [dict(time='2026-10-20', day='2026-10-20', open=43, high=43.35, low=42.45, close=42.85, volume=77)])
+    login(client, 'amy', 'user12345')
+    q = client.get('/api/tw/board/quote/7719').json
+    assert q['market'] == 'ESB' and q['name'] == '碳基' and q['chg'] == -0.28 and q['chg_pct'] == -0.65
+    j = client.get('/api/tw/board/chart/7719?period=D').json
+    assert j['market'] == 'ESB' and len(j['bars']) == 1 and seen == ['7719.TWO'] and j['inst']['days'] == []
+    assert board.stock_name('7719') == '碳基'
+    assert client.get('/api/tw/board/quote/9999').status_code == 404

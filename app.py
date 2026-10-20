@@ -807,7 +807,7 @@ def gen_strategy(price, ma5, ma20, ma60, rsi, levels, info=None):
 
     # Leveraged / inverse ETFs need completely different strategy language
     _info     = info or {}
-    _sym      = _info.get('symbol', '').upper().replace('.TW','').replace('.TWO','')
+    _sym      = _info.get('symbol', '').upper().replace('.TWO','').replace('.TW','')
     _name     = (_info.get('longName','') + _info.get('shortName','')).upper()
     _is_lev   = _sym.endswith('L') or '槓桿' in _name or '2倍' in _name
     _is_inv   = _sym.endswith('R') or _sym.endswith('B') or '反向' in _name
@@ -1282,8 +1282,10 @@ def _load_tw_names():
 
 def get_tw_cn_name(ticker, fallback=''):
     _load_tw_names()
-    code = ticker.replace('.TW','').replace('.TWO','')
-    return _TW_NAME_CACHE.get(code, fallback)
+    code = ticker.replace('.TWO','').replace('.TW','')
+    if code in _TW_NAME_CACHE:
+        return _TW_NAME_CACHE[code]
+    return tw_board.stock_name(code) or fallback
 
 # 在背景預先載入
 threading.Thread(target=_load_tw_names, daemon=True).start()
@@ -1401,7 +1403,7 @@ def gen_tw_risks(price, ma20, rsi, vol_ratio, week52h,
 
     # ETF-specific risk: differentiate leveraged/inverse from regular
     if is_etf:
-        sym  = ticker.upper().replace('.TW', '').replace('.TWO', '')
+        sym  = ticker.upper().replace('.TWO', '').replace('.TW', '')
         name_upper = etf_name.upper()
         is_lev = sym.endswith('L') or '槓桿' in name_upper or '2倍' in name_upper
         is_inv = sym.endswith('R') or sym.endswith('B') or '反向' in name_upper or 'INVERSE' in name_upper
@@ -1450,7 +1452,7 @@ def gen_tw_catalysts(price, ma5, ma20, ma60, macd, dea, rsi,
         name      = (info.get('longName', '') + ' ' + info.get('shortName', '')).upper()
         # yfinance returns dividendYield as a percentage for TW tickers (e.g. 6.65 = 6.65%)
         div_yield = safe_float(info.get('dividendYield', 0))
-        sym       = info.get('symbol', '').upper().replace('.TW', '').replace('.TWO', '')
+        sym       = info.get('symbol', '').upper().replace('.TWO', '').replace('.TW', '')
 
         is_leveraged = sym.endswith('L') or '槓桿' in name or '2倍' in name
         is_inverse   = sym.endswith('R') or '反向' in name or 'INVERSE' in name
@@ -2004,7 +2006,7 @@ def get_tw_news(ticker):
 
         # Supplement with Google News if fewer than 6 articles
         if len(articles) < 6:
-            code = ticker.replace('.TW','').replace('.TWO','')
+            code = ticker.replace('.TWO','').replace('.TW','')
             query = f'{code} 台股'
             gn = _fetch_gnews(query, max_results=12)
             for a in gn:
@@ -2150,7 +2152,7 @@ def get_tw_etf(ticker):
                         pct  = safe_float(row.get('Holding Percent', 0))
                         if pct > 1: pct /= 100
                         if name and name != 'nan':
-                            holdings.append({'symbol': str(sym).replace('.TW','').replace('.TWO','')[:10],
+                            holdings.append({'symbol': str(sym).replace('.TWO','').replace('.TW','')[:10],
                                              'name': name[:30], 'pct': round(pct * 100, 2)})
         except:
             pass
@@ -2493,7 +2495,7 @@ def get_tw_etf_detail(ticker):
                 if th is not None and not th.empty:
                     for sym, row in th.iterrows():
                         holdings.append({
-                            'symbol': str(sym).replace('.TW','').replace('.TWO',''),
+                            'symbol': str(sym).replace('.TWO','').replace('.TW',''),
                             'name':   str(row.get('Name', sym))[:25],
                             'pct':    round(float(row.get('Holding Percent', 0)) * 100, 2)
                         })
@@ -3696,7 +3698,7 @@ def _scan_ticker(ticker, conditions, is_tw, period='1y'):
         vol_ratio = curr_vol / avg_vol if avg_vol > 0 else 1.0
         inst_pct  = round(safe_float(info.get('heldPercentInstitutions', 0)) * 100, 1)
         div_yield = round(safe_float(info.get('dividendYield', 0)), 2)
-        display = ticker.replace('.TW','').replace('.TWO','') if is_tw else ticker
+        display = ticker.replace('.TWO','').replace('.TW','') if is_tw else ticker
 
         return {
             'ticker':    ticker,

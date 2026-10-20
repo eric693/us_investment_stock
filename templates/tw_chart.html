@@ -474,7 +474,7 @@ async function loadQuote() {
     const q = await api('/api/tw/board/quote/' + encodeURIComponent(c));
     if (c !== code) return;
     const cc = q.chg > 0 ? 'up' : q.chg < 0 ? 'dn' : '';
-    const metaTxt = q.kind === 'index' ? (q.market === 'TSE' ? '證交所' : '櫃買中心') + '・大盤指數' : (q.market === 'TSE' ? '上市' : '上櫃') + '・' + (q.industry || '');
+    const metaTxt = q.kind === 'index' ? (q.market === 'TSE' ? '證交所' : '櫃買中心') + '・大盤指數' : ({TSE: '上市', ESB: '興櫃'}[q.market] || '上櫃') + (q.industry ? '・' + q.industry : '');
     $('#title').innerHTML = `<div class="code">${esc(q.code)}<span class="meta">${esc(metaTxt)}</span></div><div class="name">${esc(q.name)}</div>`;
     $('#star').style.visibility = q.kind === 'index' ? 'hidden' : '';
     const ent = nav && nav.list.find(x => x[0] === q.code);
