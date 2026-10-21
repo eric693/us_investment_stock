@@ -2296,10 +2296,12 @@ def line_config():
     user = userdata.current()
     if request.method == 'POST':
         data = request.json or {}
-        err = notify.save_line(user, data.get('line_token', ''), data.get('line_user_id', ''))
+        err = notify.save_line(user, data.get('line_token', ''), data.get('line_user_id', ''),
+                               data.get('line_secret'))
         return (jsonify({'error': err}), 400) if err else jsonify({'ok': True})
     c = userdata.get(user, 'line') or {}
-    return jsonify({'line_token': c.get('token', ''), 'line_user_id': c.get('user_id', '')})
+    return jsonify({'line_token': c.get('token', ''), 'line_user_id': c.get('user_id', ''),
+                    'has_secret': bool(c.get('secret'))})
 
 
 @app.route('/api/tw/monitor/register', methods=['POST'])

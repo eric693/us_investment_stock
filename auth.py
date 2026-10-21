@@ -23,7 +23,8 @@ STATIC_DIR = os.path.join(BASE_DIR, 'static')
 SECRET_FILE = os.path.join(BASE_DIR, '.secret_key')
 FAIL_FILE = os.path.join(BASE_DIR, '.login_fail.json')
 MAX_FAILS, FAIL_WINDOW = 10, 900          # 15 分鐘內錯 10 次就暫停
-PUBLIC_ENDPOINTS = {'auth.login', 'auth.about', 'auth.service_worker', 'auth.manifest', 'static'}
+PUBLIC_ENDPOINTS = {'auth.login', 'auth.about', 'auth.service_worker', 'auth.manifest', 'static',
+                    'notify.line_webhook'}     # LINE 伺服器呼叫，以 Channel secret 驗簽
 
 bp = Blueprint('auth', __name__)
 

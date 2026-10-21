@@ -26,7 +26,7 @@ def test_alerts_and_line_are_per_user(client, monkeypatch):
     amy, boss = two_clients(client)
     amy.post('/api/tw/line/config', json={'line_token': 'amy-token', 'line_user_id': 'Uamy'})
     amy.post('/api/tw/board/alerts', json={'enabled': True, 'scope': 'all'})
-    assert boss.get('/api/tw/line/config').json == {'line_token': '', 'line_user_id': ''}
+    assert boss.get('/api/tw/line/config').json == {'line_token': '', 'line_user_id': '', 'has_secret': False}
     assert boss.get('/api/tw/board/alerts').json['enabled'] is False
     assert amy.get('/api/tw/line/config').json['line_token'] == 'amy-token'
     assert amy.get('/api/tw/board/alerts').json['line_ready'] is True

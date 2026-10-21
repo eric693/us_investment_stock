@@ -24,73 +24,288 @@
   </form>
 
   <section class="fcard" id="notify">
-    <h2>通知設定</h2>
-    <p class="nhint">即時選股、智慧盯盤、策略選股出場提醒觸發時，會送到下面開啟的每個管道。同一輪掃描的訊號會合併成一則。</p>
+    <h2>通知管道</h2>
+    <p class="nhint">即時選股、智慧盯盤、出場提醒與每日潛力股，會送到下面開啟的每個管道；同一輪掃描的訊號合併成一則。</p>
     <div class="fmsg err" id="nErr" style="white-space:pre-line" hidden></div>
 
-    <h3 class="nsub">手機／瀏覽器通知 <span class="nstate" id="webState">讀取中…</span></h3>
-    <p class="nhint" id="webHint">不用 LINE、不佔額度。每台手機或電腦要各自開啟一次。</p>
-    <div class="nrow">
-      <button class="fbtn" type="button" id="webOn">在這台裝置開啟通知</button>
-      <button class="fbtn ghost" type="button" id="webOff" hidden>關閉這台裝置的通知</button>
+    <div class="chan">
+      <div class="chan-head">
+        <div class="chan-ico web" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M6 8a6 6 0 1 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/></svg></div>
+        <div class="chan-txt"><b>手機／瀏覽器通知</b><span id="webHint">不用 LINE、不佔額度，每台裝置各自開啟一次</span></div>
+        <span class="nstate" id="webState">讀取中…</span>
+      </div>
+      <div class="chan-act">
+        <button class="fbtn sm" type="button" id="webOn">在這台裝置開啟</button>
+        <button class="fbtn ghost sm" type="button" id="webOff" hidden>關閉這台裝置</button>
+      </div>
     </div>
 
-    <h3 class="nsub">LINE 推播 <span class="nstate" id="lineState">讀取中…</span></h3>
-    <div class="frow"><label for="nToken">Channel access token</label><input class="finput" id="nToken" type="password" autocomplete="new-password" data-lpignore="true" data-1p-ignore placeholder="LINE Developers → Messaging API → Channel access token (long-lived)"></div>
-    <div class="frow"><label for="nUid">User ID</label><input class="finput" id="nUid" autocomplete="off" data-lpignore="true" data-1p-ignore placeholder="Basic settings 最下方的 Your user ID（U 開頭，33 字）"></div>
-    <div class="frow"><span></span><div class="nrow" style="margin:0">
-      <button class="fbtn" type="button" id="lineSave">驗證並儲存</button>
-      <button class="fbtn ghost" type="button" id="lineClear">清除 LINE 設定</button>
-    </div></div>
-    <p class="nhint">記得用手機 LINE 加這個官方帳號為好友，否則收不到。免費方案每月訊息有上限，建議推播範圍選自選股。</p>
+    <div class="chan">
+      <div class="chan-head">
+        <div class="chan-ico line" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M21 11.5a8.4 8.4 0 0 1-9 8.4 9 9 0 0 1-3.4-.7L3 21l1.6-4.2A8 8 0 0 1 3 11.5 8.6 8.6 0 0 1 12 3a8.6 8.6 0 0 1 9 8.5z"/></svg></div>
+        <div class="chan-txt"><b>LINE 推播</b><span id="lineSum">用你自己的 LINE 官方帳號發送</span></div>
+        <span class="nstate" id="lineState">讀取中…</span>
+      </div>
+      <div class="chan-act" id="lineDone" hidden>
+        <button class="fbtn ghost sm" type="button" id="lineEdit">重新設定</button>
+        <button class="fbtn danger sm" type="button" id="lineClear">清除 LINE 設定</button>
+      </div>
 
-    <div class="nrow" style="margin-top:18px;border-top:1px solid var(--line);padding-top:16px">
-      <button class="fbtn ghost" type="button" id="nTest">傳送測試通知</button>
+      <ol class="steps" id="lineSetup">
+        <li>
+          <div class="st-h">填入官方帳號金鑰 <span class="st-ok" id="st1" hidden>✓ 已儲存</span></div>
+          <p class="nhint">在 <a href="https://developers.line.biz/console/" target="_blank" rel="noopener">LINE Developers</a> 你的 Messaging API channel 裡。</p>
+          <label class="fld"><span>Channel access token<small>Messaging API 分頁最下方（long-lived）</small></span>
+            <input class="finput" id="nToken" type="password" autocomplete="new-password" data-lpignore="true" data-1p-ignore></label>
+          <label class="fld"><span>Channel secret<small>Basic settings 分頁</small></span>
+            <input class="finput" id="nSecret" type="password" autocomplete="new-password" data-lpignore="true" data-1p-ignore></label>
+          <details class="adv"><summary>已經知道自己的 User ID？</summary>
+            <label class="fld"><span>User ID<small>U 開頭、33 字；填了就不用綁定</small></span>
+              <input class="finput" id="nUid" autocomplete="off" data-lpignore="true" data-1p-ignore></label>
+          </details>
+          <button class="fbtn sm" type="button" id="lineSave">驗證並儲存</button>
+        </li>
+        <li>
+          <div class="st-h">設定 Webhook</div>
+          <p class="nhint">Messaging API 分頁 → Webhook URL 貼上下面網址 → 按 Verify → 開啟 Use webhook。<br>另到 LINE Official Account Manager → 回應設定，關閉「自動回應訊息」。</p>
+          <div class="copybox"><code id="whUrl"></code><button class="fbtn ghost sm" type="button" id="whCopy">複製</button></div>
+        </li>
+        <li>
+          <div class="st-h">綁定你的 LINE</div>
+          <p class="nhint">手機 LINE 加官方帳號為好友，按下面按鈕，把 6 碼傳給官方帳號（10 分鐘內有效）。</p>
+          <div class="bindrow">
+            <button class="fbtn ghost sm" type="button" id="lineBind">產生綁定碼</button>
+            <div class="ncode" id="bindCode" hidden></div>
+            <span class="nhint" id="bindMsg" style="margin:0"></span>
+          </div>
+        </li>
+      </ol>
+    </div>
+
+    <div class="cardfoot">
       <span id="nTestMsg" class="nhint" style="margin:0"></span>
+      <button class="fbtn ghost sm" type="button" id="nTest">傳送測試通知</button>
+    </div>
+  </section>
+
+  <section class="fcard" id="daily">
+    <h2 class="h2row">每日潛力股 <span class="nstate" id="dailyState">讀取中…</span></h2>
+    <p class="nhint">把<a href="/picks">潛力股評分</a>的前幾名定時送給你。資料約在台股晚上 8 點、美股台灣時間早上 6 點半就緒；設定時間比這早，會送前一個交易日的名單。</p>
+
+    <div class="mkts">
+      <label class="mkt"><span class="sw"><input type="checkbox" id="dTw"><i></i></span><b>台股</b>
+        <span class="mkt-t">發送時間 <input type="time" id="dTwT" class="finput tin"></span></label>
+      <label class="mkt"><span class="sw"><input type="checkbox" id="dUs"><i></i></span><b>美股</b>
+        <span class="mkt-t">發送時間 <input type="time" id="dUsT" class="finput tin"></span></label>
+    </div>
+
+    <div class="opt"><span>頻率</span>
+      <div class="seg" id="dFreq"><button type="button" data-v="trading">每個交易日</button><button type="button" data-v="weekly">每週一次</button></div>
+    </div>
+    <div class="opt" id="dWdBox" hidden><span>星期</span>
+      <div class="seg" id="dWd"><button type="button" data-v="0">一</button><button type="button" data-v="1">二</button><button type="button" data-v="2">三</button><button type="button" data-v="3">四</button><button type="button" data-v="4">五</button><button type="button" data-v="5">六</button><button type="button" data-v="6">日</button></div>
+    </div>
+    <div class="opt"><span>檔數</span>
+      <div class="seg" id="dN"><button type="button" data-v="3">前 3 名</button><button type="button" data-v="5">前 5 名</button><button type="button" data-v="10">前 10 名</button></div>
+    </div>
+
+    <div class="cardfoot">
+      <span class="nhint" id="dEst" style="margin:0"></span>
+      <div class="nrow" style="margin:0">
+        <button class="fbtn ghost sm" type="button" id="dPreview">現在送一次看看</button>
+        <button class="fbtn sm" type="button" id="dSave">儲存設定</button>
+      </div>
+    </div>
+  </section>
+
+  <section class="fcard" id="quota">
+    <h2>LINE 每月額度</h2>
+    <div class="qwrap">
+      <div class="qnum"><b id="qUsed">—</b><span>/ <span id="qCapTxt">200</span> 則・<span id="qMonth"></span></span></div>
+      <div class="qbar"><i id="qBar"></i></div>
+      <p class="nhint" id="qHint">輕用量方案每月 200 則免費，到上限就停送 LINE（手機通知照常），下個月 1 日恢復。用量以 LINE 官方統計為準，所有提醒共用。</p>
+      <div class="nrow" style="margin:0">
+        <label class="nchk">每月最多送 <input type="number" id="qCap" class="finput nin" min="1" step="1"> 則</label>
+        <button class="fbtn ghost sm" type="button" id="qSave">儲存上限</button>
+      </div>
     </div>
   </section>
 </main>
 <style>
-.nsub { font-size: .9rem; margin: 20px 0 8px; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
-.nhint { font-size: .8rem; color: var(--text-dim); line-height: 1.7; margin: 0 0 10px; }
-.nrow { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; margin-bottom: 10px; }
-.nstate { font-size: .72rem; font-weight: 600; padding: 3px 9px; border-radius: 999px; border: 1px solid var(--card-bd2); color: var(--text-mid); }
-.nstate.ok { color: var(--green); border-color: rgba(18,209,142,.35); }
-.nstate.bad { color: var(--red); border-color: var(--red-line); }
-@media (max-width: 620px) { .frow { grid-template-columns: 1fr; } }
+.form-page [hidden] { display: none !important; }
+.nhint { font-size: .8rem; color: var(--text-dim); line-height: 1.7; margin: 0 0 12px; }
+.nhint a { color: var(--accent); }
+.nrow { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+.nstate { font-size: .72rem; font-weight: 600; padding: 3px 10px; border-radius: 999px; border: 1px solid var(--card-bd2); color: var(--text-mid); white-space: nowrap; }
+.nstate.ok { color: var(--green); border-color: rgba(18,209,142,.35); background: rgba(18,209,142,.07); }
+.nstate.bad { color: var(--red); border-color: var(--red-line); background: var(--red-soft); }
+.h2row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+
+.chan { border: 1px solid var(--card-bd); border-radius: 14px; padding: 14px 16px; margin-bottom: 12px; background: var(--surface-1); }
+.chan-head { display: flex; align-items: center; gap: 12px; }
+.chan-ico { width: 38px; height: 38px; border-radius: 11px; display: grid; place-items: center; flex-shrink: 0; }
+.chan-ico svg { width: 20px; height: 20px; fill: none; stroke: #fff; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.chan-ico.web { background: var(--accent-grad); }
+.chan-ico.line { background: #06c755; }
+.chan-txt { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.chan-txt b { font-size: .92rem; }
+.chan-txt span { font-size: .76rem; color: var(--text-dim); overflow-wrap: anywhere; }
+.chan-act { display: flex; gap: 8px; flex-wrap: wrap; margin: 12px 0 0 50px; }
+
+.steps { list-style: none; counter-reset: st; margin: 16px 0 2px; padding: 0; }
+.steps > li { counter-increment: st; position: relative; padding: 0 0 18px 50px; }
+.steps > li::before { content: counter(st); position: absolute; left: 6px; top: -1px; width: 26px; height: 26px; border-radius: 50%;
+  display: grid; place-items: center; font-size: .78rem; font-weight: 700; color: var(--accent); border: 1.5px solid var(--accent); background: var(--card-bg); }
+.steps > li:not(:last-child)::after { content: ''; position: absolute; left: 18.5px; top: 30px; bottom: 4px; width: 1.5px; background: var(--card-bd2); }
+.steps > li:last-child { padding-bottom: 4px; }
+.st-h { font-weight: 700; font-size: .88rem; margin: 2px 0 4px; display: flex; gap: 8px; align-items: center; }
+.st-ok { font-size: .72rem; color: var(--green); font-weight: 600; }
+.fld { display: block; margin-bottom: 10px; }
+.fld > span { display: flex; justify-content: space-between; gap: 8px; font-size: .8rem; color: var(--text-mid); margin-bottom: 5px; flex-wrap: wrap; }
+.fld small { color: var(--text-dim); font-size: .72rem; }
+.adv { margin: 0 0 12px; font-size: .78rem; color: var(--text-dim); }
+.adv summary { cursor: pointer; margin-bottom: 8px; }
+.copybox { display: flex; align-items: center; gap: 8px; border: 1px solid var(--card-bd2); border-radius: 11px; padding: 6px 6px 6px 12px; background: var(--card-bg); }
+.copybox code { flex: 1; min-width: 0; font-size: .8rem; overflow-x: auto; white-space: nowrap; }
+.bindrow { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.ncode { font: 700 1.5rem/1 ui-monospace, SFMono-Regular, Menlo, monospace; letter-spacing: .22em; padding: 8px 12px 8px 16px;
+  border-radius: 10px; background: var(--card-bg); border: 1px dashed var(--accent); color: var(--text); }
+.cardfoot { display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap;
+  border-top: 1px solid var(--line); margin-top: 14px; padding-top: 14px; }
+.cardfoot > :last-child { margin-left: auto; }
+
+.mkts { display: grid; gap: 8px; margin-bottom: 14px; }
+.mkt { display: flex; align-items: center; gap: 12px; border: 1px solid var(--card-bd); border-radius: 12px; padding: 10px 14px; background: var(--surface-1); cursor: pointer; }
+.mkt b { font-size: .92rem; }
+.mkt-t { margin-left: auto; display: flex; align-items: center; gap: 8px; font-size: .78rem; color: var(--text-dim); }
+.tin { width: 132px; height: 36px; }
+.sw { position: relative; width: 40px; height: 22px; flex-shrink: 0; }
+.sw input { position: absolute; opacity: 0; inset: 0; margin: 0; cursor: pointer; }
+.sw i { position: absolute; inset: 0; border-radius: 999px; background: var(--card-bd2); transition: background .15s; pointer-events: none; }
+.sw i::after { content: ''; position: absolute; top: 3px; left: 3px; width: 16px; height: 16px; border-radius: 50%; background: #fff; box-shadow: 0 1px 3px rgba(0,0,0,.25); transition: transform .15s; }
+.sw input:checked + i { background: var(--accent); }
+.sw input:checked + i::after { transform: translateX(18px); }
+.sw input:focus-visible + i { outline: 2px solid var(--accent); outline-offset: 2px; }
+.mkt:has(input:not(:checked)) .mkt-t { opacity: .45; }
+
+.opt { display: flex; align-items: center; gap: 14px; margin-bottom: 10px; flex-wrap: wrap; }
+.opt > span { width: 40px; font-size: .8rem; color: var(--text-mid); }
+.seg { display: inline-flex; border: 1px solid var(--card-bd2); border-radius: 10px; padding: 3px; background: var(--surface-1); flex-wrap: wrap; }
+.seg button { border: 0; background: none; color: var(--text-mid); font: inherit; font-size: .8rem; padding: 6px 12px; border-radius: 7px; cursor: pointer; min-width: 34px; }
+.seg button.on { background: var(--card-bg); color: var(--text); font-weight: 700; box-shadow: 0 1px 3px rgba(0,0,0,.12); }
+
+.qnum { display: flex; align-items: baseline; gap: 8px; margin-bottom: 8px; }
+.qnum b { font-size: 1.8rem; line-height: 1; }
+.qnum span { font-size: .82rem; color: var(--text-dim); }
+.qbar { height: 8px; border-radius: 999px; background: var(--card-bd2); overflow: hidden; margin-bottom: 12px; }
+.qbar i { display: block; height: 100%; width: 0; background: var(--green); border-radius: inherit; transition: width .3s; }
+.qbar i.warn { background: #f59e0b; }
+.qbar i.full { background: var(--red); }
+.nchk { display: inline-flex; align-items: center; gap: 8px; font-size: .82rem; color: var(--text-mid); }
+.nin { width: 90px; height: 32px; }
+@media (max-width: 620px) {
+  .chan-act { margin-left: 0; }
+  .steps > li { padding-left: 40px; }
+  .steps > li::before { left: 0; }
+  .steps > li:not(:last-child)::after { left: 12.5px; }
+  .mkt { flex-wrap: wrap; }
+  .mkt-t { width: 100%; margin-left: 52px; }
+}
 </style>
 <script>
 (function () {
   const $ = s => document.querySelector(s);
+  const WD = '一二三四五六日';
   function state(el, text, cls) { el.textContent = text; el.className = 'nstate' + (cls ? ' ' + cls : ''); }
   function showErr(msg) { $('#nErr').hidden = !msg; $('#nErr').textContent = msg || ''; }
   function busy(btn, on) { btn.disabled = on; btn.style.opacity = on ? .6 : ''; }
+  async function api(url, body) {
+    const r = await fetch(url, body === undefined ? {} : {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(body)});
+    const j = await r.json();
+    if (!r.ok) throw new Error(j.error || r.statusText);
+    return j;
+  }
+  // 分段按鈕：值存在 dataset.value
+  function seg(id, onChange) {
+    const el = $(id);
+    el.addEventListener('click', e => {
+      const b = e.target.closest('button'); if (!b) return;
+      setSeg(id, b.dataset.v); onChange && onChange();
+    });
+  }
+  function setSeg(id, v) {
+    const el = $(id); el.dataset.value = String(v);
+    el.querySelectorAll('button').forEach(b => b.classList.toggle('on', b.dataset.v === String(v)));
+  }
+
+  let lineEditing = false;
+  function lineView(st, cfg) {
+    const L = st.line, bound = L.configured;
+    $('#lineDone').hidden = !bound || lineEditing;
+    $('#lineSetup').hidden = bound && !lineEditing;
+    if (!bound) state($('#lineState'), L.pending ? '待綁定' : '未設定', L.pending ? 'bad' : '');
+    else if (L.ok === false) state($('#lineState'), '發送失敗', 'bad');
+    else state($('#lineState'), '已連線', 'ok');
+    $('#lineSum').textContent = bound
+      ? 'User ID ' + (cfg.line_user_id || '').slice(0, 9) + '…' + (L.ts ? '・上次發送 ' + L.ts.slice(5) : '')
+      : (L.pending ? '金鑰已儲存，完成下面第 2、3 步即可' : '用你自己的 LINE 官方帳號發送');
+    $('#st1').hidden = !L.pending && !bound;
+    $('#nToken').placeholder = (L.pending || bound) ? '已設定（貼上新的可更新）' : '貼上 Channel access token';
+    $('#nSecret').placeholder = cfg.has_secret ? '已設定（貼上新的可更新）' : '貼上 Channel secret（32 碼）';
+    quotaShow(st.line_usage);
+  }
 
   async function refresh() {
     const N = window.StockNotify;
-    let st;
-    try { st = await N.refreshBell(); } catch (e) {}
+    let st, cfg = {};
+    try { [st, cfg] = await Promise.all([N.refreshBell(), api('/api/tw/line/config')]); } catch (e) {}
     if (!st) return;
     showErr((st.errors || []).join('\n'));
-    const L = st.line;
-    if (!L.configured) state($('#lineState'), '未設定');
-    else if (L.ok === false) state($('#lineState'), '發送失敗', 'bad');
-    else state($('#lineState'), L.ts ? '正常・上次發送 ' + L.ts.slice(5) : '已設定', 'ok');
-    $('#nToken').placeholder = L.configured ? '已設定（貼上新的 token 可更新）' : $('#nToken').placeholder;
+    lineView(st, cfg);
+    $('#nUid').value = cfg.line_user_id || '';
 
     const sub = await N.deviceSub().catch(() => null);
     const on = !!sub && Notification.permission === 'granted';
     const n = st.web.devices || 0;
-    state($('#webState'), on ? '這台已開啟' + (n > 1 ? `・共 ${n} 台裝置` : '') : (n ? `其他 ${n} 台裝置已開啟` : '未開啟'), on ? 'ok' : '');
+    state($('#webState'), on ? '這台已開啟' + (n > 1 ? `・共 ${n} 台` : '') : (n ? `其他 ${n} 台已開啟` : '未開啟'), on ? 'ok' : '');
     $('#webOn').hidden = on; $('#webOff').hidden = !on;
     if (on) N.enableDevice().catch(() => {});      // 確保伺服器有這台的訂閱
     if (!N.supported) {
       $('#webHint').textContent = N.isIOS && !N.standalone
-        ? 'iPhone／iPad：先用 Safari 打開本站 → 分享 →「加入主畫面」，再從主畫面的 StockLens 圖示打開這一頁開啟通知（需 iOS 16.4 以上）。'
-        : '這個瀏覽器不支援推播通知，請改用 Chrome、Edge、Safari 或手機上安裝的 StockLens App。';
+        ? 'iPhone／iPad：先用 Safari 分享 →「加入主畫面」，再從主畫面圖示打開這頁開啟（iOS 16.4 以上）'
+        : '這個瀏覽器不支援推播，請改用 Chrome、Edge、Safari 或安裝的 StockLens App';
       $('#webOn').hidden = true;
     }
   }
+
+  function quotaShow(u) {
+    $('#quota').hidden = !u;
+    if (!u) return;
+    const pct = Math.min(100, u.used / u.cap * 100);
+    $('#qUsed').textContent = u.used; $('#qCapTxt').textContent = u.cap; $('#qMonth').textContent = u.month.replace('-', ' 年 ') + ' 月';
+    $('#qBar').style.width = pct + '%';
+    $('#qBar').className = pct >= 100 ? 'full' : pct >= 85 ? 'warn' : '';
+    if (document.activeElement !== $('#qCap')) $('#qCap').value = u.cap;
+  }
+
+  function dailyEst() {
+    const weekly = $('#dFreq').dataset.value === 'weekly';
+    const n = (+$('#dTw').checked) + (+$('#dUs').checked);
+    $('#dWdBox').hidden = !weekly;
+    $('#dEst').textContent = n ? `預估每月約 ${Math.round((weekly ? 4.3 : 21) * n)} 則` + (weekly ? '' : '（假日沒有新資料不送）') : '台股、美股都沒開';
+  }
+  function dailyShow(c) {
+    $('#dTw').checked = c.tw; $('#dUs').checked = c.us;
+    $('#dTwT').value = c.time.tw; $('#dUsT').value = c.time.us;
+    setSeg('#dFreq', c.freq); setSeg('#dWd', c.weekday); setSeg('#dN', c.n);
+    dailyEst();
+    const on = [c.tw && '台股 ' + c.time.tw, c.us && '美股 ' + c.time.us].filter(Boolean);
+    const when = c.freq === 'weekly' ? '每週' + WD[c.weekday] : '每個交易日';
+    if (!on.length) state($('#dailyState'), '未開啟');
+    else if (!c.ready) state($('#dailyState'), '尚未設定通知管道', 'bad');
+    else state($('#dailyState'), when + ' ' + on.join('、'), 'ok');
+  }
+  const loadDaily = () => api('/api/picks/daily').then(dailyShow).catch(() => {});
 
   function wait() { return new Promise(r => { if (window.StockNotify) r(); else addEventListener('load', r); }); }
 
@@ -106,20 +321,23 @@
       try { await N.disableDevice(); await refresh(); } catch (err) { showErr(err.message); }
       busy(e.target, false);
     };
+    $('#lineEdit').onclick = () => { lineEditing = true; refresh(); };
     $('#lineSave').onclick = async e => {
-      const uid = $('#nUid').value.trim(), tok = $('#nToken').value.trim();
+      const uid = $('#nUid').value.trim(), tok = $('#nToken').value.trim(), sec = $('#nSecret').value.trim();
       busy(e.target, true);
       try {
-        const cur = await fetch('/api/tw/line/config').then(r => r.json());
-        await N.saveLine(tok || cur.line_token || '', uid);
-        $('#nToken').value = ''; showErr(''); $('#nTestMsg').textContent = 'LINE 金鑰驗證成功，已儲存';
-        await refresh();
+        const cur = await api('/api/tw/line/config');
+        await N.saveLine(tok || cur.line_token || '', uid, sec || undefined);
+        $('#nToken').value = ''; $('#nSecret').value = ''; showErr('');
+        if (uid) lineEditing = false;
+        $('#nTestMsg').textContent = uid ? 'LINE 設定完成' : '金鑰驗證成功，接著設定 Webhook 並綁定';
+        await refresh(); loadDaily();
       } catch (err) { showErr(err.message); }
       busy(e.target, false);
     };
     $('#lineClear').onclick = async () => {
       if (!confirm('確定清除 LINE 設定？之後只會送手機／瀏覽器通知。')) return;
-      try { await N.saveLine('', ''); $('#nUid').value = ''; await refresh(); } catch (err) { showErr(err.message); }
+      try { await N.saveLine('', '', ''); lineEditing = false; await refresh(); loadDaily(); } catch (err) { showErr(err.message); }
     };
     $('#nTest').onclick = async e => {
       busy(e.target, true); $('#nTestMsg').textContent = '傳送中…';
@@ -129,7 +347,61 @@
       } catch (err) { $('#nTestMsg').textContent = ''; showErr(err.message); }
       busy(e.target, false); refresh();
     };
-    fetch('/api/tw/line/config').then(r => r.json()).then(c => { $('#nUid').value = c.line_user_id || ''; }).catch(() => {});
+    $('#whUrl').textContent = location.origin + '/api/line/webhook';
+    $('#whCopy').onclick = () => navigator.clipboard.writeText($('#whUrl').textContent)
+      .then(() => { $('#whCopy').textContent = '已複製'; setTimeout(() => { $('#whCopy').textContent = '複製'; }, 1500); });
+    let bindTimer = null;
+    $('#lineBind').onclick = async e => {
+      busy(e.target, true); showErr('');
+      try {
+        const before = (await api('/api/tw/line/config')).line_user_id || '';
+        const r = await N.lineBindCode();
+        $('#bindCode').textContent = r.code; $('#bindCode').hidden = false;
+        $('#bindMsg').textContent = '等待你傳送…';
+        e.target.textContent = '重新產生';
+        clearInterval(bindTimer);
+        const until = Date.now() + r.ttl * 1000;
+        bindTimer = setInterval(async () => {
+          const c = await api('/api/tw/line/config').catch(() => ({}));
+          if (c.line_user_id && c.line_user_id !== before) {
+            clearInterval(bindTimer); $('#bindCode').hidden = true; $('#bindMsg').textContent = '';
+            lineEditing = false; $('#nTestMsg').textContent = '✅ LINE 綁定成功'; refresh(); loadDaily();
+          } else if (Date.now() > until) {
+            clearInterval(bindTimer); $('#bindCode').hidden = true; $('#bindMsg').textContent = '綁定碼已過期，請重新產生';
+          }
+        }, 3000);
+      } catch (err) { showErr(err.message); }
+      busy(e.target, false);
+    };
+
+    seg('#dFreq', dailyEst); seg('#dWd'); seg('#dN');
+    ['#dTw', '#dUs'].forEach(s => $(s).addEventListener('change', dailyEst));
+    $('#dSave').onclick = async e => {
+      busy(e.target, true);
+      try {
+        dailyShow(await api('/api/picks/daily', {tw: $('#dTw').checked, us: $('#dUs').checked,
+          n: +$('#dN').dataset.value, freq: $('#dFreq').dataset.value, weekday: +$('#dWd').dataset.value,
+          time: {tw: $('#dTwT').value, us: $('#dUsT').value}}));
+        showErr(''); $('#dEst').textContent = '✅ 已儲存';
+        setTimeout(dailyEst, 2000);
+      } catch (err) { showErr(err.message); }
+      busy(e.target, false);
+    };
+    $('#dPreview').onclick = async e => {
+      busy(e.target, true); $('#dEst').textContent = '傳送中…';
+      try {
+        const j = await api('/api/picks/daily/preview', {});
+        $('#dEst').textContent = '已送出，請檢查手機' + (j.warning ? '（部分失敗：' + j.warning + '）' : '');
+      } catch (err) { dailyEst(); showErr(err.message); }
+      busy(e.target, false); refresh();
+    };
+    $('#qSave').onclick = async e => {
+      busy(e.target, true);
+      try { const u = await api('/api/notify/line/cap', {cap: parseInt($('#qCap').value, 10)}); $('#qCap').blur(); quotaShow(u); showErr(''); }
+      catch (err) { showErr(err.message); }
+      busy(e.target, false);
+    };
+    loadDaily();
     refresh();
   });
 })();

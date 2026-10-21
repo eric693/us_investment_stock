@@ -29,7 +29,9 @@ import requests
 import yfinance as yf
 from flask import Blueprint, jsonify, request, render_template
 
+import notify
 import tw_board
+import userdata
 
 bp = Blueprint('picks', __name__)
 
@@ -554,6 +556,15 @@ def get_picks(market):
     return res
 
 
+def _cached(market):
+    """只讀快取檔，不觸發重算。"""
+    try:
+        with open(CACHE_FILE.format(market), encoding='utf-8') as fh:
+            return json.load(fh)
+    except (OSError, ValueError):
+        return None
+
+
 def _clean(o):
     """NaN / numpy 數值 → JSON 可用的值。"""
     if isinstance(o, dict):
@@ -596,6 +607,101 @@ def _sync_loop():
 _status = {}
 
 
+# ── 每日推播 ──────────────────────────────────────────────────────────
+DAILY_KEY = 'picks_daily'              # 帳號設定，見 daily_cfg
+DAILY_SENT_KEY = 'picks_daily_sent'    # {'tw': {'end': 已推播的資料日期, 'day': 推播那天}, 'us': ...}
+DAILY_N = (3, 5, 10)
+DAILY_FREQ = ('trading', 'weekly')     # 每個交易日（有新資料才送）／每週一次
+DAILY_TIME = {'tw': '20:30', 'us': '07:30'}   # 台北時間；台股約 20:00、美股約 06:30 資料就緒
+PUSH_LOCK_FILE = os.path.join(BASE_DIR, '.picks_push.lock')
+MARKET_NAME = {'tw': '台股', 'us': '美股'}
+SITE_URL = os.environ.get('NOTIFY_SITE_URL', notify.VAPID_SUB)   # LINE 訊息裡的連結要完整網址
+
+
+def _hhmm(v, default):
+    return v if isinstance(v, str) and re.fullmatch(r'([01]\d|2[0-3]):[0-5]\d', v) else default
+
+
+def daily_cfg(user):
+    c = userdata.get(user, DAILY_KEY) or {}
+    t = c.get('time') or {}
+    wd = c.get('weekday')
+    return {'tw': bool(c.get('tw')), 'us': bool(c.get('us')),
+            'n': c.get('n') if c.get('n') in DAILY_N else 5,
+            'freq': c.get('freq') if c.get('freq') in DAILY_FREQ else 'trading',
+            'weekday': wd if isinstance(wd, int) and 0 <= wd <= 6 else 0,
+            'time': {m: _hhmm(t.get(m), DAILY_TIME[m]) for m in ('tw', 'us')}}
+
+
+def _sent(user):
+    """舊格式只存資料日期字串，一併轉成 {'end', 'day'}。"""
+    raw = userdata.get(user, DAILY_SENT_KEY) or {}
+    return {m: (v if isinstance(v, dict) else {'end': v, 'day': ''}) for m, v in raw.items()}
+
+
+def daily_text(market, res, n):
+    lines = [f"【StockLens {MARKET_NAME[market]}潛力股】{res['end']} 前 {n} 名"]
+    for r in res['stocks'][:n]:
+        chg = r.get('chg_pct')
+        chg = '' if chg is None else f"（{'+' if chg > 0 else ''}{chg}%）"
+        lines.append(f"\n{r['rank']}. {r['code']} {r['name']}　{r['score']} 分\n"
+                     f"   收 {r['close']}{chg}　停損 {r['stop']}")
+        if r.get('why'):
+            lines.append('   ' + '、'.join(r['why'][:2]))
+        if r.get('risk'):
+            lines.append('   ⚠ ' + '、'.join(r['risk'][:1]))
+    lines.append(f"\n多因子評分，僅供參考，非投資建議。完整名單：{SITE_URL}/picks?market={market}")
+    return '\n'.join(lines)
+
+
+def run_schedule(now):
+    """到了各帳號設定的時間就送（每個市場一天最多一則）。
+    每個交易日：有新一天的評分才送，遇假日或資料還沒好就等，資料到了當天補送；
+    每週一次：在指定星期送當時最新的名單。"""
+    today, hm = now.strftime('%Y-%m-%d'), now.strftime('%H:%M')
+    latest = {}
+    for user, _ in userdata.users_with(DAILY_KEY):
+        cfg = daily_cfg(user)
+        sent = _sent(user)
+        for m in ('tw', 'us'):
+            last = sent.get(m, {})
+            if not cfg[m] or hm < cfg['time'][m] or last.get('day') == today:
+                continue
+            if cfg['freq'] == 'weekly' and now.weekday() != cfg['weekday']:
+                continue
+            if m not in latest:
+                latest[m] = _cached(m)
+            res = latest[m]
+            if not res or not res.get('stocks'):
+                continue
+            if cfg['freq'] == 'trading' and res['end'] == last.get('end'):
+                continue
+            if not notify.ready(user):
+                continue
+            # 先記下再送：送失敗（額度用完、token 失效）不會每分鐘重送，錯誤原因由 notify 顯示在畫面上
+            sent[m] = {'end': res['end'], 'day': today}
+            userdata.put(user, DAILY_SENT_KEY, sent)
+            ok, err = notify.send(user, daily_text(m, res, cfg['n']), url=f'/picks?market={m}')
+            if not ok:
+                print(f'[picks] daily {m} {user}: {err}')
+
+
+def _push_loop():
+    """只有一個 worker 會拿到鎖：每分鐘看一次有沒有到推播時間。"""
+    lock = open(PUSH_LOCK_FILE, 'w')
+    try:
+        fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except OSError:
+        lock.close()
+        return
+    while True:
+        try:
+            run_schedule(tw_board._now())
+        except Exception as e:
+            print(f'[picks] schedule: {e}')
+        time.sleep(60)
+
+
 # ── API ───────────────────────────────────────────────────────────────
 @bp.route('/api/picks/<market>')
 def api_picks(market):
@@ -605,6 +711,49 @@ def api_picks(market):
     if not res:
         return jsonify(error='資料尚未準備好（第一次啟動需要幾分鐘下載歷史資料），請稍後再試'), 503
     return jsonify(res)
+
+
+@bp.route('/api/picks/daily', methods=['GET', 'POST'])
+def api_daily():
+    user = userdata.current()
+    if request.method == 'POST':
+        b = request.get_json(silent=True) or {}
+        old = daily_cfg(user)
+        t = b.get('time') if isinstance(b.get('time'), dict) else {}
+        wd = b.get('weekday')
+        cfg = {'tw': bool(b.get('tw', old['tw'])), 'us': bool(b.get('us', old['us'])),
+               'n': b.get('n') if b.get('n') in DAILY_N else old['n'],
+               'freq': b.get('freq') if b.get('freq') in DAILY_FREQ else old['freq'],
+               'weekday': wd if isinstance(wd, int) and 0 <= wd <= 6 else old['weekday'],
+               'time': {m: _hhmm(t.get(m), old['time'][m]) for m in ('tw', 'us')}}
+        userdata.put(user, DAILY_KEY, cfg)
+        # 剛開啟的市場不補送開啟前就有的名單（每個交易日模式），下一次資料更新才開始
+        sent = _sent(user)
+        for m in ('tw', 'us'):
+            if cfg[m] and not old[m]:
+                cached = _cached(m)
+                if cached:
+                    sent[m] = {'end': cached['end'], 'day': sent.get(m, {}).get('day', '')}
+        userdata.put(user, DAILY_SENT_KEY, sent)
+    return jsonify(dict(daily_cfg(user), ready=notify.ready(user), line=notify.line_usage(user)))
+
+
+@bp.route('/api/picks/daily/preview', methods=['POST'])
+def api_daily_preview():
+    """立刻把目前的名單送一次（試看格式用），不影響每日推播。"""
+    user = userdata.current()
+    if not notify.ready(user):
+        return jsonify(error='還沒有設定任何通知管道（LINE 或這台裝置的通知）'), 400
+    cfg = daily_cfg(user)
+    markets = [m for m in ('tw', 'us') if cfg[m]] or ['tw']
+    texts = []
+    for m in markets:
+        res = get_picks(m)
+        if not res:
+            return jsonify(error='資料尚未準備好，請稍後再試'), 503
+        texts.append(daily_text(m, res, cfg['n']))
+    ok, err = notify.send(user, '\n\n'.join(texts), url=f'/picks?market={markets[0]}')
+    return (jsonify(ok=True, warning=err), 200) if ok else (jsonify(error=err), 400)
 
 
 @bp.route('/api/picks/<market>/stock/<code>')
@@ -633,3 +782,4 @@ def init(app, login_required):
     app.register_blueprint(bp)
     if not os.environ.get('TW_BOARD_NO_BG'):
         threading.Thread(target=_sync_loop, daemon=True).start()
+        threading.Thread(target=_push_loop, daemon=True).start()

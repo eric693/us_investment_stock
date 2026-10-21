@@ -28,7 +28,12 @@
     isIOS: isIOS, standalone: standalone, supported: supported,
     status: function () { return json('/api/notify/status'); },
     test: function () { return post('/api/notify/test'); },
-    saveLine: function (token, uid) { return post('/api/tw/line/config', {line_token: token, line_user_id: uid}); },
+    saveLine: function (token, uid, secret) {
+      var b = {line_token: token, line_user_id: uid};
+      if (secret !== undefined) b.line_secret = secret;
+      return post('/api/tw/line/config', b);
+    },
+    lineBindCode: function () { return post('/api/notify/line/bind', {}); },
 
     // 這台裝置目前的訂閱（沒有就是 null）
     deviceSub: function () {
