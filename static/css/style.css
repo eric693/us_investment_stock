@@ -431,9 +431,10 @@ a:hover { text-decoration: underline; }
 /* ── Chart ──────────────────────────────────────────────────────── */
 .chart-card { min-width: 0; display: flex; flex-direction: column; }
 .chart-top {
-  display: flex; justify-content: space-between;
+  display: flex; justify-content: space-between; flex-wrap: wrap; gap: 6px;
   align-items: center; margin-bottom: 8px;
 }
+.chart-top > * { min-width: 0; max-width: 100%; }
 .ma-pills { display: flex; gap: 5px; flex-wrap: wrap; }
 .pill {
   padding: 2px 9px; border-radius: 20px;
@@ -445,7 +446,7 @@ a:hover { text-decoration: underline; }
 .pill.rsi  { background: rgba(240,180,41,.14); color: #f0b429; border: 1px solid #f0b42930; }
 .pill.bb   { background: rgba(157,215,100,.14); color: #90d45a; border: 1px solid #90d45a30; }
 
-.period-tabs { display: flex; gap: 4px; }
+.period-tabs { display: flex; gap: 4px; flex-wrap: wrap; }
 .ptab {
   padding: 3px 10px; border-radius: 5px; cursor: pointer; border: none;
   background: var(--surface-2); color: var(--text-dim);
@@ -828,6 +829,8 @@ a:hover { text-decoration: underline; }
 }
 
 /* ── Responsive ───────────────────────────────────────────────────── */
+/* 格線裡的卡片預設 min-width:auto，內容（表格、長字串）會把格子撐出畫面 */
+.two-col > *, .three-col > *, .four-col > *, .iv-layout > *, .ft-layout > * { min-width: 0; }
 @media (max-width: 1200px) {
   .two-col   { grid-template-columns: 1fr; }
   .four-col  { grid-template-columns: repeat(2,1fr); }
@@ -848,7 +851,8 @@ a:hover { text-decoration: underline; }
 }
 @media (max-width: 600px) {
   .three-col  { grid-template-columns: 1fr; }
-  .four-col   { grid-template-columns: 1fr 1fr; }
+  .four-col   { grid-template-columns: 1fr; }
+  .iv-layout, .ft-layout { grid-template-columns: 1fr; gap: 16px; }
   .perf-row   { gap: 6px; }
   .sample-grid { grid-template-columns: 1fr 1fr; }
   .feature-row { grid-template-columns: 1fr 1fr; }

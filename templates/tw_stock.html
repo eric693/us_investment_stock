@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>台股投資分析儀表板</title>
 <script src="https://cdn.plot.ly/plotly-2.26.0.min.js"></script>
-<link rel="stylesheet" href="/static/css/style.css?v=6">
+<link rel="stylesheet" href="/static/css/style.css?v=8">
 {% include "_head.html" %}
 <script src="/static/js/pickcard.js?v=1" defer></script>
 <style>
@@ -454,16 +454,12 @@
       <!-- Row 5: LINE Settings -->
       <div id="lineSettingsWrap" class="hidden">
         <div class="line-settings-box">
-          <div class="line-settings-title">LINE 通知設定（選填）</div>
-          <div class="line-token-row">
-            <input id="lineTokenInput" class="line-token-input" type="password" placeholder="Channel Access Token...">
-            <input id="lineUserIdInput" class="line-token-input" type="text" placeholder="LINE User ID (Uxxxxxxxxx)..." style="margin-top:6px">
-            <div style="display:flex;gap:8px;margin-top:4px">
-              <button class="line-save-btn" onclick="saveLineToken()">儲存設定</button>
-              <button class="line-save-btn" style="background:rgba(0,214,143,.15);border-color:rgba(0,214,143,.4);color:#00d68f" onclick="testLineConnection()">測試傳送</button>
-            </div>
+          <div class="line-settings-title">通知（LINE／手機）</div>
+          <div class="line-token-row" style="flex-wrap:wrap">
+            <span id="lineStatusMsg" class="line-status" style="margin:0;flex:1">讀取中…</span>
+            <a class="line-save-btn" href="/account#notify" style="text-decoration:none">通知設定</a>
+            <button class="line-save-btn" style="background:rgba(0,214,143,.15);border-color:rgba(0,214,143,.4);color:#00d68f" onclick="testLineConnection()">測試傳送</button>
           </div>
-          <div id="lineStatusMsg" class="line-status"></div>
         </div>
       </div>
     </div>
@@ -541,7 +537,7 @@
     <div class="card chart-card">
       <div class="chart-top" style="position:relative">
         <div class="ma-pills" id="maPills"></div>
-        <div style="display:flex;align-items:center;gap:6px">
+        <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">
           <div class="period-tabs">
             <button class="ptab" data-period="1D" onclick="changePeriod('1D')">1D</button>
             <button class="ptab" data-period="5D" onclick="changePeriod('5D')">5D</button>
@@ -946,7 +942,7 @@ function applyMASettings() {
 document.addEventListener('DOMContentLoaded', () => {
   $('tickerInput').addEventListener('keypress', e => { if (e.key === 'Enter') searchStock(); });
   $('heroInput').addEventListener('keypress', e => { if (e.key === 'Enter') searchFromHero(); });
-  _loadLineConfigFromServer();
+  _loadNotifyStatus();
   loadMarket();
   renderWatchlist();
   updateAlertBadge();
@@ -1212,11 +1208,7 @@ async function renderMonitorPanel(d) {
   _monitorProfile = saved.profile || 'aggressive';
   _applyModeUI();
   _applyProfileUI();
-  const tok = _getLineToken();
-  const uid = _getLineUserId();
-  if (tok) { $('lineTokenInput').value = tok; }
-  if (uid) { $('lineUserIdInput').value = uid; }
-  if (tok || uid) { setHTML('lineStatusMsg', '<span style="color:var(--green)">設定已儲存</span>'); }
+  _loadNotifyStatus();
   // Restore position inputs
   const pos = getPosition(d.ticker);
   if (pos.avgPrice) $('avgPriceInput').value = pos.avgPrice;
@@ -1248,8 +1240,6 @@ async function _serverRegister() {
       body: JSON.stringify({
         ticker:       currentData.ticker,
         profile:      _monitorProfile,
-        line_token:   _getLineToken(),
-        line_user_id: _getLineUserId(),
       }),
     });
     _setServerLabel(true);
@@ -1332,7 +1322,7 @@ async function manualScan() {
     _setAutoLabel(true, new Date().toLocaleTimeString('zh-TW',{hour:'2-digit',minute:'2-digit'}) + ' 掃描');
     // Auto-notify from browser only when server monitoring is NOT active (avoid duplicates)
     const serverActive = !$('monitorServerLabel').classList.contains('hidden');
-    if (sig.action === 'BUY' && _getLineToken() && _getLineUserId() && !serverActive) {
+    if (sig.action === 'BUY' && _notifyReady && !serverActive) {
       _autoLineNotify(sig);
     }
   } catch(e) {
@@ -1395,7 +1385,7 @@ function _renderSignalCard(sig) {
         <div><strong>移動停利/停損：</strong>${sig.trailingStop || '止損 ' + sig.stopLoss + ' 元'}</div>
       </div>` : ''}
       <div class="sig-actions">
-        <button class="sig-line-btn" onclick="sendSignalToLine()">發送 LINE 通知</button>
+        <button class="sig-line-btn" onclick="sendSignalToLine()">發送通知</button>
         <div class="sig-auto-badge">
           <span class="rt-dot ${_monitorMode === 'auto' ? '' : 'rt-off'}"></span>
           ${_monitorMode === 'auto' ? '自動掃描每 5 分鐘' : '手動掃描模式'}
@@ -1406,51 +1396,41 @@ function _renderSignalCard(sig) {
 
 function sendSignalToLine() {
   if (!_lastSignal) {
-    alert('請先按「立即掃描」取得訊號，再發送 LINE 通知。'); return;
+    alert('請先按「立即掃描」取得訊號，再發送通知。'); return;
   }
-  const tok = _getLineToken();
-  const uid = _getLineUserId();
-  if (!tok || !uid) {
-    alert('請先在下方設定 LINE Channel Access Token 與 User ID 並按儲存。'); return;
+  if (!_notifyReady) {
+    alert('還沒設定通知管道，請到「帳號設定 → 通知管道」設定 LINE 或手機通知。'); return;
   }
-  _sendLine(tok, uid, _formatLineMsg(_lastSignal));
+  _sendLine(_formatLineMsg(_lastSignal));
 }
 
 async function testLineConnection() {
-  const tok = ($('lineTokenInput').value || '').trim();
-  const uid = ($('lineUserIdInput').value || '').trim();
-  if (!tok || !uid) {
-    setHTML('lineStatusMsg', '<span style="color:var(--red)">請先填寫 Token 和 User ID</span>'); return;
-  }
   setHTML('lineStatusMsg', '<span style="color:var(--text-dim)">傳送中...</span>');
   const ticker = currentData ? (currentData.displayTicker || currentData.ticker.replace('.TW','').replace('.TWO','')) : '測試';
-  await _sendLine(tok, uid, `【連線測試】\n台股智慧盯盤系統連線成功！\n標的：${ticker}\n時間：${new Date().toLocaleString('zh-TW')}`);
+  await _sendLine(`【連線測試】\n台股智慧盯盤系統連線成功！\n標的：${ticker}\n時間：${new Date().toLocaleString('zh-TW')}`);
 }
 
 async function _autoLineNotify(sig) {
-  const tok = _getLineToken();
-  const uid = _getLineUserId();
-  if (!tok || !uid) return;
-  await _sendLine(tok, uid, _formatLineMsg(sig));
+  await _sendLine(_formatLineMsg(sig));
 }
 
-async function _sendLine(token, user_id, message) {
+// 由伺服器用帳號的通知設定送出（LINE 金鑰不經過瀏覽器）
+async function _sendLine(message) {
+  const esc = t => String(t).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
   try {
     const r = await fetch('/api/tw/notify/line', {
       method: 'POST',
       headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({ token, user_id, message }),
+      body: JSON.stringify({ message }),
     });
     const d = await r.json();
-    const el = $('lineStatusMsg');
     if (d.ok) {
-      if (el) setHTML('lineStatusMsg', '<span style="color:var(--green)">LINE 通知已發送</span>');
+      setHTML('lineStatusMsg', '<span style="color:var(--green)">通知已發送</span>' + (d.warning ? `<span style="color:var(--red)">（部分失敗：${esc(d.warning)}）</span>` : ''));
     } else {
-      if (el) setHTML('lineStatusMsg', `<span style="color:var(--red)">發送失敗：${d.msg || d.error || '未知錯誤'}</span>`);
+      setHTML('lineStatusMsg', `<span style="color:var(--red)">發送失敗：${esc(d.error || '未知錯誤')}</span>`);
     }
   } catch(e) {
-    const el = $('lineStatusMsg');
-    if (el) setHTML('lineStatusMsg', `<span style="color:var(--red)">網路錯誤：${e.message}</span>`);
+    setHTML('lineStatusMsg', `<span style="color:var(--red)">網路錯誤：${esc(e.message)}</span>`);
   }
 }
 
@@ -1466,39 +1446,15 @@ function _formatLineMsg(sig) {
 —— 僅供參考，投資有風險 ——`;
 }
 
-async function saveLineToken() {
-  const tok = ($('lineTokenInput').value || '').trim();
-  const uid = ($('lineUserIdInput').value || '').trim();
-  // 伺服器會先向 LINE 驗證金鑰，驗證不過就不儲存
-  let err = '';
+let _notifyReady = false;
+async function _loadNotifyStatus() {
   try {
-    const r = await fetch('/api/tw/line/config', {
-      method: 'POST', headers: {'Content-Type':'application/json'},
-      body: JSON.stringify({ line_token: tok, line_user_id: uid }),
-    });
-    if (!r.ok) err = (await r.json()).error || '儲存失敗';
-  } catch(e) { err = '連不到伺服器，請稍後再試'; }
-  if (err) {
-    setHTML('lineStatusMsg', '<span style="color:var(--red)">' + err.replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])) + '</span>');
-    return;
-  }
-  UserStore.setItem('line_channel_token', tok);
-  UserStore.setItem('line_user_id', uid);
-  if (_monitorMode === 'auto') await _serverRegister();
-  setHTML('lineStatusMsg', (tok && uid)
-    ? '<span style="color:var(--green)">設定已儲存（伺服器同步完成）</span>'
-    : '<span style="color:var(--text-dim)">設定已清除</span>');
-}
-
-function _getLineToken() { return UserStore.getItem('line_channel_token') || ''; }
-function _getLineUserId() { return UserStore.getItem('line_user_id') || ''; }
-
-async function _loadLineConfigFromServer() {
-  try {
-    const r = await fetch('/api/tw/line/config');
-    const d = await r.json();
-    if (d.line_token)   { UserStore.setItem('line_channel_token', d.line_token); }
-    if (d.line_user_id) { UserStore.setItem('line_user_id', d.line_user_id); }
+    const st = await fetch('/api/notify/status').then(r => r.json());
+    const ch = [st.line && st.line.configured && 'LINE 已連線', st.web && st.web.devices && `手機通知 ${st.web.devices} 台`].filter(Boolean);
+    _notifyReady = ch.length > 0;
+    setHTML('lineStatusMsg', _notifyReady
+      ? `<span style="color:var(--green)">${ch.join('・')}</span>`
+      : '<span style="color:var(--red)">還沒設定通知管道</span>');
   } catch(e) {}
 }
 

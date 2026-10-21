@@ -18,8 +18,7 @@ SYSTEM = '__system__'
 
 # 原本存在瀏覽器 localStorage 的個人資料；改由伺服器依帳號保存
 BROWSER_KEYS = ('pflio_v2', 'wl', 'wl_tw', 'positions_tw', 'monitorList', 'monitor_settings',
-                'priceAlerts', 'priceAlerts_tw', 'line_channel_token', 'line_user_id',
-                'tw_ma_settings')
+                'priceAlerts', 'priceAlerts_tw', 'tw_ma_settings')   # LINE 金鑰只存在伺服器端 'line'
 MAX_VALUE = 512 * 1024
 
 bp = Blueprint('userdata', __name__)

@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>台股看盤</title>
-<link rel="stylesheet" href="/static/css/style.css?v=6">
+<link rel="stylesheet" href="/static/css/style.css?v=8">
 {% include "_head.html" %}
 <style>
 .wrap { max-width: 1680px; margin: 0 auto; padding: 22px 22px 40px; }
@@ -424,9 +424,8 @@ table.q tbody tr:hover td:first-child { box-shadow: inset 3px 0 0 var(--accent);
           <button class="btn2" id="alertSave" style="height:34px">儲存設定</button>
         </div>
         <div class="row">
-          <input class="txt-in" id="lineToken" type="password" name="line-channel-token" placeholder="LINE Channel access token" autocomplete="new-password" data-lpignore="true" data-1p-ignore>
-          <input class="txt-in" id="lineUser" name="line-user-id" placeholder="LINE User ID（U 開頭）" autocomplete="off" data-lpignore="true" data-1p-ignore>
-          <button class="btn2" id="lineSave" style="height:34px">儲存 LINE</button>
+          <span id="chanSum" style="color:var(--text-mid)">通知管道讀取中…</span>
+          <a class="btn2" href="/account#notify" style="height:34px;display:inline-flex;align-items:center;text-decoration:none">通知設定</a>
           <button class="btn2" id="lineTest" style="height:34px">傳送測試</button>
         </div>
         <div class="row" id="alertErr" style="color:var(--red)"></div>
@@ -1072,9 +1071,10 @@ async function loadAlerts() {
     $('#alertErr').textContent = a.last_error || '';
     const log = (a.log || []).slice(-15).reverse();
     $('#alertLog').innerHTML = log.length ? log.map(x => `<div><span class="t">${esc(x.ts.slice(5))}</span><span class="side ${x.side}">${x.side === 'buy' ? 'BUY' : 'SELL'}</span><span>${esc(x.code)} ${esc(x.name)}</span><span class="num">${x.price}</span>${x.pushed ? '' : '<span style="color:var(--red)">未送出</span>'}</div>`).join('') : '<span style="color:var(--text-dim)">尚無紀錄</span>';
-    const lc = await api('/api/tw/line/config');
-    $('#lineUser').value = lc.line_user_id || '';
-    $('#lineToken').placeholder = lc.line_token ? '已設定（輸入新值可更新）' : 'LINE Channel access token';
+    const st = await api('/api/notify/status');
+    const ch = [st.line.configured && 'LINE 已連線', st.web.devices && `手機通知 ${st.web.devices} 台`].filter(Boolean);
+    $('#chanSum').textContent = ch.length ? '通知管道：' + ch.join('・') : '還沒設定通知管道';
+    $('#chanSum').style.color = ch.length ? 'var(--text-mid)' : 'var(--red)';
   } catch (e) {}
 }
 $('#alertSave').onclick = async () => {
@@ -1085,15 +1085,6 @@ $('#alertSave').onclick = async () => {
       params: {k_low: +$('#kLow').value, k_high: +$('#kHigh').value, ma_band: +$('#maBand').value, kd_n: +$('#rtKdN').value}})});
     loadAlerts();
   } catch (e) { alert(e.message); }
-};
-$('#lineSave').onclick = async () => {
-  try {
-    const lc = await api('/api/tw/line/config');
-    await api('/api/tw/line/config', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({
-      line_token: $('#lineToken').value.trim() || lc.line_token, line_user_id: $('#lineUser').value.trim()})});
-    $('#lineToken').value = ''; $('#alertErr').textContent = ''; loadAlerts();
-    alert('LINE 金鑰驗證成功，已儲存');
-  } catch (e) { $('#alertErr').textContent = e.message; }
 };
 $('#lineTest').onclick = async () => {
   try { await api('/api/tw/board/alerts/test', {method: 'POST'}); alert('已傳送測試訊息，請檢查 LINE'); } catch (e) { alert(e.message); }

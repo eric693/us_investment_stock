@@ -372,3 +372,21 @@ def test_daily_bars_prefer_official_and_add_live_bar(board, monkeypatch):
     assert bars[1]['close'] == series(board, code, 'close')[0]            # 重疊期間用官方數字
     assert bars[-1] == dict(time=today, day=today, open=51.0, high=56.0, low=50.5, close=55.0, volume=1234)
     assert src == 'official+realtime'
+
+
+def test_screener_run_serializes_numpy_bool(client, monkeypatch):
+    """條件判斷回傳 numpy.bool_ 時，結果仍要能轉成 JSON（台股策略選股曾因此 500）。"""
+    import numpy as np
+    import pandas as pd
+    import app as appmod
+    from conftest import login
+    idx = pd.bdate_range('2026-01-01', periods=80)
+    close = pd.Series(np.linspace(100, 120, 80), index=idx)
+    hist = pd.DataFrame({'Open': close, 'High': close + 1, 'Low': close - 1, 'Close': close, 'Volume': 1000.0})
+    monkeypatch.setattr(appmod.yf, 'Ticker', lambda t: type('T', (), {'info': {'shortName': 'Fake'}})())
+    monkeypatch.setattr(appmod, '_hist', lambda stock, period='1y': hist)
+    monkeypatch.setattr(appmod, '_eval_condition', lambda h, i, c: (np.bool_(True), '符合'))
+    login(client, 'amy', 'user12345')
+    r = client.post('/api/screener/run', json={'tickers': ['2330'], 'isTw': True,
+                                               'conditions': [{'type': 'price_cross_above_ma', 'params': {}}]})
+    assert r.status_code == 200 and r.get_json()['matched'] == 1

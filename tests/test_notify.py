@@ -52,7 +52,8 @@ def test_line_save_ok_and_clear(nclient, monkeypatch):
     monkeypatch.setattr(notify.requests, 'get', lambda *a, **k: Resp(200))
     assert nclient.post('/api/tw/line/config', json={'line_token': 'tok', 'line_user_id': GOOD_UID}).status_code == 200
     assert notify.channels('amy')['line']
-    assert nclient.post('/api/tw/line/config', json={'line_token': '', 'line_user_id': ''}).status_code == 200
+    clear = {'line_token': '', 'line_user_id': '', 'line_secret': ''}     # 帳號頁的「清除 LINE 設定」
+    assert nclient.post('/api/tw/line/config', json=clear).status_code == 200
     assert not notify.channels('amy')['line']
 
 
@@ -268,3 +269,20 @@ def test_line_bind_needs_secret(nclient, monkeypatch):
     assert nclient.post('/api/notify/line/bind').status_code == 400
     r = nclient.post('/api/tw/line/config', json={'line_token': 'tok', 'line_user_id': '', 'line_secret': ''})
     assert r.status_code == 400 and 'secret' in r.get_json()['error']
+
+
+def test_line_token_kept_when_blank_and_page_send_uses_server_creds(nclient, monkeypatch):
+    posts = []
+    monkeypatch.setattr(notify.requests, 'get', lambda *a, **k: Resp(200, data={'totalUsage': 0}))
+    monkeypatch.setattr(notify.requests, 'post', lambda url, **k: posts.append(k) or Resp(200))
+    nclient.post('/api/tw/line/config', json={'line_token': 'tok', 'line_user_id': '', 'line_secret': SECRET})
+    # 只改 User ID、token 留空 → 沿用原本的 token 與 secret
+    assert nclient.post('/api/tw/line/config', json={'line_token': '', 'line_user_id': GOOD_UID}).status_code == 200
+    c = userdata.get('amy', 'line')
+    assert c['token'] == 'tok' and c['secret'] == SECRET and c['user_id'] == GOOD_UID
+    # 什麼都沒填就按儲存不會清掉設定
+    assert nclient.post('/api/tw/line/config', json={'line_token': '', 'line_user_id': ''}).status_code == 400
+    assert userdata.get('amy', 'line')['token'] == 'tok'
+    # 頁面上的「發送通知」只送訊息，金鑰由伺服器帶
+    r = nclient.post('/api/tw/notify/line', json={'message': '【測試】\n內容', 'token': 'evil'})
+    assert r.status_code == 200 and posts[-1]['headers']['Authorization'] == 'Bearer tok'

@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>帳號設定</title>
-<link rel="stylesheet" href="/static/css/style.css?v=6">
+<link rel="stylesheet" href="/static/css/style.css?v=8">
 {% include "_head.html" %}
 </head>
 <body data-help-page="account">
@@ -326,8 +326,7 @@
       const uid = $('#nUid').value.trim(), tok = $('#nToken').value.trim(), sec = $('#nSecret').value.trim();
       busy(e.target, true);
       try {
-        const cur = await api('/api/tw/line/config');
-        await N.saveLine(tok || cur.line_token || '', uid, sec || undefined);
+        await N.saveLine(tok, uid, sec || undefined);     // token 留空 → 伺服器沿用原本的
         $('#nToken').value = ''; $('#nSecret').value = ''; showErr('');
         if (uid) lineEditing = false;
         $('#nTestMsg').textContent = uid ? 'LINE 設定完成' : '金鑰驗證成功，接著設定 Webhook 並綁定';

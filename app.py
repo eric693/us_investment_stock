@@ -71,9 +71,12 @@ def _load_monitor_cfg():
             legacy = legacy or userdata.get(userdata.SYSTEM, 'legacy_owner') or ''
             entry.update(owner=legacy, ticker=key)
             cfg['tickers'][f'{legacy}|{key}'] = cfg['tickers'].pop(key)
-    # 共用的 LINE 金鑰已搬到各帳號（userdata 'line'），不再留在共用檔
+    # 共用的 LINE 金鑰已搬到各帳號（userdata 'line'），不再留在共用檔或各筆監控
     cfg.pop('line_token', None)
     cfg.pop('line_user_id', None)
+    for entry in cfg.get('tickers', {}).values():
+        entry.pop('line_token', None)
+        entry.pop('line_user_id', None)
     return cfg
 
 
@@ -2265,29 +2268,15 @@ def get_tw_signal(ticker):
 
 @app.route('/api/tw/notify/line', methods=['POST'])
 def send_line_notify():
-    try:
-        data    = request.json or {}
-        token   = data.get('token', '').strip()
-        user_id = data.get('user_id', '').strip()
-        message = data.get('message', '').strip()
-        if not token or not user_id or not message:
-            return jsonify({'error': 'token, user_id and message required'}), 400
-        r = _requests.post(
-            'https://api.line.me/v2/bot/message/push',
-            headers={
-                'Content-Type': 'application/json',
-                'Authorization': f'Bearer {token}',
-            },
-            json={
-                'to': user_id,
-                'messages': [{'type': 'text', 'text': message}],
-            },
-            timeout=10
-        )
-        return jsonify({'status': r.status_code, 'ok': r.status_code == 200,
-                        'msg': r.text[:200]})
-    except Exception as e:
-        return jsonify({'error': str(e)}), 500
+    """頁面上的「發送通知」：由伺服器用這個帳號的通知設定送出（金鑰不經過瀏覽器，也受每月額度限制）。"""
+    message = ((request.json or {}).get('message') or '').strip()
+    if not message:
+        return jsonify({'error': '訊息是空的'}), 400
+    user = userdata.current()
+    if not notify.ready(user):
+        return jsonify({'error': '還沒有設定通知管道，請到「帳號設定 → 通知管道」設定 LINE 或手機通知'}), 400
+    ok, err = notify.send(user, message, url='/tw')
+    return (jsonify({'ok': True, 'warning': err}), 200) if ok else (jsonify({'error': err}), 400)
 
 
 @app.route('/api/tw/line/config', methods=['GET', 'POST'])
@@ -2296,11 +2285,17 @@ def line_config():
     user = userdata.current()
     if request.method == 'POST':
         data = request.json or {}
-        err = notify.save_line(user, data.get('line_token', ''), data.get('line_user_id', ''),
-                               data.get('line_secret'))
+        token, uid, secret = data.get('line_token', ''), data.get('line_user_id', ''), data.get('line_secret')
+        if not token.strip() and not uid.strip() and secret is None:
+            # 清除要明確帶 line_secret=''（帳號頁的「清除」），什麼都沒填就按儲存不算清除
+            return jsonify({'error': '請貼上要更新的 token 或 secret'}), 400
+        if not token.strip() and (uid.strip() or (secret or '').strip()):
+            token = (userdata.get(user, 'line') or {}).get('token', '')    # 沒貼新的 token 就沿用
+        err = notify.save_line(user, token, uid, secret)
         return (jsonify({'error': err}), 400) if err else jsonify({'ok': True})
     c = userdata.get(user, 'line') or {}
-    return jsonify({'line_token': c.get('token', ''), 'line_user_id': c.get('user_id', ''),
+    # token 只留在伺服器，不回傳給瀏覽器
+    return jsonify({'has_token': bool(c.get('token')), 'line_user_id': c.get('user_id', ''),
                     'has_secret': bool(c.get('secret'))})
 
 
@@ -2311,8 +2306,6 @@ def monitor_register():
     if not ticker:
         return jsonify({'error': 'ticker required'}), 400
     profile      = data.get('profile', 'aggressive')
-    line_token   = data.get('line_token', '').strip()
-    line_user_id = data.get('line_user_id', '').strip()
     now_str = pd.Timestamp.now(tz='Asia/Taipei').strftime('%Y-%m-%d %H:%M')
     user = userdata.current()
     with _monitor_lock:
@@ -2322,8 +2315,6 @@ def monitor_register():
             'owner':            user,
             'ticker':           ticker,
             'profile':          profile,
-            'line_token':       line_token,
-            'line_user_id':     line_user_id,
             'last_signal':      existing.get('last_signal'),
             'last_scan':        existing.get('last_scan', ''),
             'last_notify_time': existing.get('last_notify_time', ''),
@@ -3680,6 +3671,7 @@ def _scan_ticker(ticker, conditions, is_tw, period='1y'):
         all_passed   = True
         for cond in conditions:
             passed, detail = _eval_condition(hist, info, cond)
+            passed = bool(passed)          # 條件常回傳 numpy.bool_，jsonify 不認得
             cond_results.append({'label': cond.get('label', cond['type']),
                                  'passed': passed, 'detail': detail})
             if not passed:
@@ -3810,8 +3802,6 @@ def screener_add_alert():
     data   = request.json or {}
     ticker_raw    = data.get('ticker', '').strip()
     exit_conds    = data.get('exitConditions', [])
-    line_token    = data.get('line_token', '')
-    line_user_id  = data.get('line_user_id', '')
     is_tw         = data.get('isTw', True)
 
     if not ticker_raw:
@@ -3829,8 +3819,6 @@ def screener_add_alert():
             'owner':          user,
             'ticker':         ticker,
             'profile':        existing.get('profile', 'steady'),
-            'line_token':     line_token or existing.get('line_token', ''),
-            'line_user_id':   line_user_id or existing.get('line_user_id', ''),
             'last_signal':    existing.get('last_signal'),
             'last_scan':      existing.get('last_scan', ''),
             'last_notify_time': existing.get('last_notify_time', ''),

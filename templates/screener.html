@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>策略選股 — 智能篩選</title>
-<link rel="stylesheet" href="/static/css/style.css?v=6">
+<link rel="stylesheet" href="/static/css/style.css?v=8">
 {% include "_head.html" %}
 <style>
 /* ── Nav ─────────────────────────────────────── */
@@ -239,7 +239,7 @@ select.inp{cursor:pointer;}
     <button class="modal-close" onclick="closeModal('addMonitorModal')"></button>
     <div class="modal-title" id="addMonitorTitle">加入監控並設定退出警報</div>
     <input type="hidden" id="addMonitorTicker">
-    <label class="form-label">退出條件（觸發時 LINE 通知）</label>
+    <label class="form-label">退出條件（觸發時送 LINE／手機通知）</label>
     <div id="modalExitList" style="margin-bottom:10px;"></div>
     <div style="font-size:0.76rem;color:var(--text-dim);margin-bottom:12px;">
       退出條件已從左側設定自動帶入，可在此調整
@@ -625,14 +625,6 @@ async function confirmAddMonitor() {
   const ticker = _pendingMonitorTicker;
   if (!ticker) return;
 
-  // Fetch saved LINE config
-  let lineToken = '', lineUserId = '';
-  try {
-    const cfg = await fetch('/api/tw/line/config').then(r => r.json());
-    lineToken   = cfg.line_token   || '';
-    lineUserId  = cfg.line_user_id || '';
-  } catch {}
-
   try {
     const resp = await fetch('/api/screener/add_alert', {
       method: 'POST',
@@ -641,8 +633,6 @@ async function confirmAddMonitor() {
         ticker:         ticker,
         isTw:           _pendingIsTw,
         exitConditions: _pendingExitConds,
-        line_token:     lineToken,
-        line_user_id:   lineUserId,
       }),
     });
     const j = await resp.json();
