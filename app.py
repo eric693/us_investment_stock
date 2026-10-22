@@ -873,6 +873,7 @@ def get_market():
         'nasdaq': '^IXIC',
         'dow':    '^DJI',
         'gold':   'GC=F',
+        'oil':    'CL=F',          # WTI 原油期貨
         'dxy':    'DX-Y.NYB',
     }
     result = {}
@@ -1709,6 +1710,7 @@ def get_tw_market():
     syms = {
         'usdtwd': 'USDTWD=X',
         'gold':   'GC=F',
+        'oil':    'CL=F',          # WTI 原油期貨
         'vix':    '^VIX',
     }
     if 'twii' not in result:

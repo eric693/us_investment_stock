@@ -289,6 +289,11 @@
     <span class="mb-val" id="mbGold">--</span>
     <span class="mb-pct" id="mbGoldP">--</span>
   </div>
+  <div class="mb-item" id="mb-oil">
+    <span class="mb-lbl" title="WTI 原油期貨（美元／桶）">原油</span>
+    <span class="mb-val" id="mbOil">--</span>
+    <span class="mb-pct" id="mbOilP">--</span>
+  </div>
   <div class="mb-time" id="mbTime"></div>
 </div>
 
@@ -1048,6 +1053,7 @@ async function loadMarket() {
     setMB('mbTwoiiVal',  'mbTwoiiP',  d.twoii);
     setMB('mbUsdtwdVal', 'mbUsdtwdP', d.usdtwd);
     setMB('mbGold',      'mbGoldP',   d.gold);
+    setMB('mbOil',       'mbOilP',   d.oil);
 
     $('mbTime').textContent = new Date().toLocaleTimeString('zh-TW', {hour:'2-digit',minute:'2-digit'}) + ' 更新';
   } catch(e) {}
