@@ -103,10 +103,17 @@
   sec('admin.main', '使用者管理（管理員）', steps(['新增帳號：輸入帳號、初始密碼、權限。', '重設密碼、切換管理員／使用者權限、刪除帳號。',
       '重設密碼或調整權限後，該帳號需重新登入。刪除帳號會一併刪除該帳號的個人資料。']));
 
+  sec('commodity.main', '黃金・原油進出場', '<p>用固定規則在黃金、原油的 1 小時、4 小時、日線圖上標出進出場點，並用過去資料回測成績。</p>' +
+    steps(['上方切換商品（黃金／原油）與週期（1 小時／4 小時／日線）。',
+      '圖上紅色 ▲「進」是進場，▼「出」是出場並標示報酬；紅色虛線階梯是每筆交易的出場線（移動停損）。',
+      '持有中時，圖上會畫三條橫線：出場線（跌破就出場）、進場價、參考目標 2R。',
+      '右側「歷史回測」列出全部、前半段、後半段的成績；兩段都賺錢的週期較可靠。點交易紀錄的一列可以跳到圖上位置。']) +
+    note('規則只做多，參數沒有針對過去資料最佳化。目前回測以黃金 4 小時、日線最穩定；黃金 1 小時、原油日線前後段差異大。回測不代表未來，僅供參考。'));
+
   var PAGES = {
     board: ['board.index', 'board.pulse', 'board.all', 'board.watch', 'board.score', 'board.sector', 'board.rank', 'board.after', 'board.rt', 'board.line'],
     chart: ['chart.basic', 'chart.tools', 'chart.index'],
-    tw: ['tw.main', 'tw.monitor', 'chart.tools'], us: ['us.main'], screener: ['screener.main'], picks: ['picks.main'],
+    tw: ['tw.main', 'tw.monitor', 'chart.tools'], us: ['us.main'], screener: ['screener.main'], picks: ['picks.main'], commodity: ['commodity.main'],
     portfolio: ['portfolio.main'], account: ['account.main'], admin: ['admin.main'],
   };
 

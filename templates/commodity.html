@@ -1,0 +1,305 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>黃金・原油</title>
+<link rel="stylesheet" href="/static/css/style.css?v=8">
+{% include "_head.html" %}
+<script src="https://unpkg.com/lightweight-charts@5.0.9/dist/lightweight-charts.standalone.production.js"></script>
+<style>
+.cm-wrap { max-width: 1400px; margin: 0 auto; padding: 16px; display: flex; flex-direction: column; gap: 14px; }
+.card2 { background: var(--card-bg); border: 1px solid var(--card-bd); border-radius: 18px; box-shadow: var(--shadow); }
+.head { display: flex; align-items: center; gap: 14px 22px; flex-wrap: wrap; padding: 14px 18px; }
+.seg { display: inline-flex; border: 1px solid var(--card-bd2); border-radius: 11px; padding: 3px; background: var(--surface-1); }
+.seg button { border: 0; background: none; color: var(--text-mid); font: inherit; font-size: .85rem; padding: 7px 14px; border-radius: 8px; cursor: pointer; white-space: nowrap; }
+.seg button.on { background: var(--card-bg); color: var(--text); font-weight: 700; box-shadow: 0 1px 3px rgba(0,0,0,.15); }
+.px { display: flex; align-items: baseline; gap: 10px; }
+.px b { font: 700 1.6rem/1 'JetBrains Mono', ui-monospace, monospace; }
+.px .chg { font: 600 .9rem 'JetBrains Mono', ui-monospace, monospace; }
+.px small { color: var(--text-dim); font-size: .75rem; }
+.up { color: var(--red); } .dn { color: var(--green); }
+.state { margin-left: auto; font-size: .8rem; font-weight: 700; padding: 6px 12px; border-radius: 999px; border: 1px solid var(--card-bd2); color: var(--text-mid); }
+.state.hold { color: var(--red); border-color: var(--red-line); background: var(--red-soft); }
+.state.ready { color: #d97706; border-color: rgba(217,119,6,.35); background: rgba(217,119,6,.08); }
+
+.grid { display: grid; grid-template-columns: minmax(0, 1fr) 340px; gap: 14px; align-items: start; }
+.chart-card { padding: 10px 10px 6px; }
+.legend { display: flex; gap: 14px; flex-wrap: wrap; font-size: .74rem; color: var(--text-dim); padding: 2px 8px 8px; }
+.legend i { display: inline-block; width: 14px; height: 0; border-top: 2px solid; vertical-align: middle; margin-right: 5px; }
+.legend i.dash { border-top-style: dashed; }
+#chart { height: 560px; }
+.side { display: flex; flex-direction: column; gap: 14px; }
+.box { padding: 16px 18px; }
+.box h3 { font-size: .95rem; margin: 0 0 10px; display: flex; align-items: center; gap: 8px; }
+.box h3 small { font-weight: 400; color: var(--text-dim); font-size: .72rem; margin-left: auto; }
+.hint { font-size: .78rem; color: var(--text-dim); line-height: 1.7; margin: 0; }
+.kv { display: grid; grid-template-columns: auto 1fr; gap: 6px 14px; font-size: .85rem; margin-bottom: 10px; }
+.kv span { color: var(--text-dim); }
+.kv b { font-family: 'JetBrains Mono', ui-monospace, monospace; text-align: right; }
+.st-tbl { width: 100%; border-collapse: collapse; font-size: .8rem; }
+.st-tbl th { color: var(--text-dim); font-weight: 600; font-size: .72rem; text-align: right; padding: 5px 4px; border-bottom: 1px solid var(--line); }
+.st-tbl th:first-child, .st-tbl td:first-child { text-align: left; }
+.st-tbl td { padding: 6px 4px; text-align: right; border-bottom: 1px solid var(--line); font-family: 'JetBrains Mono', ui-monospace, monospace; }
+.st-tbl td:first-child { font-family: inherit; color: var(--text-mid); }
+.verdict { margin-top: 10px; font-size: .78rem; line-height: 1.7; padding: 8px 10px; border-radius: 10px; background: var(--surface-1); color: var(--text-mid); }
+.rules { margin: 0; padding-left: 18px; font-size: .8rem; line-height: 1.75; color: var(--text-mid); }
+.rules b { color: var(--text); }
+.trades { width: 100%; border-collapse: collapse; font-size: .8rem; }
+.trades th { color: var(--text-dim); font-weight: 600; font-size: .72rem; text-align: right; padding: 6px 8px; border-bottom: 1px solid var(--line); white-space: nowrap; }
+.trades td { padding: 7px 8px; text-align: right; border-bottom: 1px solid var(--line); font-family: 'JetBrains Mono', ui-monospace, monospace; white-space: nowrap; }
+.trades th:first-child, .trades td:first-child { text-align: left; }
+.trades tr { cursor: pointer; }
+.trades tr:hover td { background: var(--surface-1); }
+.tbl-scroll { overflow-x: auto; max-height: 420px; overflow-y: auto; }
+.tag { font-size: .68rem; font-weight: 700; padding: 1px 7px; border-radius: 6px; background: var(--red-soft); color: var(--red); border: 1px solid var(--red-line); font-family: inherit; }
+.loading { padding: 80px 0; text-align: center; color: var(--text-dim); }
+@media (max-width: 1000px) { .grid { grid-template-columns: 1fr; } }
+@media (max-width: 600px) {
+  .cm-wrap { padding: 10px; }
+  #chart { height: 420px; }
+  .state { margin-left: 0; }
+  .px b { font-size: 1.35rem; }
+}
+</style>
+</head>
+<body data-help-page="commodity">
+{% include "_appbar.html" %}
+<main class="cm-wrap">
+  <section class="card2 head">
+    <div class="seg" id="sym"><button data-v="gold">黃金</button><button data-v="oil">原油</button></div>
+    <div class="seg" id="tf"><button data-v="1h">1 小時</button><button data-v="4h">4 小時</button><button data-v="1d">日線</button></div>
+    <div class="px"><b id="last">--</b><span class="chg" id="chg"></span><small id="unit"></small></div>
+    <span class="state" id="state">讀取中…</span>
+  </section>
+
+  <div class="grid">
+    <section class="card2 chart-card">
+      <div class="legend">
+        <span><i style="border-color:#f59e0b"></i>EMA20</span>
+        <span><i style="border-color:#3b82f6"></i>EMA50</span>
+        <span><i style="border-color:#a855f7"></i>EMA200</span>
+        <span><i class="dash" style="border-color:var(--red)"></i>出場線（移動停損）</span>
+        <span>▲ 進場　▼ 出場</span>
+      </div>
+      <div id="chart"><div class="loading">載入中…</div></div>
+    </section>
+
+    <div class="side">
+      <section class="card2 box">
+        <h3>目前狀態 <small id="updated"></small></h3>
+        <div id="pos"></div>
+      </section>
+      <section class="card2 box">
+        <h3>歷史回測 <small id="range"></small></h3>
+        <table class="st-tbl">
+          <thead><tr><th></th><th>全部</th><th>前半段</th><th>後半段</th></tr></thead>
+          <tbody id="stats"></tbody>
+        </table>
+        <div class="verdict" id="verdict"></div>
+      </section>
+      <section class="card2 box">
+        <h3>進出場規則</h3>
+        <ol class="rules">
+          <li><b>趨勢向上</b>：EMA50 在 EMA200 之上，價格也在 EMA200 之上。</li>
+          <li><b>等回檔</b>：最近 5 根 K 棒碰到 EMA20。</li>
+          <li><b>進場</b>：收盤站回 EMA20 且突破前一根高點，下一根開盤買進。</li>
+          <li><b>停損</b>：回檔低點下方 0.5 ATR（距離 1～3 ATR）。</li>
+          <li><b>出場</b>：進場後最高價 − 3 ATR 的移動停損，只升不降，碰到就出場（圖上紅色虛線）。</li>
+        </ol>
+        <p class="hint" style="margin-top:8px">只做多。做空在回測中黃金、原油幾乎每個週期都虧，所以不採用。回測已扣交易成本（黃金來回 0.03%、原油 0.05%）。</p>
+      </section>
+    </div>
+  </div>
+
+  <section class="card2 box">
+    <h3>交易紀錄 <small>點一列可跳到圖上位置</small></h3>
+    <div class="tbl-scroll">
+      <table class="trades">
+        <thead><tr><th>進場</th><th>進場價</th><th>初始停損</th><th>出場</th><th>出場價</th><th>報酬</th><th>R 倍數</th><th>持有根數</th></tr></thead>
+        <tbody id="trades"></tbody>
+      </table>
+    </div>
+  </section>
+  <p class="hint" style="text-align:center">資料：Yahoo 期貨連續月（黃金 GC=F、原油 CL=F），時間為台北時間。回測是過去的表現，不代表未來，僅供參考，非投資建議。</p>
+</main>
+
+<script>
+(function () {
+  const $ = s => document.querySelector(s);
+  const LC = window.LightweightCharts;
+  const store = {get(k, d) { try { return JSON.parse(localStorage.getItem(k)) ?? d; } catch (e) { return d; } }, set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) {} }};
+  const qs = new URLSearchParams(location.search);
+  const st = Object.assign({sym: 'gold', tf: '4h'}, store.get('commodity', {}));
+  if (['gold', 'oil'].includes(qs.get('sym'))) st.sym = qs.get('sym');
+  if (['1h', '4h', '1d'].includes(qs.get('tf'))) st.tf = qs.get('tf');
+  const CACHE = {};
+  let chart = null, DATA = null;
+
+  const num = (v, d = 2) => v == null ? '—' : Number(v).toLocaleString('en-US', {minimumFractionDigits: d, maximumFractionDigits: d});
+  const pct = v => v == null ? '—' : (v > 0 ? '+' : '') + num(v, 1) + '%';
+  const cls = v => v > 0 ? 'up' : v < 0 ? 'dn' : '';
+  const esc = s => String(s).replace(/[&<>"]/g, c => ({'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;'}[c]));
+
+  function segs() {
+    document.querySelectorAll('#sym button').forEach(b => b.classList.toggle('on', b.dataset.v === st.sym));
+    document.querySelectorAll('#tf button').forEach(b => b.classList.toggle('on', b.dataset.v === st.tf));
+  }
+  $('#sym').onclick = e => { const b = e.target.closest('button'); if (b) { st.sym = b.dataset.v; load(); } };
+  $('#tf').onclick = e => { const b = e.target.closest('button'); if (b) { st.tf = b.dataset.v; load(); } };
+
+  async function load() {
+    segs();
+    store.set('commodity', st);
+    history.replaceState(null, '', `/commodity?sym=${st.sym}&tf=${st.tf}`);
+    const key = st.sym + st.tf;
+    if (!CACHE[key]) {
+      $('#state').textContent = '讀取中…'; $('#state').className = 'state';
+      try {
+        const r = await fetch(`/api/commodity/${st.sym}?tf=${st.tf}`);
+        if (r.status === 401) { location.href = '/login?next=' + encodeURIComponent(location.pathname + location.search); return; }
+        const j = await r.json();
+        if (!r.ok) throw new Error(j.error || r.statusText);
+        CACHE[key] = j;
+      } catch (e) {
+        $('#chart').innerHTML = `<div class="loading">${esc(e.message)}</div>`; $('#state').textContent = '讀取失敗'; return;
+      }
+    }
+    DATA = CACHE[key];
+    render();
+  }
+
+  const STATE = {
+    holding: ['持有中', 'hold'],
+    pullback: ['已回檔・等進場訊號', 'ready'],
+    waiting: ['趨勢向上・等回檔', ''],
+    no_trend: ['空手・趨勢未成立', ''],
+  };
+
+  function render() {
+    const d = DATA;
+    $('#last').textContent = num(d.last.close);
+    $('#chg').textContent = (d.last.chg > 0 ? '+' : '') + d.last.chg.toFixed(2) + '%'; $('#chg').className = 'chg ' + cls(d.last.chg);
+    $('#unit').textContent = d.unit + '・' + d.last.time;
+    const [txt, c] = STATE[d.state];
+    $('#state').textContent = d.name + ' ' + d.tf_name + '：' + txt; $('#state').className = 'state ' + c;
+    $('#updated').textContent = d.updated + ' 更新';
+    $('#range').textContent = d.range[0].slice(0, 10) + ' ～ ' + d.range[1].slice(0, 10);
+    renderPos(d); renderStats(d); renderTrades(d); drawChart(d);
+  }
+
+  function renderPos(d) {
+    const p = d.position, atr = d.last.atr;
+    if (p) {
+      const dist = (d.last.close - p.stop) / d.last.close * 100;
+      $('#pos').innerHTML = `<div class="kv">
+        <span>進場時間</span><b>${esc(p.since)}</b>
+        <span>進場價</span><b>${num(p.entry)}</b>
+        <span>出場線（停損）</span><b class="dn">${num(p.stop)}</b>
+        <span>參考目標 2R</span><b>${num(p.target)}</b>
+        <span>目前損益</span><b class="${cls(p.pnl)}">${(p.pnl > 0 ? '+' : '') + p.pnl.toFixed(2)}%（${p.R > 0 ? '+' : ''}${p.R}R）</b>
+      </div><p class="hint">價格跌破 <b>${num(p.stop)}</b> 就出場（距現價 ${dist.toFixed(1)}%）。出場線會隨新高往上移，不會往下。</p>`;
+      return;
+    }
+    const msg = {
+      pullback: '趨勢向上且已回檔到 EMA20。等收盤站回 EMA20 並突破前一根高點，下一根開盤進場。',
+      waiting: '趨勢向上，但價格離 EMA20 還遠，追高風險大。等回檔碰到 EMA20 再看。',
+      no_trend: 'EMA50 在 EMA200 之下或價格跌破 EMA200，趨勢不成立，不進場。',
+    }[d.state];
+    $('#pos').innerHTML = `<p class="hint" style="font-size:.84rem;color:var(--text-mid)">${msg}</p>
+      <div class="kv" style="margin:10px 0 0"><span>ATR(14)</span><b>${num(atr)}</b></div>`;
+  }
+
+  function renderStats(d) {
+    const S = d.stats, cols = [S.all, S.first, S.second];
+    const row = (label, f) => `<tr><td>${label}</td>${cols.map(s => `<td>${s.n ? f(s) : '—'}</td>`).join('')}</tr>`;
+    $('#stats').innerHTML =
+      row('交易次數', s => s.n) +
+      row('勝率', s => s.win + '%') +
+      row('平均賺／賠', s => `<span class="up">${s.avg_win}</span>/<span class="dn">${s.avg_loss}</span>`) +
+      row('獲利因子', s => s.pf ?? '—') +
+      row('累積報酬', s => `<span class="${cls(s.total)}">${pct(s.total)}</span>`) +
+      row('最大回撤', s => `<span class="dn">${s.max_dd}%</span>`) +
+      row('持倉時間', s => s.exposure + '%') +
+      `<tr><td>買進持有</td>${cols.map(s => `<td class="${cls(s.bh)}">${pct(s.bh)}</td>`).join('')}</tr>`;
+    const a = S.all, f = S.first, s = S.second;
+    const both = f.n && s.n && f.total > 0 && s.total > 0;
+    let v;
+    if (both) v = `前後兩段都賺錢，這個週期的規則表現<b>較穩定</b>。`;
+    else if (a.total > 0) v = `整體賺錢，但${f.total <= 0 ? '前半段' : '後半段'}虧損，<b>穩定度普通</b>，要搭配其他週期確認。`;
+    else v = `這個週期整體虧損，<b>不建議單獨使用</b>。`;
+    v += ` 只有 ${a.exposure}% 的時間在場內，${a.total < a.bh ? '報酬低於一路持有，但避開了趨勢轉弱的時段' : '報酬高於一路持有'}。前後段分界 ${esc(d.split.slice(0, 10))}。`;
+    $('#verdict').innerHTML = v;
+  }
+
+  function renderTrades(d) {
+    const rows = d.trades.slice().reverse();
+    $('#trades').innerHTML = rows.length ? rows.map((t, i) => `<tr data-i="${d.trades.length - 1 - i}">
+      <td>${esc(t.entry_label)}</td><td>${num(t.entry)}</td><td>${num(t.stop0)}</td>
+      <td>${t.open ? '<span class="tag">持有中</span>' : esc(t.exit_label)}</td><td>${t.open ? '—' : num(t.exit)}</td>
+      <td class="${cls(t.ret)}">${(t.ret > 0 ? '+' : '') + t.ret.toFixed(2)}%</td>
+      <td class="${cls(t.R)}">${t.R > 0 ? '+' : ''}${t.R}</td><td>${t.bars}</td></tr>`).join('')
+      : '<tr><td colspan="8" style="text-align:center;color:var(--text-dim)">沒有交易</td></tr>';
+  }
+  $('#trades').onclick = e => {
+    const tr = e.target.closest('tr[data-i]'); if (!tr || !chart) return;
+    const t = DATA.trades[+tr.dataset.i];
+    if (!t.in_view) { alert('這筆交易早於圖上顯示的範圍（1 小時圖只畫最近約半年）'); return; }
+    const times = DATA.bars.map(b => b[0]);
+    const a = Math.max(0, times.indexOf(t.entry_time) - 40), b = Math.min(times.length - 1, times.indexOf(t.exit_time) + 40);
+    chart.timeScale().setVisibleLogicalRange({from: a, to: b});
+    $('#chart').scrollIntoView({behavior: 'smooth', block: 'center'});
+  };
+
+  function drawChart(d) {
+    const box = $('#chart');
+    if (chart) { chart.remove(); chart = null; }
+    box.innerHTML = '';
+    const UP = Theme.css('--red'), DN = Theme.css('--green');
+    chart = LC.createChart(box, {
+      autoSize: true,
+      layout: {background: {color: Theme.css('--card-bg')}, textColor: Theme.css('--text-mid'), fontSize: 11, attributionLogo: false,
+               fontFamily: "'JetBrains Mono', ui-monospace, monospace"},
+      grid: {vertLines: {color: Theme.css('--grid')}, horzLines: {color: Theme.css('--grid')}},
+      crosshair: {mode: LC.CrosshairMode.Normal},
+      rightPriceScale: {borderColor: Theme.css('--line')},
+      timeScale: {borderColor: Theme.css('--line'), timeVisible: d.tf !== '1d', secondsVisible: false, rightOffset: 6},
+      localization: {locale: 'zh-TW', priceFormatter: p => p.toFixed(2)},
+    });
+    const candle = chart.addSeries(LC.CandlestickSeries, {upColor: UP, downColor: DN, borderUpColor: UP, borderDownColor: DN,
+      wickUpColor: UP, wickDownColor: DN, priceLineVisible: false});
+    candle.setData(d.bars.map(([time, open, high, low, close]) => ({time, open, high, low, close})));
+    const line = (color, w = 1, extra = {}) => Object.assign({color, lineWidth: w, priceLineVisible: false, lastValueVisible: false, crosshairMarkerVisible: false}, extra);
+    [['20', '#f59e0b'], ['50', '#3b82f6'], ['200', '#a855f7']].forEach(([k, c]) =>
+      chart.addSeries(LC.LineSeries, line(c, k === '200' ? 2 : 1)).setData(d.ema[k].map(([time, value]) => ({time, value}))));
+
+    // 每筆交易的出場線（移動停損），階梯狀
+    const vis = d.trades.filter(t => t.in_view && t.stops.length);
+    vis.forEach(t => chart.addSeries(LC.LineSeries, line(UP, 2, {lineStyle: LC.LineStyle.Dashed, lineType: LC.LineType.WithSteps}))
+      .setData(t.stops.map(([time, value]) => ({time, value}))));
+
+    const markers = [];
+    d.trades.filter(t => t.in_view).forEach(t => {
+      markers.push({time: t.entry_time, position: 'belowBar', shape: 'arrowUp', color: UP, text: '進'});
+      if (!t.open) markers.push({time: t.exit_time, position: 'aboveBar', shape: 'arrowDown', color: t.ret > 0 ? '#d97706' : Theme.css('--text-dim'),
+        text: '出 ' + (t.ret > 0 ? '+' : '') + t.ret.toFixed(1) + '%'});
+    });
+    markers.sort((a, b) => (a.time > b.time) - (a.time < b.time));
+    LC.createSeriesMarkers(candle, markers);
+
+    const p = d.position;
+    if (p) {
+      candle.createPriceLine({price: p.stop, color: UP, lineWidth: 2, lineStyle: LC.LineStyle.Solid, axisLabelVisible: true, title: '出場線'});
+      candle.createPriceLine({price: p.entry, color: Theme.css('--text-mid'), lineWidth: 1, lineStyle: LC.LineStyle.Dotted, axisLabelVisible: true, title: '進場'});
+      candle.createPriceLine({price: p.target, color: '#d97706', lineWidth: 1, lineStyle: LC.LineStyle.Dashed, axisLabelVisible: true, title: '目標 2R'});
+    }
+    const n = d.bars.length, show = {'1h': 240, '4h': 220, '1d': 260}[d.tf];
+    chart.timeScale().setVisibleLogicalRange({from: n - show, to: n + 6});
+  }
+
+  window.addEventListener('themechange', () => { if (DATA) drawChart(DATA); });
+  load();
+})();
+</script>
+</body>
+</html>

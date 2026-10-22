@@ -84,3 +84,39 @@ def test_picks_api(client, pk, board):
     assert client.get('/api/picks/xx').status_code == 400
     assert client.get('/api/picks/us').status_code == 503        # 美股資料還沒下載
     assert client.get('/picks').status_code == 200
+
+
+def test_commodity_backtest_rules():
+    """趨勢回檔進場、移動停損只升不降、碰到停損出場。"""
+    import commodity as cm
+    rng = np.random.default_rng(3)
+    n = 900
+    close = 100 * np.exp(np.cumsum(0.002 + rng.normal(0, 0.01, n)))      # 帶漂移的上升走勢
+    df = pd.DataFrame({'Open': np.r_[close[0], close[:-1]], 'High': close * 1.004, 'Low': close * 0.996, 'Close': close},
+                      index=pd.date_range('2024-01-01', periods=n, freq='4h', tz='America/New_York'))
+    trades, st = cm.backtest(df, cost=0.0003)
+    assert trades
+    for t in trades:
+        assert t['stop0'] < t['entry'] and t['target'] == pytest.approx(t['entry'] + 2 * t['risk'])
+        assert all(b >= a for a, b in zip(t['stops'], t['stops'][1:]))           # 出場線只升不降
+        if not t['open']:
+            assert df['Low'].iloc[t['exit_i']] <= t['stops'][-1] and t['exit'] <= t['stops'][-1] + 1e-9
+    assert all(a['exit_i'] < b['entry_i'] for a, b in zip(trades, trades[1:]))  # 同時只有一筆
+    assert st['state'] in ('holding', 'pullback', 'waiting', 'no_trend')
+
+
+def test_commodity_api(client, monkeypatch):
+    import commodity as cm
+    rng = np.random.default_rng(5)
+    n = 700
+    close = 1800 * np.exp(np.cumsum(0.001 + rng.normal(0, 0.008, n)))
+    df = pd.DataFrame({'Open': close, 'High': close * 1.003, 'Low': close * 0.997, 'Close': close},
+                      index=pd.date_range('2025-01-01', periods=n, freq='4h', tz='America/New_York'))
+    monkeypatch.setattr(cm, '_download', lambda ticker, tf: df)
+    cm._cache.clear()
+    login(client, 'amy', 'user12345')
+    assert client.get('/api/commodity/silver?tf=4h').status_code == 400
+    r = client.get('/api/commodity/gold?tf=4h').get_json()
+    assert r['name'] == '黃金' and len(r['bars']) == n and r['stats']['all']['n'] == len([t for t in r['trades'] if not t['open']])
+    assert set(r['stats']) == {'all', 'first', 'second'}
+    assert client.get('/commodity').status_code == 200

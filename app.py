@@ -179,6 +179,7 @@ threading.Thread(target=_server_scan_loop, daemon=True).start()
 
 import tw_board
 import picks
+import commodity
 
 
 def _hist(stock, period='1y', interval='1d', **kw):
@@ -3914,6 +3915,7 @@ sys.modules[__name__].__dict__['_run_server_scan'] = _run_server_scan_with_exit
 
 tw_board.init(app, login_required)
 picks.init(app, login_required)
+commodity.init(app, login_required)
 app.register_blueprint(notify.bp)
 
 
