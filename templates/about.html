@@ -4,9 +4,9 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>StockLens — 台股・美股分析平台</title>
-<meta name="description" content="StockLens：台股即時看盤、三大法人籌碼、盤後與盤中選股、經回測驗證的潛力股評分、美股分析、策略選股與投資組合管理。">
+<meta name="description" content="StockLens：台股即時看盤、三大法人籌碼、盤後與盤中選股、經回測驗證的潛力股評分、黃金原油進出場訊號、美股分析、策略選股與投資組合管理。">
 <meta property="og:title" content="StockLens — 看懂籌碼，早一步出手">
-<meta property="og:description" content="台股即時看盤、三大法人籌碼、盤後與盤中選股、經回測驗證的潛力股評分、美股分析、策略選股與投資組合管理。">
+<meta property="og:description" content="台股即時看盤、三大法人籌碼、盤後與盤中選股、經回測驗證的潛力股評分、黃金原油進出場訊號、美股分析、策略選股與投資組合管理。">
 <meta property="og:type" content="website">
 <link rel="stylesheet" href="/static/css/style.css?v=8">
 {% include "_head.html" %}
@@ -115,9 +115,9 @@ footer { padding: 32px 0 48px; color: var(--text-dim); font-size: .78rem; line-h
 <header class="hero">
   <div class="blob a"></div><div class="blob b"></div>
   <div class="wrap">
-    <span class="eyebrow">台股 ・ 美股 ・ 籌碼 ・ 選股</span>
+    <span class="eyebrow">台股 ・ 美股 ・ 黃金原油 ・ 籌碼 ・ 選股</span>
     <h1 class="headline">看懂籌碼，<br><em>早一步</em>出手。</h1>
-    <p class="lede">StockLens 把上市櫃即時行情、三大法人持股動向、技術指標與選股工具放在同一個地方。盤後用法人籌碼找訊號，盤中用 KD 與均線即時選股，符合條件還能用 LINE 通知你。</p>
+    <p class="lede">StockLens 把上市櫃即時行情、三大法人持股動向、技術指標與選股工具放在同一個地方。盤後用法人籌碼找訊號，盤中用 KD 與均線即時選股，黃金、原油有回測過的進出場規則；訊號出現時用 LINE 或手機通知你。</p>
     <div class="hero-cta">
       {% if current_user %}
       <a class="btn btn-primary" href="/tw/board">進入系統</a>
@@ -151,6 +151,14 @@ footer { padding: 32px 0 48px; color: var(--text-dim); font-size: .78rem; line-h
             <li>指標先用前段資料挑選、再用後段驗證，兩段都有效才採用</li><li>公開回測：分數前 20 名 vs 全體的累積報酬、依分數分組的報酬</li>
             <li>每檔附上理由與風險提示（追高、過熱、本益比偏高、營收衰退）</li><li>個股分析頁直接顯示該股分數與停損參考</li></ul>
         </div>
+        <div class="card wide">
+          <div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 17l5-5 4 3 8-8"/><path d="M15 7h5v5"/><path d="M3 21h18"/></svg></div>
+          <h3>黃金・原油進出場訊號</h3>
+          <p>黃金、WTI 原油的 1 小時、4 小時、日線 K 線，依固定規則自動標出進場點與出場點，並公開歷史回測成績。</p>
+          <ul><li>規則：趨勢向上（EMA50 &gt; EMA200）時，回檔到 EMA20 再站回並突破前高才進場</li><li>出場：進場後最高價 − 3 ATR 的移動停損，只升不降，圖上畫成出場線</li>
+            <li>持有中時畫出出場線、進場價與 2R 參考目標三條橫線</li><li>回測分前後兩段，兩段都賺的週期才算穩定（目前黃金 4 小時、日線最穩）</li>
+            <li>每筆交易的進出場時間、價格、報酬與 R 倍數，點一下跳到圖上</li><li>出現新的進場或出場時，可用 LINE 或手機通知</li></ul>
+        </div>
         <div class="card">
           <div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2.5"/><path d="M7 15l3-3 3 2 4-5"/></svg></div>
           <h3>台股看盤</h3>
@@ -171,9 +179,9 @@ footer { padding: 32px 0 48px; color: var(--text-dim); font-size: .78rem; line-h
         </div>
         <div class="card">
           <div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2L4 14h7l-1 8 9-12h-7z"/></svg></div>
-          <h3>盤中即時選股 + LINE 推播</h3>
+          <h3>盤中即時選股 + 推播</h3>
           <p>依 KD 與均線條件在盤中自動篩選，每 60 秒可自動重跑。</p>
-          <ul><li>可自訂 K 值高低檔、均線糾結範圍</li><li>符合條件時用 LINE 通知，同一檔一天只推一次</li></ul>
+          <ul><li>可自訂 K 值高低檔、均線糾結範圍</li><li>符合條件時用 LINE 或手機通知，同一檔一天只推一次</li></ul>
         </div>
         <div class="card">
           <div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg></div>
@@ -203,7 +211,15 @@ footer { padding: 32px 0 48px; color: var(--text-dim); font-size: .78rem; line-h
           <div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg></div>
           <h3>智慧盯盤</h3>
           <p>伺服器每 5 分鐘自動掃描你盯的台股。</p>
-          <ul><li>可選激進或穩健的策略性格</li><li>出現買進訊號時用 LINE 推播</li></ul>
+          <ul><li>可選激進或穩健的策略性格</li><li>出現買進訊號時用 LINE 或手機通知</li></ul>
+        </div>
+        <div class="card wide">
+          <div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 8a6 6 0 1 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/></svg></div>
+          <h3>通知：LINE 與手機推播</h3>
+          <p>即時選股、智慧盯盤、出場提醒、每日潛力股與黃金原油進出場，都送到你設定的管道，不用開著網頁。</p>
+          <ul><li>手機／瀏覽器推播：不用 LINE、不佔額度，每台裝置開一次</li><li>LINE：用自己的官方帳號，傳綁定碼就自動完成設定</li>
+            <li>每日潛力股：自選台股或美股、發送時間、每個交易日或每週一次、前幾名</li><li>LINE 每月額度：顯示本月用量，到上限自動停送 LINE，手機通知照常</li>
+            <li>同一輪的訊號合併成一則，省額度</li><li>發送失敗（token 過期、額度用完）會在鈴鐺亮紅點並說明原因</li></ul>
         </div>
       </div>
     </div>
@@ -215,7 +231,7 @@ footer { padding: 32px 0 48px; color: var(--text-dim); font-size: .78rem; line-h
       <div class="steps">
         <div class="step"><h3>看大盤與資金流向</h3><p>在「台股看盤」先看指數、漲跌家數，再看哪些類股、概念股有資金流入。</p></div>
         <div class="step"><h3>用籌碼與技術面選股</h3><p>先看「潛力股」排行找出分數高的股票，再用盤後法人選股、盤中即時選股確認時機，把結果加入自選股。</p></div>
-        <div class="step"><h3>逐檔看圖、持續追蹤</h3><p>在技術圖用滾輪一檔一檔看下去，設好 LINE 推播與智慧盯盤，訊號出現時就會通知你。</p></div>
+        <div class="step"><h3>逐檔看圖、持續追蹤</h3><p>在技術圖用滾輪一檔一檔看下去，設好 LINE 或手機通知、智慧盯盤與每日潛力股，訊號出現時就會通知你；黃金、原油則照進出場訊號與出場線操作。</p></div>
       </div>
     </div>
   </section>

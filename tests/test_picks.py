@@ -120,3 +120,41 @@ def test_commodity_api(client, monkeypatch):
     assert r['name'] == '黃金' and len(r['bars']) == n and r['stats']['all']['n'] == len([t for t in r['trades'] if not t['open']])
     assert set(r['stats']) == {'all', 'first', 'second'}
     assert client.get('/commodity').status_code == 200
+
+
+def _fake_res(trades):
+    return {'key': 'gold', 'tf': '4h', 'name': '黃金', 'tf_name': '4 小時', 'trades': trades,
+            'position': {'stop': 95.0} if trades and trades[-1]['open'] else None}
+
+
+def _t(entry_time, open_, exit_time=None):
+    return {'entry_time': entry_time, 'exit_time': exit_time or entry_time, 'entry_label': f'E{entry_time}',
+            'exit_label': f'X{exit_time}', 'entry': 100.0, 'exit': 103.0, 'target': 110.0, 'ret': 3.0, 'R': 0.6,
+            'bars': 5, 'open': open_}
+
+
+def test_commodity_alerts_entry_then_exit(client, monkeypatch):
+    import commodity as cm
+    import notify
+    import userdata
+    sent, state = [], {'trades': [_t(1, False, 2)]}
+    monkeypatch.setattr(cm, 'analyze', lambda k, tf: _fake_res(state['trades']))
+    monkeypatch.setattr(notify, 'ready', lambda u: True)
+    monkeypatch.setattr(notify, 'send', lambda u, text, url='': sent.append(text) or (True, ''))
+    login(client, 'amy', 'user12345')
+    r = client.post('/api/commodity/alerts', json={'combo': 'gold:4h', 'on': True}).get_json()
+    assert r['items'] == ['gold:4h']
+    assert client.post('/api/commodity/alerts', json={'combo': 'silver:4h', 'on': True}).status_code == 400
+
+    cm.run_alerts()
+    assert sent == []                                   # 開啟時的舊交易不補送
+    state['trades'] = [_t(1, False, 2), _t(5, True)]
+    cm.run_alerts(); cm.run_alerts()
+    assert len(sent) == 1 and '進場訊號' in sent[0] and '出場線（停損）95.00' in sent[0]
+    state['trades'] = [_t(1, False, 2), _t(5, False, 9)]
+    cm.run_alerts()
+    assert len(sent) == 2 and '出場' in sent[1] and '+3.00%' in sent[1]
+    client.post('/api/commodity/alerts', json={'combo': 'gold:4h', 'on': False})
+    state['trades'].append(_t(12, True))
+    cm.run_alerts()
+    assert len(sent) == 2 and userdata.get('amy', cm.ALERT_KEY) == []

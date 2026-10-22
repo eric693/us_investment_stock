@@ -11,13 +11,18 @@
 參數刻意不最佳化（3 ATR 是 2.5／3／4 三組中間的那組），頁面同時列出前後兩段的成績看穩定度。
 資料：Yahoo 期貨連續月 GC=F、CL=F。1 小時約兩年；4 小時由 1 小時合成；日線十年。
 """
+import os
 import time
+import fcntl
 import threading
 
 import numpy as np
 import pandas as pd
 import yfinance as yf
 from flask import Blueprint, jsonify, request, render_template
+
+import notify
+import userdata
 
 bp = Blueprint('commodity', __name__)
 
@@ -221,6 +226,129 @@ def api_commodity(key):
     return jsonify(res)
 
 
+# ── 進出場通知 ────────────────────────────────────────────────────────
+# 帳號設定 ALERT_KEY = ['gold:4h', ...]；ALERT_SENT_KEY 記每個組合最後通知過的進場／出場時間。
+# 開啟時先記下目前最新的一筆當基準，之後出現更新的進場或出場才送，不補送舊訊號。
+ALERT_KEY = 'commodity_alerts'
+ALERT_SENT_KEY = 'commodity_alerts_sent'
+ALERT_LOCK_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), '.commodity_push.lock')
+SITE_URL = os.environ.get('NOTIFY_SITE_URL', notify.VAPID_SUB)
+
+
+def _combo_ok(c):
+    k, _, tf = c.partition(':')
+    return k in SYMBOLS and tf in TFS
+
+
+def alert_items(user):
+    return [c for c in (userdata.get(user, ALERT_KEY) or []) if _combo_ok(c)]
+
+
+def _marks(res):
+    """(最新一筆進場時間, 最新一筆已出場的出場時間)。"""
+    tr = res['trades']
+    entry = tr[-1]['entry_time'] if tr else None
+    closed = [t for t in tr if not t['open']]
+    return entry, (closed[-1]['exit_time'] if closed else None)
+
+
+def _fmt(v):
+    return f'{v:,.2f}'
+
+
+def alert_texts(res, sent):
+    """比對上次通知的位置，回傳要送的訊息（可能是出場、進場或兩者）。"""
+    head = f"【StockLens {res['name']} {res['tf_name']}】"
+    link = f"{SITE_URL}/commodity?sym={res['key']}&tf={res['tf']}"
+    out = []
+    tr = res['trades']
+    closed = [t for t in tr if not t['open']]
+    if closed and closed[-1]['exit_time'] != sent.get('exit') and closed[-1]['entry_time'] == sent.get('entry'):
+        t = closed[-1]       # 上次通知過進場的那筆出場了
+        out.append(f"{head}出場\n出場 {_fmt(t['exit'])}（{t['exit_label']}，觸及出場線）\n"
+                   f"進場 {_fmt(t['entry'])} → 報酬 {t['ret']:+.2f}%（{t['R']:+.2f}R），持有 {t['bars']} 根\n{link}")
+    if tr and tr[-1]['entry_time'] != sent.get('entry'):
+        t = tr[-1]
+        if t['open']:
+            stop = res['position']['stop']
+            out.append(f"{head}進場訊號\n進場 {_fmt(t['entry'])}（{t['entry_label']}）\n"
+                       f"出場線（停損）{_fmt(stop)}，距離 {(stop / t['entry'] - 1) * 100:+.1f}%\n"
+                       f"參考目標 2R {_fmt(t['target'])}\n趨勢回檔進場，跌破出場線就出場。僅供參考。\n{link}")
+    return out
+
+
+def run_alerts():
+    results = {}
+    for user, items in userdata.users_with(ALERT_KEY):
+        combos = [c for c in (items or []) if _combo_ok(c)]
+        if not combos:
+            continue
+        sent_all = userdata.get(user, ALERT_SENT_KEY) or {}
+        for c in combos:
+            if c not in results:
+                k, _, tf = c.partition(':')
+                try:
+                    results[c] = analyze(k, tf)
+                except Exception as e:
+                    print(f'[commodity] {c}: {e}')
+                    results[c] = None
+            res = results[c]
+            if not res:
+                continue
+            sent = sent_all.get(c)
+            entry, exit_ = _marks(res)
+            if sent is None:                              # 剛開啟：只記基準
+                sent_all[c] = {'entry': entry, 'exit': exit_}
+                continue
+            msgs = alert_texts(res, sent)
+            sent_all[c] = {'entry': entry, 'exit': exit_}
+            userdata.put(user, ALERT_SENT_KEY, sent_all)     # 先記再送，失敗不重送
+            if msgs and notify.ready(user):
+                ok, err = notify.send(user, '\n\n'.join(msgs), url=f'/commodity?sym={res["key"]}&tf={res["tf"]}')
+                if not ok:
+                    print(f'[commodity] notify {user} {c}: {err}')
+        userdata.put(user, ALERT_SENT_KEY, sent_all)
+
+
+def _alert_loop():
+    lock = open(ALERT_LOCK_FILE, 'w')
+    try:
+        fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except OSError:
+        lock.close()
+        return
+    time.sleep(120)
+    while True:
+        try:
+            run_alerts()
+        except Exception as e:
+            print(f'[commodity] alerts: {e}')
+        time.sleep(600)
+
+
+@bp.route('/api/commodity/alerts', methods=['GET', 'POST'])
+def api_alerts():
+    user = userdata.current()
+    if request.method == 'POST':
+        b = request.get_json(silent=True) or {}
+        combo, on = b.get('combo', ''), bool(b.get('on'))
+        if not _combo_ok(combo):
+            return jsonify(error='商品或週期不正確'), 400
+        items = [c for c in alert_items(user) if c != combo] + ([combo] if on else [])
+        userdata.put(user, ALERT_KEY, items)
+        sent = userdata.get(user, ALERT_SENT_KEY) or {}
+        sent.pop(combo, None)
+        if on:
+            k, _, tf = combo.partition(':')
+            try:
+                entry, exit_ = _marks(analyze(k, tf))
+                sent[combo] = {'entry': entry, 'exit': exit_}
+            except Exception:
+                pass                                      # 背景第一次跑到時再記基準
+        userdata.put(user, ALERT_SENT_KEY, sent)
+    return jsonify(items=alert_items(user), ready=notify.ready(user))
+
+
 def init(app, login_required):
     @app.route('/commodity')
     @login_required
@@ -228,3 +356,5 @@ def init(app, login_required):
         return render_template('commodity.html')
 
     app.register_blueprint(bp)
+    if not os.environ.get('TW_BOARD_NO_BG'):
+        threading.Thread(target=_alert_loop, daemon=True).start()

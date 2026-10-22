@@ -53,6 +53,15 @@
 .trades tr:hover td { background: var(--surface-1); }
 .tbl-scroll { overflow-x: auto; max-height: 420px; overflow-y: auto; }
 .tag { font-size: .68rem; font-weight: 700; padding: 1px 7px; border-radius: 6px; background: var(--red-soft); color: var(--red); border: 1px solid var(--red-line); font-family: inherit; }
+.al-row { display: flex; align-items: center; gap: 12px; cursor: pointer; font-size: .86rem; }
+.al-row small { font-size: .74rem; }
+.sw { position: relative; width: 40px; height: 22px; flex-shrink: 0; }
+.sw input { position: absolute; opacity: 0; inset: 0; margin: 0; cursor: pointer; }
+.sw i { position: absolute; inset: 0; border-radius: 999px; background: var(--card-bd2); transition: background .15s; pointer-events: none; }
+.sw i::after { content: ''; position: absolute; top: 3px; left: 3px; width: 16px; height: 16px; border-radius: 50%; background: #fff; box-shadow: 0 1px 3px rgba(0,0,0,.25); transition: transform .15s; }
+.sw input:checked + i { background: var(--accent); }
+.sw input:checked + i::after { transform: translateX(18px); }
+.sw input:focus-visible + i { outline: 2px solid var(--accent); outline-offset: 2px; }
 .loading { padding: 80px 0; text-align: center; color: var(--text-dim); }
 @media (max-width: 1000px) { .grid { grid-template-columns: 1fr; } }
 @media (max-width: 600px) {
@@ -89,6 +98,12 @@
       <section class="card2 box">
         <h3>目前狀態 <small id="updated"></small></h3>
         <div id="pos"></div>
+      </section>
+      <section class="card2 box">
+        <h3>進出場通知 <small id="alNote"></small></h3>
+        <label class="al-row"><span class="sw"><input type="checkbox" id="alOn"><i></i></span>
+          <span><b id="alName">—</b><br><small id="alEst" class="hint"></small></span></label>
+        <p class="hint" id="alList" style="margin-top:8px"></p>
       </section>
       <section class="card2 box">
         <h3>歷史回測 <small id="range"></small></h3>
@@ -185,8 +200,36 @@
     $('#state').textContent = d.name + ' ' + d.tf_name + '：' + txt; $('#state').className = 'state ' + c;
     $('#updated').textContent = d.updated + ' 更新';
     $('#range').textContent = d.range[0].slice(0, 10) + ' ～ ' + d.range[1].slice(0, 10);
-    renderPos(d); renderStats(d); renderTrades(d); drawChart(d);
+    renderPos(d); renderStats(d); renderTrades(d); drawChart(d); renderAlert();
   }
+
+  // ── 進出場通知 ──
+  let AL = null;
+  const NAMES = {gold: '黃金', oil: '原油', '1h': '1 小時', '4h': '4 小時', '1d': '日線'};
+  const comboName = c => c.split(':').map(x => NAMES[x]).join(' ');
+  async function loadAlerts(body) {
+    try {
+      const r = await fetch('/api/commodity/alerts', body ? {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(body)} : {});
+      const j = await r.json();
+      if (!r.ok) throw new Error(j.error || r.statusText);
+      AL = j; renderAlert();
+    } catch (e) { alert(e.message); }
+  }
+  function renderAlert() {
+    if (!AL || !DATA) return;
+    const combo = st.sym + ':' + st.tf;
+    $('#alOn').checked = AL.items.includes(combo);
+    $('#alName').textContent = comboName(combo) + ' 出現進場或出場時通知我';
+    const a = DATA.stats.all;
+    const months = Math.max(1, (new Date(DATA.range[1].slice(0, 10)) - new Date(DATA.range[0].slice(0, 10))) / 2.63e9);
+    $('#alEst').textContent = a.n ? `依回測約每月 ${Math.max(1, Math.round(a.n * 2 / months))} 則（進場、出場各一則）` : '';
+    $('#alNote').textContent = AL.ready ? '送到 LINE／手機通知' : '尚未設定通知管道';
+    $('#alNote').style.color = AL.ready ? '' : 'var(--red)';
+    $('#alList').innerHTML = AL.items.length ? '已開啟：' + AL.items.map(comboName).join('、') : '目前沒有開啟任何通知。';
+    if (!AL.ready) $('#alList').innerHTML += '　<a href="/account#notify" style="color:var(--accent)">設定通知管道 →</a>';
+  }
+  $('#alOn').onchange = e => loadAlerts({combo: st.sym + ':' + st.tf, on: e.target.checked});
+  loadAlerts();
 
   function renderPos(d) {
     const p = d.position, atr = d.last.atr;
