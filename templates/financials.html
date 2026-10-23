@@ -371,7 +371,7 @@
     const st = d.status;
     const running = st && st.running ? `掃描中 ${st.done}/${st.total}…` : '';
     if (!d.date) {
-      box.innerHTML = `${scanBar([])}<div class="card2 empty">${running || '還沒有掃描結果。系統每個交易日收盤後自動掃描（台股約晚上 8 點半後、美股台北清晨），第一次約需 10 分鐘。'}</div>`;
+      box.innerHTML = `${scanBar([])}<div class="card2 empty">${running || (st && st.paused ? `第一次掃描進行中：已完成 ${st.done}/${st.total}，${esc(st.paused)}。` : '還沒有掃描結果。')}<br>系統只在離峰時段（晚上 8:30～隔天 8:30、週末）自動掃描，避免影響白天查詢；全市場約 50 分鐘。</div>`;
       bindScan(); return;
     }
     const sectors = [...new Set(d.rows.map(r => r.sector).filter(Boolean))].sort();
@@ -399,7 +399,7 @@
       <label><input type="checkbox" id="scBelow" ${SC.below ? 'checked' : ''}>只看低於買進價</label>
       <label>綜合分數 ≥ <input type="number" id="scMin" value="${SC.min}" min="0" max="100" step="5" style="width:64px"></label>
       ${sectors.length ? `<label>產業 <select id="scSec"><option value="">全部</option>${sectors.map(x => `<option ${x === SC.sector ? 'selected' : ''}>${esc(x)}</option>`).join('')}</select></label>` : ''}
-      <span class="meta">${d.date ? '資料日 ' + esc(d.date) : ''}${st && st.running ? `・掃描中 ${st.done}/${st.total}` : ''}</span></section>`;
+      <span class="meta">${d.date ? '資料日 ' + esc(d.date) : ''}${st && st.running ? `・掃描中 ${st.done}/${st.total}` : st && st.paused ? `・${esc(st.paused)}（已完成 ${st.done}/${st.total}）` : ''}</span></section>`;
   }
   function bindScan() {
     const box = $('#tab-scan');

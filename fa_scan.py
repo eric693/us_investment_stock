@@ -204,6 +204,11 @@ def _loop():
     except OSError:
         lock.close()
         return
+    # 上一個行程留下的「掃描中」狀態已經不準，先改成暫停，真正開跑時會更新
+    for m, st in read_status().items():
+        if st.get('running'):
+            _status[m] = dict(st, running=False, paused='等待離峰時段（晚上 8:30 後）繼續')
+    _set_status()
     time.sleep(300)                    # 讓其他背景同步先跑
     while True:
         now = tw_board._now()
