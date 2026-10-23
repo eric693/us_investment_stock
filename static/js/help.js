@@ -118,10 +118,18 @@
       '合理價取三種方法：本益比法（未來 12 個月 EPS × 合理本益比）、兩段式現金流折現、分析師目標價。']) +
     note('台股另看月營收與同產業本益比、殖利率中位數；金融股改用 ROE 與股價淨值比估值。規則化分析，僅供參考，非投資建議。'));
 
+  sec('etf.main', '台股 ETF 分析', '<p>一次比較最多 5 檔台股 ETF：價格是否合理、配息與填息、成分股重不重疊。</p>' +
+    steps(['上方加入代號（或點熱門、右下的即將除息清單），按「比較」。',
+      '「折溢價」超過 ±1% 代表市價偏離淨值，溢價時買進等於買貴；「今日資金流向」看申購贖回。',
+      '「近 12 個月殖利率」用實際配過的錢計算；「填息」是除息後漲回除息前價格要幾個交易日。',
+      '「成分股重疊度」50% 以上代表兩檔有一半買一樣的股票；「合併後實際持有的股票」可在每檔旁填比重，看整體押在哪些股票。',
+      '「配息月份」可以挑不同月份配息的 ETF 組合，讓每月都有現金流。']) +
+    note('淨值與折溢價來自證交所即時淨值，盤中約每分鐘更新；成分股每日更新。'));
+
   var PAGES = {
     board: ['board.index', 'board.pulse', 'board.all', 'board.watch', 'board.score', 'board.sector', 'board.rank', 'board.after', 'board.rt', 'board.line'],
     chart: ['chart.basic', 'chart.tools', 'chart.index'],
-    tw: ['tw.main', 'tw.monitor', 'chart.tools'], us: ['us.main'], screener: ['screener.main'], picks: ['picks.main'], commodity: ['commodity.main'], financials: ['financials.main'],
+    tw: ['tw.main', 'tw.monitor', 'chart.tools'], us: ['us.main'], screener: ['screener.main'], picks: ['picks.main'], commodity: ['commodity.main'], financials: ['financials.main'], etf: ['etf.main'],
     portfolio: ['portfolio.main'], account: ['account.main'], admin: ['admin.main'],
   };
 

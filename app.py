@@ -183,6 +183,7 @@ import commodity
 import financials
 import fa_scan
 import portfolio_risk
+import etf_tw
 
 
 def _hist(stock, period='1y', interval='1d', **kw):
@@ -3928,6 +3929,7 @@ commodity.init(app, login_required)
 financials.init(app, login_required)
 fa_scan.init(app, login_required)
 portfolio_risk.init(app, login_required)
+etf_tw.init(app, login_required)
 app.register_blueprint(notify.bp)
 
 

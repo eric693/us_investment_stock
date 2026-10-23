@@ -22,3 +22,4 @@ us_market.db*
 .fa_cache/
 fa_scan.db*
 .fa_scan_status.json
+.etf_cache/
