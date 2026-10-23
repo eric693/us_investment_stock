@@ -150,7 +150,7 @@
   <!-- Page Title -->
   <div style="margin-bottom:20px;">
     <h1 style="font-size:1.3rem;font-weight:900;color:var(--text);">投資組合管理</h1>
-    <p style="color:var(--text-dim);font-size:0.84rem;margin-top:4px;">群組管理・持倉損益・多股比較　｜　資料即時更新，所有資料存放於本機</p>
+    <p style="color:var(--text-dim);font-size:0.84rem;margin-top:4px;">群組管理・持倉損益・多股比較　｜　資料即時更新，資料存在你的帳號，換裝置登入也看得到</p>
   </div>
 
   <!-- Tabs -->
@@ -158,6 +158,7 @@
     <button class="pf-tab active" onclick="switchTab('groups')">自選群組</button>
     <button class="pf-tab" onclick="switchTab('portfolio')">持倉損益</button>
     <button class="pf-tab" onclick="switchTab('compare')">多股比較</button>
+    <button class="pf-tab" onclick="switchTab('risk')">風險分析</button>
   </div>
 
   <!-- ══ TAB: 自選群組 ══════════════════════════════════════ -->
@@ -227,6 +228,15 @@
         <div id="barChart"></div>
       </div>
     </div>
+  </div>
+
+  <!-- ══ TAB: 風險分析 ══════════════════════════════════════ -->
+  <div id="tab-risk" class="pf-section">
+    <div class="port-toolbar">
+      <button class="btn btn-primary btn-sm" onclick="runRisk()">↻ 重新分析</button>
+      <span id="riskMeta" style="font-size:0.76rem;color:var(--text-dim);margin-left:6px;"></span>
+    </div>
+    <div id="riskRoot"><div class="card" style="color:var(--text-dim);text-align:center;padding:40px">讀取中…</div></div>
   </div>
 
   <!-- ══ TAB: 多股比較 ══════════════════════════════════════ -->
@@ -360,11 +370,13 @@ function showToast(msg, type='') {
 // TAB
 // ═══════════════════════════════════════════
 function switchTab(name) {
-  document.querySelectorAll('.pf-tab').forEach((b,i) => b.classList.toggle('active', ['groups','portfolio','compare'][i]===name));
+  document.querySelectorAll('.pf-tab').forEach((b,i) => b.classList.toggle('active', ['groups','portfolio','compare','risk'][i]===name));
   document.querySelectorAll('.pf-section').forEach(s => s.classList.remove('active'));
   document.getElementById('tab-'+name).classList.add('active');
   if (name==='portfolio') { renderPortfolio(); refreshPortfolioPrices(); }
   if (name==='groups')    renderGroups();
+  if (name==='risk')      runRisk();
+  try { history.replaceState(null, '', '/portfolio' + (name === 'groups' ? '' : '?tab=' + name)); } catch (e) {}
 }
 
 // ═══════════════════════════════════════════
@@ -780,8 +792,8 @@ async function refreshPortfolioPrices() {
 
   await Promise.all(tickers.map(async ticker => {
     try {
-      const isTw = ticker.endsWith('.TW') || ticker.endsWith('.TWO');
-      const url = isTw ? `/api/tw/realtime/${ticker}` : `/api/stock/${ticker}`;
+      const isTw = ticker.endsWith('.TW') || ticker.endsWith('.TWO') || _isTwCode(ticker);
+      const url = isTw ? `/api/tw/realtime/${ticker.includes('.') ? ticker : ticker + '.TW'}` : `/api/stock/${ticker}`;
       const r = await fetch(url);
       const j = await r.json();
       _portPrices[ticker] = { price: j.price, pct: j.changePct, name: j.name };
@@ -790,6 +802,88 @@ async function refreshPortfolioPrices() {
 
   renderPortfolio();
   document.getElementById('portUpdateTime').textContent = '更新於 ' + new Date().toLocaleTimeString('zh-TW');
+}
+
+// ═══════════════════════════════════════════
+// RISK
+// ═══════════════════════════════════════════
+const REC_LBL = {buy: '買進', accumulate: '逢低布局', hold: '持有觀望', avoid: '避開'};
+const REC_CLR = {buy: 'var(--red)', accumulate: '#d97706', hold: 'var(--text-mid)', avoid: 'var(--green)'};
+function riskHoldings() {
+  const d = getData();
+  if ((d.holdings || []).length) return {src: '持倉損益', list: d.holdings.map(h => ({ticker: h.ticker, shares: h.shares, costPrice: h.costPrice}))};
+  // 還沒建持倉的話，改用台股分析頁「持股成本」裡記錄的部位
+  let pos = {};
+  try { pos = JSON.parse(UserStore.getItem('positions_tw') || '{}'); } catch (e) {}
+  const list = Object.entries(pos).filter(([, p]) => p.shares > 0).map(([t, p]) => ({ticker: t, shares: p.shares, costPrice: p.avgPrice}));
+  return {src: '台股分析的持股成本', list};
+}
+async function runRisk() {
+  const root = document.getElementById('riskRoot');
+  const {src, list} = riskHoldings();
+  if (!list.length) {
+    root.innerHTML = '<div class="card" style="color:var(--text-dim);text-align:center;padding:40px">還沒有持倉。到「持倉損益」新增持股（台股可直接輸入 2330），就能看風險分析。</div>';
+    return;
+  }
+  root.innerHTML = '<div class="card" style="color:var(--text-dim);text-align:center;padding:40px">分析中…</div>';
+  let r;
+  try {
+    const resp = await fetch('/api/portfolio/risk', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({holdings: list})});
+    r = await resp.json();
+    if (!resp.ok) throw new Error(r.error || resp.statusText);
+  } catch (e) { root.innerHTML = `<div class="card" style="color:var(--red);text-align:center;padding:40px">${esc(e.message)}</div>`; return; }
+  document.getElementById('riskMeta').textContent = `資料來源：${src}・${r.n} 檔・近一年 ${r.start} ～ ${r.end}・美元匯率 ${r.usdtwd}`;
+  const f = (v, d = 1) => v == null ? '—' : Number(v).toLocaleString('en-US', {minimumFractionDigits: d, maximumFractionDigits: d});
+  const bk = r.main_bench === 'taiex' ? '加權指數' : 'S&P 500';
+  const kpi = (lbl, val, sub, bad) => `<div class="sum-card"><div class="sum-label">${lbl}</div><div class="sum-val" style="${bad ? 'color:var(--red)' : ''}">${val}</div><div style="font-size:.7rem;color:var(--text-dim);margin-top:2px">${sub}</div></div>`;
+  const b = r.beta[r.main_bench];
+  root.innerHTML = `
+    <div class="port-summary" style="grid-template-columns:repeat(auto-fit,minmax(150px,1fr))">
+      ${kpi('總市值（台幣）', f(r.total, 0), `台股 ${r.tw_weight}%・美股 ${f(100 - r.tw_weight)}%`)}
+      ${kpi('年化波動度', r.vol + '%', '一年內約 2/3 的時間落在 ±這個幅度', r.vol > 30)}
+      ${kpi('Beta（' + bk + '）', f(b, 2), b == null ? '' : `大盤漲跌 10%，組合約 ${f(b * 10)}%`, b > 1.3)}
+      ${kpi('最大回撤（近一年）', r.max_dd + '%', `${r.dd_from} → ${r.dd_to}`, r.max_dd < -25)}
+      ${kpi('單日風險值 95%', '-' + r.var95 + '%', `20 天裡約有 1 天虧超過 ${f(r.var95_amt, 0)} 元`)}
+      ${kpi('有效持股數', f(r.eff_n), `${r.n} 檔持股，集中度等同 ${f(r.eff_n)} 檔平均分配`, r.eff_n < 3)}
+      ${kpi('平均相關係數', f(r.avg_corr, 2), r.avg_corr == null ? '' : r.avg_corr > 0.5 ? '偏高，分散效果有限' : '分散效果不錯', r.avg_corr > 0.5)}
+      ${kpi('近一年報酬', (r.ret_1y >= 0 ? '+' : '') + r.ret_1y + '%', `以目前權重回推・夏普值 ${f(r.sharpe, 2)}`)}
+    </div>
+    ${r.warnings.length ? `<div class="card" style="border-color:var(--red-line);background:var(--red-soft)"><div class="card-title" style="color:var(--red)">風險提醒</div>
+      <ul style="margin:0;padding-left:18px;font-size:.86rem;line-height:1.9">${r.warnings.map(w => `<li>${esc(w)}</li>`).join('')}</ul></div>`
+      : '<div class="card" style="color:var(--green)">沒有明顯的集中度或相關性問題。</div>'}
+    ${r.missing.length ? `<div style="font-size:.78rem;color:var(--text-dim);margin:-4px 0 12px">查不到資料、沒有納入：${r.missing.map(esc).join('、')}</div>` : ''}
+    <div class="card"><div class="card-title">各持股風險與建議部位</div>
+      <div class="port-table-wrap"><table class="port-table"><thead><tr>
+        <th>股票</th><th>產業</th><th>權重</th><th>風險貢獻</th><th>波動度</th><th>Beta</th><th>距一年高點</th><th>財報建議</th><th>持有股數</th><th>風險平價建議</th><th>停損上限股數</th><th>停損參考</th></tr></thead>
+      <tbody>${r.rows.map(o => {
+        const rt = o.rating;
+        const rec = rt ? `<span style="color:${REC_CLR[rt.rec]};font-weight:700">${REC_LBL[rt.rec]}</span>${rt.prev && rt.prev !== rt.rec ? `<div style="font-size:.7rem;color:var(--text-dim)">原${REC_LBL[rt.prev]}</div>` : ''}` : '<span style="color:var(--text-dim)">—</span>';
+        const over = o.max_shares != null && o.shares > o.max_shares * 1.5;
+        return `<tr><td><div class="port-sym" onclick="location.href='/financials?ticker=${encodeURIComponent(o.code)}'">${esc(o.code)}</div><div style="font-size:.72rem;color:var(--text-dim)">${esc(o.name)}</div></td>
+          <td style="font-size:.78rem">${esc(o.sector)}</td><td>${o.weight}%</td>
+          <td style="${o.risk_contrib > o.weight * 1.5 ? 'color:var(--red);font-weight:700' : ''}">${o.risk_contrib}%</td>
+          <td>${o.vol}%</td><td>${f(o.beta, 2)}</td><td>${o.dd_from_high}%</td><td>${rec}</td>
+          <td>${f(o.shares, 0)}</td><td>${f(o.target_shares, 0)}<div style="font-size:.7rem;color:var(--text-dim)">${o.rp_weight}%</div></td>
+          <td style="${over ? 'color:var(--red);font-weight:700' : ''}">${f(o.max_shares, 0)}</td><td>${f(o.stop, 2)}</td></tr>`;
+      }).join('')}</tbody></table></div>
+      <p style="font-size:.76rem;color:var(--text-dim);line-height:1.7;margin-top:10px">
+        <b>風險貢獻</b>：這檔佔組合波動的比例，比權重大很多代表它特別會晃。<b>風險平價建議</b>：讓每檔分到相同波動的股數（波動大的少放）。
+        <b>停損上限股數</b>：停損設在 2 倍 ATR 時，跌到停損最多虧掉總資產 1% 的股數；超過代表部位太大。財報建議來自每晚的全市場掃描，點代號看完整分析。</p>
+    </div>
+    <div class="chart-row">
+      <div class="card"><div class="card-title">產業配置</div><div id="riskSector" style="height:280px"></div></div>
+      <div class="card"><div class="card-title">持股相關係數 <span style="font-size:.72rem;color:var(--text-dim);font-weight:400">0.7 以上同漲同跌</span></div><div id="riskCorr" style="height:280px"></div></div>
+    </div>
+    <div class="card"><div class="card-title">以目前權重回推近一年走勢</div><div id="riskNav" style="height:260px"></div></div>`;
+  const T = c => Theme.css(c), lay = x => Object.assign({paper_bgcolor: 'rgba(0,0,0,0)', plot_bgcolor: 'rgba(0,0,0,0)', font: {color: T('--text-mid'), size: 11}, margin: {l: 50, r: 16, t: 10, b: 40}}, x);
+  Plotly.newPlot('riskSector', [{type: 'bar', orientation: 'h', y: r.sectors.map(s => s.name).reverse(), x: r.sectors.map(s => s.weight).reverse(),
+    marker: {color: r.sectors.map(s => s.weight > 35 ? T('--red') : '#6d5dfc').reverse()}, text: r.sectors.map(s => s.weight + '%').reverse(), textposition: 'auto'}],
+    lay({margin: {l: 120, r: 16, t: 10, b: 30}, xaxis: {gridcolor: T('--grid'), ticksuffix: '%'}}), {responsive: true, displayModeBar: false});
+  Plotly.newPlot('riskCorr', [{type: 'heatmap', z: r.corr.matrix, x: r.corr.labels, y: r.corr.labels, zmin: -1, zmax: 1,
+    colorscale: [[0, '#059669'], [0.5, '#f4f4f5'], [0.85, '#f59e0b'], [1, '#e11d48']], text: r.corr.matrix.map(row => row.map(v => v.toFixed(2))), texttemplate: '%{text}', hoverongaps: false}],
+    lay({xaxis: {type: 'category'}, yaxis: {type: 'category', autorange: 'reversed'}}), {responsive: true, displayModeBar: false});
+  Plotly.newPlot('riskNav', [{type: 'scatter', mode: 'lines', x: r.nav.map(p => p[0]), y: r.nav.map(p => p[1]), fill: 'tozeroy', line: {color: '#6d5dfc', width: 2}}],
+    lay({yaxis: {gridcolor: T('--grid'), ticksuffix: '%'}, xaxis: {gridcolor: T('--grid')}}), {responsive: true, displayModeBar: false});
 }
 
 // ═══════════════════════════════════════════
@@ -918,6 +1012,7 @@ function fmtNum(v) { return parseFloat(v).toLocaleString('en-US'); }
 // INIT
 // ═══════════════════════════════════════════
 renderGroups();
+{ const t = new URLSearchParams(location.search).get('tab'); if (['portfolio', 'compare', 'risk'].includes(t)) switchTab(t); }
 </script>
 </body>
 </html>
