@@ -149,7 +149,7 @@ def dashboard():
     lbl, cls = vix_label(float(vix.iloc[-1]))
     cnn, sig = _cnn(), current_signal()
     # CNN 綜合了動能、新高新低家數、垃圾債利差等，常比 VIX 早反映情緒；兩者不一致時一起說明
-    if cnn and cnn['score'] <= 25 and sig['vix'] < 25:
+    if cnn and cnn['score'] < 45 and sig['vix'] < 25:
         sig = dict(sig, text=f"CNN 恐懼貪婪指數 {cnn['score']:.0f}（{cnn['rating']}），市場情緒偏悲觀；但 VIX 只有 {sig['vix']:.1f}，"
                              '屬一般修正而非恐慌。可小量分批，回測顯示 VIX 40 以上或期限結構恢復時才是較可靠的大舉加碼點')
     elif cnn and cnn['score'] >= 75 and sig['vix'] < 15:
