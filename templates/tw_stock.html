@@ -1927,6 +1927,9 @@ async function renderIntraday(ticker) {
       yaxis:{gridcolor:GRID,zerolinecolor:GRID,tickfont:{color:'var(--text-mid)'},side:'left',autorange:true},
       xaxis:{rangeslider:{visible:false},gridcolor:GRID,showticklabels:false},
       hovermode:'x unified',
+      // 休市日顯示的是最後一個交易日，右上角標出日期
+      annotations: d.isToday === false ? [{xref:'paper',yref:'paper',x:1,y:1.06,xanchor:'right',showarrow:false,
+        text:d.day.slice(5).replace('-','/') + ' 盤中（今日休市）',font:{color:'var(--text-dim)',size:10}}] : [],
     },{responsive:true,displayModeBar:false});
     Plotly.newPlot('volumeChart', [
       {type:'bar',x:dates,y:o.volume,name:'成交量',marker:{color:volColors},showlegend:false},

@@ -582,11 +582,24 @@ def _write_status():
 
 # ── 即時行情 ──────────────────────────────────────────────────────────
 def _market_open(now=None):
+    live = now is None
     now = now or _now()
     if now.weekday() >= 5:
         return False
     hm = now.hour * 100 + now.minute
-    return 900 <= hm <= 1335
+    if not 900 <= hm <= 1335:
+        return False
+    return not (live and _closed_today(now))
+
+
+def _closed_today(now):
+    """颱風假、國定假日：開盤 10 分鐘後證交所回報的成交日期仍不是今天，就當作今天休市。"""
+    if now.hour * 100 + now.minute < 910:
+        return False
+    snap = _read_rt() or {}
+    today = now.strftime('%Y%m%d')
+    polled_today = (snap.get('ts') or '').replace('-', '')[:8] == today and snap.get('ts', '')[11:16] >= '09:10'
+    return polled_today and snap.get('date') not in (None, today)
 
 
 def _touch_active():
@@ -670,7 +683,8 @@ def _rt_loop():
             t0 = time.time()
             try:
                 alerts_on = any(c.get('enabled') for _, c in userdata.users_with('tw_alerts'))
-                if (_rt_wanted() or alerts_on) and _market_open():
+                # 休市判斷要靠 9:10 之後的一次輪詢，所以盤中時段先照時鐘跑一次
+                if (_rt_wanted() or alerts_on) and (_market_open() or _market_open(_now()) and not _rt_polled_after_910()):
                     snap = _poll_realtime_once(snap if snap.get('date') == _now().strftime('%Y%m%d')
                                                else {})
                     if alerts_on:
@@ -681,6 +695,12 @@ def _rt_loop():
 
 
 _rt_cache = {'mtime': 0, 'data': None}
+
+
+def _rt_polled_after_910():
+    snap = _read_rt() or {}
+    now = _now()
+    return (snap.get('ts') or '')[:10] == now.strftime('%Y-%m-%d') and snap.get('ts', '')[11:16] >= '09:10'
 
 
 def _read_rt():

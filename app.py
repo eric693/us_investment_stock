@@ -2766,10 +2766,10 @@ def get_tw_tick_stats(ticker):
     if cached: return jsonify(cached)
     try:
         stock = yf.Ticker(raw)
-        hist  = stock.history(period='1d', interval='1m')
+        hist  = stock.history(period='5d', interval='1m')        # 休市日取最後一個交易日
         if hist.empty and raw.endswith('.TW'):
             alt  = raw.replace('.TW', '.TWO')
-            hist = yf.Ticker(alt).history(period='1d', interval='1m')
+            hist = yf.Ticker(alt).history(period='5d', interval='1m')
         if hist.empty:
             return jsonify({'error': '暫無分鐘資料'}), 404
         last_date = hist.index.date[-1]
@@ -3233,9 +3233,13 @@ def get_tw_intraday(ticker):
     if cached: return jsonify(cached)
     try:
         stock = yf.Ticker(ticker)
-        hist  = stock.history(period='1d', interval='5m')
+        # 休市日（週末、颱風假、國定假日）period='1d' 會是空的，改抓最近 5 天取最後一個交易日
+        hist  = stock.history(period='5d', interval='5m')
         if hist.empty:
             return jsonify({'error': '今日無盤中資料', 'ticker': ticker}), 404
+        hist = hist.tz_convert('Asia/Taipei')
+        last_day = hist.index.date[-1]
+        hist = hist[hist.index.date == last_day]
 
         def clean(lst):
             res = []
@@ -3251,6 +3255,8 @@ def get_tw_intraday(ticker):
         result = {
             'ticker':  ticker,
             'dates':   dates,
+            'day':     last_day.strftime('%Y-%m-%d'),
+            'isToday': last_day == pd.Timestamp.now(tz='Asia/Taipei').date(),
             'ohlcv': {
                 'open':   clean(hist['Open'].tolist()),
                 'high':   clean(hist['High'].tolist()),

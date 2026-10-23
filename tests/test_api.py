@@ -100,3 +100,17 @@ def test_emerging_quote_and_chart(client, board, monkeypatch):
     assert j['market'] == 'ESB' and len(j['bars']) == 1 and seen == ['7719.TWO'] and j['inst']['days'] == []
     assert board.stock_name('7719') == '碳基'
     assert client.get('/api/tw/board/quote/9999').status_code == 404
+
+
+def test_market_closed_on_typhoon_day(board, monkeypatch):
+    """颱風假：開盤時段內證交所回報的成交日期仍是前一天，就不算盤中。"""
+    import pandas as pd
+    now = pd.Timestamp('2026-10-23 11:16', tz='Asia/Taipei')      # 週五
+    monkeypatch.setattr(board, '_now', lambda: now)
+    monkeypatch.setattr(board, '_read_rt', lambda: {'ts': '2026-10-23 11:16:55', 'date': '20261022'})
+    assert board._market_open(now) is True                  # 指定時間只看時鐘
+    assert board._market_open() is False
+    monkeypatch.setattr(board, '_read_rt', lambda: {'ts': '2026-10-23 11:16:55', 'date': '20261023'})
+    assert board._market_open() is True
+    monkeypatch.setattr(board, '_read_rt', lambda: {'ts': '2026-10-23 09:02:00', 'date': '20261022'})
+    assert board._market_open() is True                     # 9:10 前還沒成交，先不判定休市
