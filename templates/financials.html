@@ -1,0 +1,316 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>財報分析</title>
+<link rel="stylesheet" href="/static/css/style.css?v=9">
+{% include "_head.html" %}
+<script src="https://cdn.plot.ly/plotly-2.26.0.min.js"></script>
+<style>
+.fa-wrap { max-width: 1240px; margin: 0 auto; padding: 16px; display: flex; flex-direction: column; gap: 14px; }
+.card2 { background: var(--card-bg); border: 1px solid var(--card-bd); border-radius: 18px; box-shadow: var(--shadow); }
+.box { padding: 18px 20px; }
+.box h3 { font-size: 1rem; margin: 0 0 12px; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.box h3 small { font-weight: 400; color: var(--text-dim); font-size: .74rem; margin-left: auto; }
+.hint { font-size: .78rem; color: var(--text-dim); line-height: 1.7; margin: 0; }
+.mono { font-family: 'JetBrains Mono', ui-monospace, monospace; }
+.up { color: var(--red); } .dn { color: var(--green); }
+
+.search { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; padding: 14px 18px; }
+.search input { flex: 1; min-width: 180px; height: 44px; border-radius: 12px; border: 1px solid var(--card-bd2); background: var(--surface-1);
+  color: var(--text); padding: 0 14px; font: inherit; font-size: 1rem; }
+.search button { height: 44px; padding: 0 22px; border: 0; border-radius: 12px; background: var(--accent-grad); color: #fff; font: inherit; font-weight: 700; cursor: pointer; }
+.chips { display: flex; gap: 6px; flex-wrap: wrap; width: 100%; }
+.chips a { font-size: .78rem; padding: 4px 10px; border-radius: 999px; border: 1px solid var(--card-bd2); color: var(--text-mid); text-decoration: none; cursor: pointer; }
+.chips a:hover { border-color: var(--accent); color: var(--text); }
+
+.hero { display: grid; grid-template-columns: 1.2fr 1fr; gap: 0; }
+.hero > div { padding: 20px 22px; }
+.hero > div + div { border-left: 1px solid var(--line); }
+.co { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+.co h2 { margin: 0; font-size: 1.5rem; }
+.co .code { font: 600 .9rem 'JetBrains Mono', monospace; color: var(--text-dim); }
+.co .tag2 { font-size: .72rem; padding: 2px 8px; border-radius: 6px; background: var(--surface-1); border: 1px solid var(--line); color: var(--text-mid); }
+.pxrow { display: flex; align-items: baseline; gap: 10px; margin: 10px 0 16px; }
+.pxrow b { font: 700 1.9rem/1 'JetBrains Mono', monospace; }
+.pxrow span { color: var(--text-dim); font-size: .8rem; }
+.verdict-row { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; }
+.rec { font-size: 1.35rem; font-weight: 900; padding: 10px 20px; border-radius: 14px; letter-spacing: .04em; }
+.rec.buy { background: rgba(225,29,72,.12); color: var(--red); border: 1.5px solid var(--red-line); }
+.rec.accumulate { background: rgba(217,119,6,.12); color: #d97706; border: 1.5px solid rgba(217,119,6,.4); }
+.rec.hold { background: var(--surface-1); color: var(--text-mid); border: 1.5px solid var(--card-bd2); }
+.rec.avoid { background: rgba(5,150,105,.1); color: var(--green); border: 1.5px solid rgba(5,150,105,.35); }
+.ring { position: relative; width: 74px; height: 74px; }
+.ring svg { transform: rotate(-90deg); }
+.ring b { position: absolute; inset: 0; display: grid; place-items: center; font: 800 1.35rem 'JetBrains Mono', monospace; }
+.ring small { position: absolute; bottom: -18px; left: 0; right: 0; text-align: center; font-size: .68rem; color: var(--text-dim); }
+.why { margin: 16px 0 0; font-size: .88rem; color: var(--text-mid); line-height: 1.75; }
+
+.fv-num { display: flex; gap: 22px; flex-wrap: wrap; margin-bottom: 14px; }
+.fv-num div span { display: block; font-size: .72rem; color: var(--text-dim); margin-bottom: 2px; }
+.fv-num div b { font: 700 1.15rem 'JetBrains Mono', monospace; }
+.fvbar { position: relative; height: 54px; margin: 6px 8px 4px; }
+.fvbar .track { position: absolute; left: 0; right: 0; top: 22px; height: 10px; border-radius: 999px; background: linear-gradient(90deg, rgba(5,150,105,.35), rgba(217,119,6,.35), rgba(225,29,72,.35)); }
+.fvbar .mk { position: absolute; top: 0; transform: translateX(-50%); text-align: center; font-size: .68rem; white-space: nowrap; }
+.fvbar .mk i { display: block; width: 2px; height: 16px; margin: 3px auto 0; background: currentColor; }
+.fvbar .mk.px { top: auto; bottom: -2px; color: var(--text); font-weight: 700; }
+.fvbar .mk.px i { margin: 0 auto 3px; height: 18px; width: 3px; }
+.conf { font-size: .74rem; color: var(--text-dim); margin-top: 8px; }
+
+.thesis { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+.thesis ul { margin: 0; padding-left: 18px; font-size: .86rem; line-height: 1.85; }
+.thesis h4 { margin: 0 0 6px; font-size: .86rem; }
+.concl { margin-top: 14px; padding: 12px 14px; border-radius: 12px; background: var(--surface-1); font-size: .88rem; line-height: 1.8; }
+.flags { margin-top: 10px; padding: 10px 14px; border-radius: 12px; background: var(--red-soft); border: 1px solid var(--red-line); color: var(--red); font-size: .84rem; line-height: 1.7; }
+
+.pillars { display: grid; grid-template-columns: repeat(5, 1fr); gap: 10px; }
+.pl { padding: 12px 14px; border-radius: 14px; border: 1px solid var(--card-bd); background: var(--surface-1); cursor: pointer; text-align: left; font: inherit; color: inherit; }
+.pl.on { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent) inset; }
+.pl span { font-size: .78rem; color: var(--text-mid); }
+.pl b { display: block; font: 800 1.5rem 'JetBrains Mono', monospace; margin: 2px 0 6px; }
+.bar { height: 6px; border-radius: 999px; background: var(--card-bd2); overflow: hidden; }
+.bar i { display: block; height: 100%; border-radius: inherit; }
+.mt { width: 100%; border-collapse: collapse; margin-top: 14px; font-size: .84rem; }
+.mt td { padding: 9px 8px; border-bottom: 1px solid var(--line); vertical-align: top; }
+.mt td:nth-child(2) { text-align: right; font-family: 'JetBrains Mono', monospace; white-space: nowrap; }
+.mt td:nth-child(3) { width: 90px; }
+.mt td:last-child { color: var(--text-dim); font-size: .76rem; }
+.sc { display: inline-block; min-width: 34px; text-align: center; font: 700 .74rem 'JetBrains Mono', monospace; padding: 2px 6px; border-radius: 6px; }
+
+.grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+.seg { display: inline-flex; border: 1px solid var(--card-bd2); border-radius: 10px; padding: 3px; background: var(--surface-1); }
+.seg button { border: 0; background: none; color: var(--text-mid); font: inherit; font-size: .78rem; padding: 5px 12px; border-radius: 7px; cursor: pointer; }
+.seg button.on { background: var(--card-bg); color: var(--text); font-weight: 700; box-shadow: 0 1px 3px rgba(0,0,0,.12); }
+.plot { height: 280px; }
+.tbl { width: 100%; border-collapse: collapse; font-size: .82rem; }
+.tbl th { color: var(--text-dim); font-weight: 600; font-size: .72rem; text-align: right; padding: 6px 8px; border-bottom: 1px solid var(--line); }
+.tbl td { padding: 8px; text-align: right; border-bottom: 1px solid var(--line); font-family: 'JetBrains Mono', monospace; }
+.tbl th:first-child, .tbl td:first-child { text-align: left; font-family: inherit; }
+.dist { display: flex; height: 12px; border-radius: 999px; overflow: hidden; margin: 10px 0 6px; }
+.dist i { display: block; height: 100%; }
+.fs { display: grid; grid-template-columns: 1fr 1fr; gap: 4px 14px; font-size: .8rem; margin-top: 10px; }
+.empty { padding: 60px 0; text-align: center; color: var(--text-dim); }
+@media (max-width: 900px) {
+  .hero, .thesis, .grid2 { grid-template-columns: 1fr; }
+  .hero > div + div { border-left: 0; border-top: 1px solid var(--line); }
+  .pillars { grid-template-columns: repeat(3, 1fr); }
+}
+@media (max-width: 600px) {
+  .fa-wrap { padding: 10px; }
+  .pillars { grid-template-columns: repeat(2, 1fr); }
+  .mt td:last-child { display: none; }
+  .box { padding: 16px; }
+}
+</style>
+</head>
+<body data-help-page="financials">
+{% include "_appbar.html" %}
+<main class="fa-wrap">
+  <form class="card2 search" id="form">
+    <input id="q" placeholder="輸入台股代號或美股代碼，例如 2330、2317、AAPL、NVDA" autocomplete="off" autocapitalize="characters">
+    <button type="submit">分析</button>
+    <div class="chips" id="chips"></div>
+  </form>
+  <div id="root"><div class="card2 empty">輸入代號，產生一份財報分析報告。</div></div>
+  <p class="hint" style="text-align:center">規則化的基本面分析，財報來自 Yahoo Finance，台股同業估值來自證交所／櫃買中心。合理價是估計，不保證股價會到；僅供參考，非投資建議。</p>
+</main>
+
+<script>
+(function () {
+  const $ = s => document.querySelector(s);
+  const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;'}[c]));
+  const CHIPS = ['2330', '2317', '2454', '2882', '2412', 'AAPL', 'NVDA', 'MSFT', 'GOOGL', 'KO'];
+  $('#chips').innerHTML = CHIPS.map(c => `<a data-c="${c}">${c}</a>`).join('');
+  $('#chips').onclick = e => { const a = e.target.closest('a'); if (a) { $('#q').value = a.dataset.c; go(); } };
+  $('#form').onsubmit = e => { e.preventDefault(); go(); };
+  let DATA = null, PILLAR = 0, PERIOD = 'annual';
+
+  const num = (v, d = 2) => v == null ? '—' : Number(v).toLocaleString('en-US', {minimumFractionDigits: d, maximumFractionDigits: d});
+  const big = v => {
+    if (v == null) return '—';
+    const a = Math.abs(v);
+    if (DATA.market === 'tw') return a >= 1e8 ? num(v / 1e8, 0) + ' 億' : num(v / 1e4, 0) + ' 萬';
+    return a >= 1e12 ? num(v / 1e12, 2) + 'T' : a >= 1e9 ? num(v / 1e9, 1) + 'B' : num(v / 1e6, 0) + 'M';
+  };
+  const scColor = s => s == null ? 'var(--text-dim)' : s >= 70 ? 'var(--red)' : s >= 45 ? '#d97706' : 'var(--green)';
+  const scBg = s => s == null ? 'var(--surface-1)' : s >= 70 ? 'var(--red-soft)' : s >= 45 ? 'rgba(217,119,6,.1)' : 'rgba(5,150,105,.1)';
+
+  async function go(push = true) {
+    const code = $('#q').value.trim();
+    if (!code) return;
+    if (push) history.replaceState(null, '', '/financials?ticker=' + encodeURIComponent(code));
+    $('#root').innerHTML = '<div class="card2 empty">分析中…（第一次查一檔約 5～15 秒）</div>';
+    try {
+      const r = await fetch('/api/financials/' + encodeURIComponent(code));
+      if (r.status === 401) { location.href = '/login?next=' + encodeURIComponent(location.pathname + location.search); return; }
+      const j = await r.json();
+      if (!r.ok) throw new Error(j.error || r.statusText);
+      DATA = j; PILLAR = 0; render();
+    } catch (e) { $('#root').innerHTML = `<div class="card2 empty">${esc(e.message)}</div>`; }
+  }
+
+  function ring(score) {
+    const c = 2 * Math.PI * 30, p = (score || 0) / 100;
+    return `<div class="ring"><svg width="74" height="74"><circle cx="37" cy="37" r="30" fill="none" stroke="var(--card-bd2)" stroke-width="7"/>
+      <circle cx="37" cy="37" r="30" fill="none" stroke="${scColor(score)}" stroke-width="7" stroke-linecap="round" stroke-dasharray="${c * p} ${c}"/></svg>
+      <b style="color:${scColor(score)}">${score ?? '—'}</b><small>綜合分數</small></div>`;
+  }
+
+  function fvBar(d) {
+    const f = d.fair; if (!f) return '<p class="hint">資料不足，無法估算合理價。</p>';
+    const pts = [f.low, f.high, f.value, f.buy_below, d.price];
+    const lo = Math.min(...pts) * 0.95, hi = Math.max(...pts) * 1.05;
+    const x = v => ((v - lo) / (hi - lo) * 100).toFixed(1) + '%';
+    return `<div class="fv-num">
+        <div><span>合理價</span><b>${num(f.value)}</b></div>
+        <div><span>${f.upside >= 0 ? '潛在上漲' : '高於合理價'}</span><b class="${f.upside >= 0 ? 'up' : 'dn'}">${f.upside >= 0 ? '+' : ''}${f.upside}%</b></div>
+        <div><span>買進價參考（85 折）</span><b>${num(f.buy_below)}</b></div>
+        <div><span>估值區間</span><b style="font-size:.95rem">${num(f.low)} ～ ${num(f.high)}</b></div>
+      </div>
+      <div class="fvbar"><div class="track" style="left:${x(f.low)};right:calc(100% - ${x(f.high)})"></div>
+        <div class="mk" style="left:${x(f.buy_below)};color:var(--green)">買進價<i></i></div>
+        <div class="mk" style="left:${x(f.value)};color:#d97706">合理價<i></i></div>
+        <div class="mk px" style="left:${x(d.price)}"><i></i>現價 ${num(d.price)}</div>
+      </div>
+      <div class="conf">估值可信度：${esc(f.confidence_label)}</div>`;
+  }
+
+  function render() {
+    const d = DATA, r = d.rec, s = d.summary;
+    const pills = d.pillars.map((p, i) => `<button class="pl ${i === PILLAR ? 'on' : ''}" data-i="${i}"><span>${esc(p.name)}・${p.weight}%</span>
+        <b style="color:${scColor(p.score)}">${p.score ?? '—'}</b><div class="bar"><i style="width:${p.score || 0}%;background:${scColor(p.score)}"></i></div></button>`).join('');
+    $('#root').innerHTML = `
+      <section class="card2 hero">
+        <div>
+          <div class="co"><h2>${esc(d.name)}</h2><span class="code">${esc(d.code)}</span><span class="tag2">${d.market === 'tw' ? '台股' : '美股'}</span>
+            ${d.sector ? `<span class="tag2">${esc(d.sector)}</span>` : ''}${d.financial ? '<span class="tag2">金融股估值法</span>' : ''}</div>
+          <div class="pxrow"><b>${num(d.price)}</b><span>${esc(d.currency)}・市值 ${big(d.mcap)}・最新財報 ${esc(d.latest_q || '—')}</span></div>
+          <div class="verdict-row"><div class="rec ${r.level}">${esc(r.label)}</div>${ring(d.score)}
+            <div class="hint">公司品質 <b style="color:${scColor(d.quality)}">${d.quality ?? '—'}</b>　估值吸引力 <b style="color:${scColor(d.value_score)}">${d.value_score ?? '—'}</b></div></div>
+          <p class="why">${esc(r.why)}</p>
+        </div>
+        <div><h3 style="font-size:.95rem;margin:0 0 12px">合理價估算</h3>${fvBar(d)}</div>
+      </section>
+
+      <section class="card2 box">
+        <h3>投資論點 <small>${esc(d.updated)} 產生</small></h3>
+        <div class="thesis">
+          <div><h4 class="up">亮點</h4><ul>${s.pros.map(x => `<li>${esc(x)}</li>`).join('') || '<li>—</li>'}</ul></div>
+          <div><h4 class="dn">隱憂</h4><ul>${s.cons.map(x => `<li>${esc(x)}</li>`).join('') || '<li>—</li>'}</ul></div>
+        </div>
+        <div class="concl">${esc(s.conclusion)}</div>
+        ${d.flags.length ? `<div class="flags"><b>財務警訊</b>：${d.flags.map(esc).join('；')}</div>` : ''}
+      </section>
+
+      <section class="card2 box">
+        <h3>五大面向評分 <small>點選看細項；70 分以上強、45 分以下弱</small></h3>
+        <div class="pillars" id="pills">${pills}</div>
+        <table class="mt" id="metrics"></table>
+      </section>
+
+      <div class="grid2">
+        <section class="card2 box">
+          <h3>營收與獲利 <span class="seg" id="per"><button data-v="annual">年度</button><button data-v="quarterly">季度</button></span></h3>
+          <div id="c1" class="plot"></div>
+        </section>
+        <section class="card2 box">
+          <h3>利潤率趨勢</h3>
+          <div id="c2" class="plot"></div>
+        </section>
+      </div>
+
+      <div class="grid2">
+        <section class="card2 box">
+          <h3>合理價的三種算法</h3>
+          <table class="tbl"><thead><tr><th>方法</th><th>估值</th><th>相對現價</th></tr></thead><tbody>
+            ${(d.fair ? d.fair.methods : []).map(m => `<tr><td>${esc(m.name)}<div class="hint">${esc(m.detail)}</div></td><td>${num(m.value)}</td>
+              <td class="${m.upside >= 0 ? 'up' : 'dn'}">${m.upside >= 0 ? '+' : ''}${m.upside}%</td></tr>`).join('') || '<tr><td colspan="3">資料不足</td></tr>'}
+          </tbody></table>
+          <p class="hint" style="margin-top:10px">三種方法取中位數（兩種取平均）。差距越大代表市場對這家公司的看法越分歧。</p>
+        </section>
+        <section class="card2 box">
+          <h3>分析師共識 <small>${d.analyst.n ? d.analyst.n + ' 位分析師' : ''}</small></h3>
+          ${analystHtml(d.analyst)}
+        </section>
+      </div>
+
+      <div class="grid2">
+        ${d.tw_revenue ? `<section class="card2 box"><h3>月營收 <small>最新 ${esc(d.tw_revenue.last_ym)}</small></h3><div id="c3" class="plot"></div>
+          <p class="hint">單月年增 ${pctTxt(d.tw_revenue.yoy_last)}・近 3 個月 ${pctTxt(d.tw_revenue.yoy3)}・今年累計 ${pctTxt(d.tw_revenue.yoy_ytd)}</p></section>` : ''}
+        <section class="card2 box">
+          <h3>本益比歷史</h3>
+          ${peHtml(d)}
+        </section>
+        ${d.fscore_parts && d.fscore_parts.length ? `<section class="card2 box"><h3>Piotroski F-score 檢查表 <small>${d.fscore_parts.filter(x => x.ok).length} / 9</small></h3>
+          <div class="fs">${d.fscore_parts.map(x => `<div>${x.ok ? '<span class="up">✓</span>' : '<span style="color:var(--text-dim)">✗</span>'} ${esc(x.name)}</div>`).join('')}</div>
+          <p class="hint" style="margin-top:10px">比較最近兩個會計年度。分數高代表財務體質正在變好。</p></section>` : ''}
+      </div>`;
+    document.querySelectorAll('#pills .pl').forEach(b => b.onclick = () => { PILLAR = +b.dataset.i; document.querySelectorAll('#pills .pl').forEach(x => x.classList.toggle('on', x === b)); metrics(); });
+    document.querySelectorAll('#per button').forEach(b => { b.classList.toggle('on', b.dataset.v === PERIOD); b.onclick = () => { PERIOD = b.dataset.v; document.querySelectorAll('#per button').forEach(x => x.classList.toggle('on', x === b)); charts(); }; });
+    metrics(); charts();
+  }
+
+  const pctTxt = v => v == null ? '—' : `<b class="${v >= 0 ? 'up' : 'dn'}">${v >= 0 ? '+' : ''}${v}%</b>`;
+
+  function metrics() {
+    const p = DATA.pillars[PILLAR];
+    $('#metrics').innerHTML = p.metrics.length ? p.metrics.map(m => {
+      const v = m.value == null ? '—' : (typeof m.value === 'number' ? num(m.value, Math.abs(m.value) >= 100 ? 0 : m.fmt === '倍' ? 2 : 1) : esc(m.value)) + (m.value != null && m.fmt ? ' ' + m.fmt : '');
+      return `<tr><td>${esc(m.label)}</td><td>${v}</td><td><span class="sc" style="color:${scColor(m.score)};background:${scBg(m.score)}">${m.score ?? '—'}</span></td><td>${esc(m.note)}</td></tr>`;
+    }).join('') : '<tr><td>這個面向沒有可用的資料</td></tr>';
+  }
+
+  function analystHtml(a) {
+    if (!a.n) return '<p class="hint">沒有分析師追蹤資料。</p>';
+    const d = a.dist || {}, tot = Object.values(d).reduce((x, y) => x + y, 0) || 1;
+    const seg = [['strongBuy', '強力買進', 'var(--red)'], ['buy', '買進', '#f87171'], ['hold', '持有', '#d4d4d8'], ['sell', '賣出', '#34d399'], ['strongSell', '強力賣出', 'var(--green)']];
+    return `<div class="fv-num"><div><span>共識評等</span><b>${esc(a.label || '—')}</b></div>
+        <div><span>平均目標價</span><b>${num(a.target)}</b></div>
+        <div><span>相對現價</span><b class="${(a.upside || 0) >= 0 ? 'up' : 'dn'}">${a.upside == null ? '—' : (a.upside >= 0 ? '+' : '') + a.upside + '%'}</b></div>
+        <div><span>目標價區間</span><b style="font-size:.95rem">${num(a.low)} ～ ${num(a.high)}</b></div></div>
+      ${a.dist ? `<div class="dist">${seg.map(([k, , c]) => d[k] ? `<i style="width:${d[k] / tot * 100}%;background:${c}" title="${k}"></i>` : '').join('')}</div>
+        <div class="hint">${seg.map(([k, n]) => d[k] ? `${n} ${d[k]}` : '').filter(Boolean).join('・')}</div>` : ''}
+      <p class="hint" style="margin-top:10px">分析師普遍偏樂觀，目標價只當三種估值方法之一，不直接照單全收。</p>`;
+  }
+
+  function peHtml(d) {
+    const h = d.charts.pe_hist || [];
+    if (!h.length) return '<p class="hint">資料不足。</p>';
+    return `<table class="tbl"><thead><tr><th>年度</th><th>年底股價</th><th>EPS</th><th>本益比</th></tr></thead><tbody>
+      ${h.slice().reverse().map(x => `<tr><td>${esc(x.year.slice(0, 7))}</td><td>${num(x.price)}</td><td>${num(x.eps)}</td><td>${num(x.pe, 1)}</td></tr>`).join('')}</tbody></table>
+      ${d.peer ? `<p class="hint" style="margin-top:10px">同${d.market === 'tw' ? '產業' : '類股'}（${esc(d.peer.name)}，${d.peer.n} 家）本益比中位數 ${d.peer.pe ?? '—'} 倍${d.peer.pb ? `、股價淨值比 ${d.peer.pb} 倍` : ''}${d.peer.dy ? `、殖利率 ${d.peer.dy}%` : ''}。</p>` : ''}`;
+  }
+
+  function charts() {
+    const T = c => Theme.css(c), C = DATA.charts[PERIOD];
+    const lay = extra => Object.assign({paper_bgcolor: 'rgba(0,0,0,0)', plot_bgcolor: 'rgba(0,0,0,0)', margin: {l: 52, r: 44, t: 10, b: 30},
+      font: {color: T('--text-mid'), size: 11}, legend: {orientation: 'h', y: 1.12, x: 0, font: {size: 10}},
+      xaxis: {gridcolor: T('--grid'), type: 'category'}, yaxis: {gridcolor: T('--grid'), zerolinecolor: T('--line')}, hovermode: 'x unified'}, extra);
+    const cfg = {responsive: true, displayModeBar: false};
+    const lbl = d => PERIOD === 'annual' ? d.slice(0, 4) : d.slice(0, 7);
+    const div = DATA.market === 'tw' ? 1e8 : 1e9, unit = DATA.market === 'tw' ? '億' : 'B';
+    Plotly.newPlot('c1', [
+      {type: 'bar', name: '營收（' + unit + '）', x: C.rev.map(p => lbl(p[0])), y: C.rev.map(p => p[1] / div), marker: {color: 'rgba(109,93,252,.55)'}},
+      {type: 'bar', name: '淨利（' + unit + '）', x: C.ni.map(p => lbl(p[0])), y: C.ni.map(p => p[1] / div), marker: {color: T('--red')}},
+      {type: 'scatter', mode: 'lines+markers', name: 'EPS', x: C.eps.map(p => lbl(p[0])), y: C.eps.map(p => p[1]), yaxis: 'y2', line: {color: '#d97706', width: 2}},
+    ], lay({barmode: 'group', yaxis2: {overlaying: 'y', side: 'right', showgrid: false}}), cfg);
+    Plotly.newPlot('c2', [['gm', '毛利率', '#6d5dfc'], ['om', '營益率', '#d97706'], ['nm', '淨利率', T('--red')]].filter(([k]) => C[k].length).map(([k, n, c]) =>
+      ({type: 'scatter', mode: 'lines+markers', name: n, x: C[k].map(p => lbl(p[0])), y: C[k].map(p => p[1]), line: {color: c, width: 2}})),
+      lay({yaxis: {gridcolor: T('--grid'), ticksuffix: '%'}}), cfg);
+    const tr = DATA.tw_revenue;
+    if (tr && document.getElementById('c3')) {
+      Plotly.newPlot('c3', [
+        {type: 'bar', name: '月營收（億）', x: tr.months.map(m => m.ym), y: tr.months.map(m => m.rev / 1e5), marker: {color: 'rgba(109,93,252,.55)'}},
+        {type: 'scatter', mode: 'lines+markers', name: '年增率', x: tr.months.map(m => m.ym), y: tr.months.map(m => m.yoy), yaxis: 'y2', line: {color: T('--red'), width: 2}},
+      ], lay({yaxis2: {overlaying: 'y', side: 'right', showgrid: false, ticksuffix: '%'}}), cfg);
+    }
+  }
+
+  window.addEventListener('themechange', () => { if (DATA) charts(); });
+  const qs = new URLSearchParams(location.search).get('ticker');
+  if (qs) { $('#q').value = qs; go(false); }
+})();
+</script>
+</body>
+</html>

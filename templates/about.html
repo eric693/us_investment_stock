@@ -4,11 +4,11 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>StockLens — 台股・美股分析平台</title>
-<meta name="description" content="StockLens：台股即時看盤、三大法人籌碼、盤後與盤中選股、經回測驗證的潛力股評分、黃金原油進出場訊號、美股分析、策略選股與投資組合管理。">
+<meta name="description" content="StockLens：台股即時看盤、三大法人籌碼、盤後與盤中選股、經回測驗證的潛力股評分、財報分析與買進建議、黃金原油進出場訊號、美股分析、策略選股與投資組合管理。">
 <meta property="og:title" content="StockLens — 看懂籌碼，早一步出手">
-<meta property="og:description" content="台股即時看盤、三大法人籌碼、盤後與盤中選股、經回測驗證的潛力股評分、黃金原油進出場訊號、美股分析、策略選股與投資組合管理。">
+<meta property="og:description" content="台股即時看盤、三大法人籌碼、盤後與盤中選股、經回測驗證的潛力股評分、財報分析與買進建議、黃金原油進出場訊號、美股分析、策略選股與投資組合管理。">
 <meta property="og:type" content="website">
-<link rel="stylesheet" href="/static/css/style.css?v=8">
+<link rel="stylesheet" href="/static/css/style.css?v=9">
 {% include "_head.html" %}
 <style>
 body { min-height: 100vh; overflow-x: hidden; }
@@ -151,6 +151,14 @@ footer { padding: 32px 0 48px; color: var(--text-dim); font-size: .78rem; line-h
           <ul><li>台股：月營收成長、外資買超、突破高點、站上月線、投信籌碼是否擁擠</li><li>美股（S&amp;P 500 + Nasdaq-100）：12 個月動能、長期趨勢、強勢股拉回</li>
             <li>指標先用前段資料挑選、再用後段驗證，兩段都有效才採用</li><li>公開回測：分數前 20 名 vs 全體的累積報酬、依分數分組的報酬</li>
             <li>每檔附上理由與風險提示（追高、過熱、本益比偏高、營收衰退）</li><li>個股分析頁直接顯示該股分數與停損參考</li></ul>
+        </div>
+        <div class="card wide">
+          <div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/><path d="M14 3v6h6"/><path d="M8 17v-3M12 17v-6M16 17v-4"/></svg></div>
+          <h3>財報分析與買進建議（台股・美股）</h3>
+          <p>依基本面經理人的流程分析一家公司，最後給出「買進／逢低布局／持有觀望／避開」與合理價、買進價參考。</p>
+          <ul><li>五大面向：成長性、獲利能力、財務體質、盈餘品質與現金流、估值，各指標附數值、分數與意義</li><li>合理價三種算法：本益比法（未來 12 個月 EPS）、兩段式現金流折現、分析師目標價</li>
+            <li>專業指標：ROE、ROIC、Altman Z、Piotroski F-score、PEG、EV/EBITDA、自由現金流殖利率</li><li>台股另看月營收與同產業本益比、殖利率；美股另扣股票酬勞、看分析師預估上修下修</li>
+            <li>財務警訊（高槓桿、現金流跟不上獲利）會直接降級建議</li><li>金融股改用 ROE 與股價淨值比估值</li></ul>
         </div>
         <div class="card wide">
           <div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 17l5-5 4 3 8-8"/><path d="M15 7h5v5"/><path d="M3 21h18"/></svg></div>

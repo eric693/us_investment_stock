@@ -110,10 +110,18 @@
       '右側「歷史回測」列出全部、前半段、後半段的成績；兩段都賺錢的週期較可靠。點交易紀錄的一列可以跳到圖上位置。']) +
     note('規則只做多，參數沒有針對過去資料最佳化。目前回測以黃金 4 小時、日線最穩定；黃金 1 小時、原油日線前後段差異大。回測不代表未來，僅供參考。'));
 
+  sec('financials.main', '財報分析', '<p>用基本面經理人的流程分析一檔台股或美股，最後給出「買進／逢低布局／持有觀望／避開」的建議與合理價。</p>' +
+    steps(['輸入台股代號（2330）或美股代碼（AAPL），按「分析」。',
+      '最上方是結論：建議、綜合分數（公司品質 + 估值吸引力）、合理價與買進價參考（合理價打 85 折）。',
+      '「投資論點」列出亮點、隱憂與財務警訊；有警訊時建議會直接降級。',
+      '「五大面向評分」：成長性 25%、獲利能力 20%、財務體質 15%、盈餘品質 15%、估值 25%，點選可看每個指標的數值與意義。',
+      '合理價取三種方法：本益比法（未來 12 個月 EPS × 合理本益比）、兩段式現金流折現、分析師目標價。']) +
+    note('台股另看月營收與同產業本益比、殖利率中位數；金融股改用 ROE 與股價淨值比估值。規則化分析，僅供參考，非投資建議。'));
+
   var PAGES = {
     board: ['board.index', 'board.pulse', 'board.all', 'board.watch', 'board.score', 'board.sector', 'board.rank', 'board.after', 'board.rt', 'board.line'],
     chart: ['chart.basic', 'chart.tools', 'chart.index'],
-    tw: ['tw.main', 'tw.monitor', 'chart.tools'], us: ['us.main'], screener: ['screener.main'], picks: ['picks.main'], commodity: ['commodity.main'],
+    tw: ['tw.main', 'tw.monitor', 'chart.tools'], us: ['us.main'], screener: ['screener.main'], picks: ['picks.main'], commodity: ['commodity.main'], financials: ['financials.main'],
     portfolio: ['portfolio.main'], account: ['account.main'], admin: ['admin.main'],
   };
 

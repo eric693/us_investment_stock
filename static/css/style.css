@@ -1272,8 +1272,12 @@ a.mkt-chip:hover { border-color: var(--accent); }
 .mkt-chip .idx-q.up { color: var(--red); } .mkt-chip .idx-q.dn { color: var(--green); }
 @media (max-width: 860px) { .mkt-chip b { display: none; } }
 
-/* 手機：頁面連結換到第二排（可左右滑）；第一排右側的大盤小卡空間不夠時自動截斷 */
-@media (max-width: 860px) {
+/* 連結多：中等寬度先縮小間距；再窄（平板、手機）就把頁面連結換到第二排（可左右滑），第一排右側的大盤小卡空間不夠時自動截斷 */
+@media (max-width: 1440px) and (min-width: 1181px) {
+  .appbar-link { padding: 7px 9px; font-size: .82rem; }
+  .appbar-link.active::after { left: 9px; right: 9px; }
+}
+@media (max-width: 1180px) {
   .appbar { flex-wrap: wrap; height: auto; padding: 8px 12px 0; row-gap: 4px; }
   .appbar-links { order: 3; flex: 0 0 calc(100% + 24px); margin: 0 -12px; padding: 0 8px 6px; }
   .appbar-right { flex: 1 1 0; min-width: 0; justify-content: flex-end; gap: 8px; }

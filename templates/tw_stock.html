@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>台股投資分析儀表板</title>
 <script src="https://cdn.plot.ly/plotly-2.26.0.min.js"></script>
-<link rel="stylesheet" href="/static/css/style.css?v=8">
+<link rel="stylesheet" href="/static/css/style.css?v=9">
 {% include "_head.html" %}
 <script src="/static/js/pickcard.js?v=1" defer></script>
 <style>
@@ -397,6 +397,7 @@
         <button id="watchBtn" class="watch-btn" onclick="toggleWatch()">+ 自選</button>
         <button id="alertBtn" class="alert-btn" onclick="openAlertModal()">提醒 <span id="alertDot" class="alert-dot hidden"></span></button>
         <button id="rtBtn" class="alert-btn" onclick="toggleRealtime()" title="開啟盯盤模式，每60秒自動更新報價">盯盤</button>
+        <button class="alert-btn" onclick="location.href='/financials?ticker=' + encodeURIComponent((currentData && (currentData.displayTicker || currentData.ticker)) || '')" title="財報分析與買進建議">財報分析</button>
         <span id="rtIndicator" class="rt-indicator rt-off"><span class="rt-dot"></span><span id="rtLabel">停止</span></span>
       </div>
     </div>
