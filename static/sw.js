@@ -3,9 +3,15 @@
  * 頁面、/api/ 一律走網路，不會看到舊報價；離線時頁面改回一張簡短的離線提示。
  * 改了快取策略就把 CACHE 版本號 +1，舊快取會在啟用時清掉。
  */
-var CACHE = 'stocklens-static-v1';
+var CACHE = 'stocklens-static-v2';
 
-self.addEventListener('install', function () { self.skipWaiting(); });
+// 安裝時先放進快取：圖示與安裝說明用到的檔案，離線或第一次開啟也有
+var PRECACHE = ['/static/icons/icon-192.png', '/static/icons/icon-512.png', '/static/icons/apple-touch-icon.png'];
+
+self.addEventListener('install', function (e) {
+  self.skipWaiting();
+  e.waitUntil(caches.open(CACHE).then(function (c) { return c.addAll(PRECACHE); }).catch(function () {}));
+});
 
 self.addEventListener('activate', function (e) {
   e.waitUntil(caches.keys().then(function (keys) {
@@ -54,6 +60,7 @@ self.addEventListener('push', function (e) {
   e.waitUntil(self.registration.showNotification(d.title || 'StockLens', {
     body: d.body || '',
     icon: '/static/icons/icon-192.png',
+    tag: d.tag || undefined,
     data: {url: d.url || '/tw/board'}
   }));
 });

@@ -1,24 +1,32 @@
 {
-  "name": "StockLens 台股・美股分析",
+  "name": "StockLens 台股・美股・黃金原油",
   "short_name": "StockLens",
-  "description": "台股即時看盤、三大法人籌碼、盤後與盤中選股、美股分析與投資組合管理。",
+  "description": "台股即時看盤、三大法人籌碼、盤後與盤中選股、潛力股評分、黃金原油進出場訊號、美股分析與投資組合管理，訊號推播到 LINE 與手機。",
   "id": "/",
-  "start_url": "/tw/board",
+  "start_url": "/tw/board?source=pwa",
   "scope": "/",
   "display": "standalone",
+  "display_override": ["standalone", "minimal-ui"],
   "orientation": "any",
   "background_color": "#07080d",
   "theme_color": "#07080d",
   "lang": "zh-Hant",
+  "dir": "ltr",
+  "categories": ["finance", "business"],
+  "launch_handler": {"client_mode": ["navigate-existing", "auto"]},
   "icons": [
     {"src": "/static/icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any"},
     {"src": "/static/icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any"},
     {"src": "/static/icons/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable"}
   ],
+  "screenshots": [
+    {"src": "/static/screens/about-wide.webp", "sizes": "1280x800", "type": "image/webp", "form_factor": "wide", "label": "StockLens 功能總覽"},
+    {"src": "/static/screens/about-narrow.webp", "sizes": "780x1688", "type": "image/webp", "form_factor": "narrow", "label": "StockLens 手機版"}
+  ],
   "shortcuts": [
-    {"name": "台股看盤", "url": "/tw/board"},
-    {"name": "台股分析", "url": "/tw"},
-    {"name": "美股分析", "url": "/"},
-    {"name": "策略選股", "url": "/screener"}
+    {"name": "台股看盤", "url": "/tw/board", "icons": [{"src": "/static/icons/icon-192.png", "sizes": "192x192"}]},
+    {"name": "潛力股", "url": "/picks", "icons": [{"src": "/static/icons/icon-192.png", "sizes": "192x192"}]},
+    {"name": "黃金原油", "url": "/commodity", "icons": [{"src": "/static/icons/icon-192.png", "sizes": "192x192"}]},
+    {"name": "通知設定", "url": "/account#notify", "icons": [{"src": "/static/icons/icon-192.png", "sizes": "192x192"}]}
   ]
 }

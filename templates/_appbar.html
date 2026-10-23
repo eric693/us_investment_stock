@@ -34,6 +34,7 @@
       <div class="user-pop">
         <div class="user-pop-head">{{ current_user.name }}<span>{{ '管理員' if current_user.role == 'admin' else '使用者' }}</span></div>
         <a href="/account">帳號與密碼</a>
+        <a href="#" data-pwa-install hidden>安裝 App</a>
         {% if current_user.role == 'admin' %}<a href="/admin/users">使用者管理</a>{% endif %}
         <a href="/logout" class="danger">登出</a>
       </div>
