@@ -4,9 +4,9 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>StockLens — 台股・美股分析平台</title>
-<meta name="description" content="StockLens：台股即時看盤、三大法人籌碼、盤後與盤中選股、經回測驗證的潛力股評分、財報分析與買進建議、黃金原油進出場訊號、美股分析、策略選股與投資組合管理。">
+<meta name="description" content="StockLens：台股即時看盤、三大法人籌碼、盤後與盤中選股、經回測驗證的潛力股評分、財報分析與買進建議、投資組合風險分析、台股 ETF 與集保大戶籌碼、黃金原油進出場訊號、美股分析、策略選股與投資組合管理。">
 <meta property="og:title" content="StockLens — 看懂籌碼，早一步出手">
-<meta property="og:description" content="台股即時看盤、三大法人籌碼、盤後與盤中選股、經回測驗證的潛力股評分、財報分析與買進建議、黃金原油進出場訊號、美股分析、策略選股與投資組合管理。">
+<meta property="og:description" content="台股即時看盤、三大法人籌碼、盤後與盤中選股、經回測驗證的潛力股評分、財報分析與買進建議、投資組合風險分析、台股 ETF 與集保大戶籌碼、黃金原油進出場訊號、美股分析、策略選股與投資組合管理。">
 <meta property="og:type" content="website">
 <link rel="stylesheet" href="/static/css/style.css?v=11">
 {% include "_head.html" %}
@@ -159,6 +159,22 @@ footer { padding: 32px 0 48px; color: var(--text-dim); font-size: .78rem; line-h
           <ul><li>五大面向：成長性、獲利能力、財務體質、盈餘品質與現金流、估值，各指標附數值、分數與意義</li><li>合理價三種算法：本益比法（未來 12 個月 EPS）、兩段式現金流折現、分析師目標價</li>
             <li>專業指標：ROE、ROIC、Altman Z、Piotroski F-score、PEG、EV/EBITDA、自由現金流殖利率</li><li>台股另看月營收與同產業本益比、殖利率；美股另扣股票酬勞、看分析師預估上修下修</li>
             <li>財務警訊（高槓桿、現金流跟不上獲利）會直接降級建議</li><li>金融股改用 ROE 與股價淨值比估值</li></ul>
+        </div>
+        <div class="card wide">
+          <div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l8 4v5c0 5-3.5 8-8 9-4.5-1-8-4-8-9V7z"/><path d="M9 12l2 2 4-4"/></svg></div>
+          <h3>投資組合風險分析・財報選股掃描</h3>
+          <p>像基金經理人的風控報表：不只算損益，還看集中度、波動、相關性與每檔該放多少。</p>
+          <ul><li>組合波動度、Beta、最大回撤、單日 95% 風險值、有效持股數</li><li>產業集中度與持股相關係數熱圖，抓出「看似分散其實同漲同跌」</li>
+            <li>每檔的風險貢獻、最新財報建議與降評提醒</li><li>風險平價建議股數，及 2 倍 ATR 停損下每檔最多虧 1% 的股數上限</li>
+            <li>每晚全市場財報掃描（台股約 770 檔、美股約 510 檔），可依建議、分數、是否低於買進價篩選</li><li>建議成績單：追蹤「買進」「避開」等建議之後的實際表現與勝率</li></ul>
+        </div>
+        <div class="card wide">
+          <div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="9" r="5"/><circle cx="16" cy="15" r="5"/></svg></div>
+          <h3>台股 ETF 分析・集保大戶籌碼</h3>
+          <p>ETF 價格合不合理、配息填息、成分股重不重疊；個股另看千張大戶的持股變化。</p>
+          <ul><li>證交所即時淨值：折溢價（超過 ±1% 警示）、規模、每日申購贖回資金流向</li><li>近 12 個月殖利率、配息月份日曆、每次除息的填息天數、即將除息清單</li>
+            <li>最多 5 檔比較成分股重疊度，與依比重合併後實際持有的股票</li><li>集保股權分散表：千張大戶、400 張以上、50 張以下散戶比例與股東人數</li>
+            <li>台股看盤「大戶籌碼」排行：本週大戶加碼／減碼最多、籌碼集中的股票</li><li>個股 26 週大戶持股走勢與各級距明細</li></ul>
         </div>
         <div class="card wide">
           <div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 17l5-5 4 3 8-8"/><path d="M15 7h5v5"/><path d="M3 21h18"/></svg></div>

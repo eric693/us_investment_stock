@@ -184,6 +184,7 @@ import financials
 import fa_scan
 import portfolio_risk
 import etf_tw
+import tdcc
 
 
 def _hist(stock, period='1y', interval='1d', **kw):
@@ -3930,6 +3931,7 @@ financials.init(app, login_required)
 fa_scan.init(app, login_required)
 portfolio_risk.init(app, login_required)
 etf_tw.init(app, login_required)
+tdcc.init(app, login_required)
 app.register_blueprint(notify.bp)
 
 

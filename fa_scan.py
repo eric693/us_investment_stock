@@ -146,11 +146,16 @@ def run_scan(market, force=False):
     codes = [c for c in _universe(market) if c in prices]
     if not codes:
         return
+    if not force:                                   # 中途被重啟打斷時，接著跑還沒做完的
+        with _db() as con:
+            have = {r[0] for r in con.execute('SELECT code FROM snaps WHERE market=? AND date=?', (market, date))}
+        codes = [c for c in codes if c not in have]
     started = tw_board._now().strftime('%Y-%m-%d %H:%M')
     with _db() as con:
-        con.execute('INSERT OR REPLACE INTO runs VALUES(?,?,?,?,?,?)', (market, date, started, None, 0, 0))
-    ok = fail = 0
-    _set_status(**{market: {'date': date, 'started': started, 'done': 0, 'total': len(codes), 'running': True}})
+        con.execute('INSERT OR IGNORE INTO runs VALUES(?,?,?,?,?,?)', (market, date, started, None, 0, 0))
+    ok, fail = (len(_universe(market)) - len(codes)) if not force else 0, 0
+    ok = max(ok, 0)
+    _set_status(**{market: {'date': date, 'started': started, 'done': ok, 'total': ok + len(codes), 'running': True}})
 
     def job(c):
         return c, _one(c, prices[c])

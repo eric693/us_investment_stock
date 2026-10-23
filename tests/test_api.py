@@ -114,3 +114,24 @@ def test_market_closed_on_typhoon_day(board, monkeypatch):
     assert board._market_open() is True
     monkeypatch.setattr(board, '_read_rt', lambda: {'ts': '2026-10-23 09:02:00', 'date': '20261022'})
     assert board._market_open() is True                     # 9:10 前還沒成交，先不判定休市
+
+
+def test_tdcc_summary_and_ranking(board, tmp_path, monkeypatch):
+    """集保：千張大戶比例、週變化、連續週數、集中訊號與排行。"""
+    import tdcc
+    monkeypatch.setattr(tdcc, 'DB_PATH', str(tmp_path / 'tdcc.db'))
+    monkeypatch.setattr(tdcc, '_universe', lambda: ['1101', '2202'])
+    tdcc.init_db()
+    rows = []
+    for i, d in enumerate(['2026-10-01', '2026-10-08', '2026-10-15', '2026-10-22']):
+        for code, big, ppl in (('1101', 60 + i, 1000 - 50 * i), ('2202', 50 - i, 1000 + 50 * i)):
+            rows += [(d, code, 15, 10, big * 1e4, big), (d, code, 1, ppl - 10, (100 - big) * 1e4, 100 - big), (d, code, 17, ppl, 1e6, 100)]
+    with tdcc._db() as con:
+        con.executemany('INSERT INTO dist VALUES(?,?,?,?,?,?)', rows)
+    s = tdcc.summary('1101', ensure=False)
+    assert s['weeks'] == 4 and s['last']['big1000'] == 63 and s['chg']['big1000'] == 1 and s['streak'] == 3
+    assert s['chg']['people_pct'] < 0 and s['signal']['level'] == 'bull'
+    assert tdcc.summary('2202', ensure=False)['streak'] == -3
+    r = tdcc.ranking()
+    assert r['date'] == '2026-10-22' and r['prev'] == '2026-10-15'
+    assert r['up'][0]['code'] == '1101' and r['up'][0]['d1000'] == 1 and r['down'][0]['code'] == '2202'
