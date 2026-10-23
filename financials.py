@@ -805,6 +805,8 @@ def api_financials(code):
     try:
         res, err = analyze(code)
     except Exception as e:
+        if 'Too Many Requests' in str(e):
+            return jsonify(error='Yahoo 暫時限制查詢次數，請過幾分鐘再試'), 503
         return jsonify(error=f'分析失敗：{e}'), 503
     if err:
         return jsonify(error=err), 404

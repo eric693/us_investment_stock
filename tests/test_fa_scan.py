@@ -58,3 +58,29 @@ def test_screen_latest_and_rec_change(client, sc):
 def test_empty_track(sc):
     fs, _ = sc
     assert fs.track('tw')['table'] == []
+
+
+def test_scan_offpeak_and_rate_limit(sc, monkeypatch):
+    fs, dates = sc
+    assert fs._offpeak(pd.Timestamp('2026-10-23 21:00')) and fs._offpeak(pd.Timestamp('2026-10-24 12:00'))   # 晚上、週六
+    assert not fs._offpeak(pd.Timestamp('2026-10-23 10:00'))
+    monkeypatch.setattr(fs, '_universe', lambda m: ['A', 'B', 'C'])
+    monkeypatch.setattr(fs.tw_board, '_now', lambda: pd.Timestamp('2026-10-23 22:00', tz='Asia/Taipei'))
+    monkeypatch.setattr(fs, 'PACE', 0)
+    calls = []
+
+    def analyze(code, price=None):
+        calls.append(code)
+        if code == 'B':
+            raise Exception('Too Many Requests. Rate limited.')
+        return {'code': code, 'name': code, 'sector': '', 'price': price, 'score': 50, 'quality': 50, 'value_score': 50,
+                'pillars': [], 'rec': {'level': 'hold'}, 'fair': None, 'flags': []}, None
+    monkeypatch.setattr(fs.financials, 'analyze', analyze)
+    fs.run_scan('tw')
+    assert calls == ['A', 'B'] and fs._cool_until > 0          # 限流就停，不再打 C
+    with fs._db() as con:
+        assert con.execute('SELECT finished FROM runs').fetchone()[0] is None
+    calls.clear(); fs._cool_until = 0
+    monkeypatch.setattr(fs.financials, 'analyze', lambda code, price=None: analyze('X', price) if False else analyze(code if code != 'B' else 'B2', price))
+    fs.run_scan('tw')
+    assert calls == ['B2', 'C']                                # 接著跑還沒做的

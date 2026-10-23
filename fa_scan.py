@@ -13,7 +13,6 @@ import json
 import fcntl
 import sqlite3
 import threading
-from concurrent.futures import ThreadPoolExecutor
 
 import numpy as np
 import pandas as pd
@@ -32,7 +31,21 @@ LOCK_FILE = os.path.join(BASE_DIR, '.fa_scan.lock')
 STATUS_FILE = os.path.join(BASE_DIR, '.fa_scan_status.json')
 HORIZONS = [(5, '1 週'), (21, '1 個月'), (63, '3 個月'), (126, '6 個月')]
 LEVELS = [('buy', '買進'), ('accumulate', '逢低布局'), ('hold', '持有觀望'), ('avoid', '避開')]
-WORKERS = 3
+# Yahoo 對同一台主機有流量上限，被限流時連使用者在頁面上查個股都會失敗。
+# 所以掃描只在離峰時段（晚上 8:30～隔天 8:30、週末）慢慢跑：一次一檔、每檔間隔 1 秒，
+# 一遇到限流就整批暫停 20 分鐘，下次從中斷處接著跑。
+PACE = 1.0
+COOLDOWN = 1200
+_cool_until = 0.0
+
+
+class RateLimited(Exception):
+    pass
+
+
+def _offpeak(now):
+    hm = now.hour * 100 + now.minute
+    return now.weekday() >= 5 or hm >= 2030 or hm < 830
 
 
 def _db():
@@ -117,14 +130,12 @@ def read_status():
 
 
 def _one(code, price):
-    for attempt in (1, 2, 3):
-        try:
-            res, err = financials.analyze(code, price=price)
-            return res, err
-        except Exception as e:
-            if attempt == 3:
-                return None, str(e)[:120]
-            time.sleep(5 * attempt)               # Yahoo 限流時退後再試
+    try:
+        return financials.analyze(code, price=price)
+    except Exception as e:
+        if 'Too Many Requests' in str(e) or 'Rate limit' in str(e):
+            raise RateLimited(str(e))
+        return None, str(e)[:120]
 
 
 def _row(date, market, r):
@@ -157,18 +168,27 @@ def run_scan(market, force=False):
     ok = max(ok, 0)
     _set_status(**{market: {'date': date, 'started': started, 'done': ok, 'total': ok + len(codes), 'running': True}})
 
-    def job(c):
-        return c, _one(c, prices[c])
-    with ThreadPoolExecutor(WORKERS) as ex:
-        for c, (res, err) in ex.map(job, codes):
-            if res:
-                with _db() as con:
-                    con.execute(f'INSERT OR REPLACE INTO snaps VALUES({",".join("?" * 19)})', _row(date, market, res))
-                ok += 1
-            else:
-                fail += 1
-            if (ok + fail) % 20 == 0:
-                _set_status(**{market: dict(_status.get(market, {}), done=ok + fail, fail=fail)})
+    global _cool_until
+    for c in codes:
+        if not force and not _offpeak(tw_board._now()):
+            _set_status(**{market: dict(_status.get(market, {}), running=False, paused='白天暫停，晚上 8:30 後繼續')})
+            return
+        try:
+            res, err = _one(c, prices[c])
+        except RateLimited:
+            _cool_until = time.time() + COOLDOWN
+            _set_status(**{market: dict(_status.get(market, {}), running=False, paused='Yahoo 限流，20 分鐘後繼續')})
+            print(f'[fa_scan] {market}: rate limited at {c}, pausing')
+            return
+        if res:
+            with _db() as con:
+                con.execute(f'INSERT OR REPLACE INTO snaps VALUES({",".join("?" * 19)})', _row(date, market, res))
+            ok += 1
+        else:
+            fail += 1
+        if (ok + fail) % 20 == 0:
+            _set_status(**{market: dict(_status.get(market, {}), done=ok + fail, fail=fail, paused=None)})
+        time.sleep(PACE)
     finished = tw_board._now().strftime('%Y-%m-%d %H:%M')
     with _db() as con:
         con.execute('UPDATE runs SET finished=?, ok=?, fail=? WHERE market=? AND date=?', (finished, ok, fail, market, date))
@@ -187,15 +207,15 @@ def _loop():
     time.sleep(300)                    # 讓其他背景同步先跑
     while True:
         now = tw_board._now()
-        for m in ('tw', 'us'):
-            # 台股等晚上 8 點半後（收盤資料與潛力股都更新完）；美股資料在台北清晨就緒
-            if m == 'tw' and _latest('tw')[0] == now.strftime('%Y-%m-%d') and now.hour * 100 + now.minute < 2030:
-                continue
-            try:
-                run_scan(m)
-            except Exception as e:
-                print(f'[fa_scan] {m}: {e}')
-        time.sleep(900)
+        if _offpeak(now) and time.time() >= _cool_until:
+            for m in ('tw', 'us'):
+                try:
+                    run_scan(m)
+                except Exception as e:
+                    print(f'[fa_scan] {m}: {e}')
+                if time.time() < _cool_until:
+                    break
+        time.sleep(600)
 
 
 # ── 查詢 ──────────────────────────────────────────────────────────────
