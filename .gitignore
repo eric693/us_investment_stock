@@ -24,3 +24,4 @@ fa_scan.db*
 .fa_scan_status.json
 .etf_cache/
 tdcc.db*
+.fear_cache/

@@ -134,10 +134,17 @@
       '點股票進個股分析，籌碼區的「集保大戶持股」有 26 週走勢、400 張以上、50 張以下散戶比例與各級距明細。']) +
     note('單週變化可能受除權息、可轉債轉換、庫藏股影響，搭配連續多週趨勢判斷。'));
 
+  sec('fear.main', '恐慌指標', '<p>恐慌時往往是長期投資人的加碼機會，但「恐慌剛開始」和「恐慌見頂」差很多。這頁把常用的恐慌指標放在一起，並用 1990 年以來的資料回測幾種加碼時機。</p>' +
+    steps(['最上方：VIX 與它在過去 10 年的百分位、CNN 恐懼貪婪指數（0～100，越低越恐懼）、期限結構（VIX ÷ VIX3M，大於 1 為倒掛）。',
+      '「各恐慌指標」：VIX9D、VIX3M、VVIX、VXN、MOVE（美債）、SKEW、OVX（原油）、GVZ（黃金），色條越長越恐慌。',
+      '「歷史回測」：切換買 S&P 500 或台股加權，比較「觸及門檻就買」「從高點回落 20% 才買」「期限結構恢復才買」之後 1～12 個月的報酬、勝率與比任何一天買進多賺多少；點一列看每次訊號。',
+      '「加碼提醒」：勾選條件，同一波恐慌每個條件只通知一次。']) +
+    note('回測只算指數價格、不含股息。VIX 40 以上與期限結構恢復的訊號較可靠，但 36 年只有十幾次，建議分批加碼、只用閒錢。'));
+
   var PAGES = {
     board: ['board.index', 'board.pulse', 'board.all', 'board.watch', 'board.score', 'board.sector', 'board.rank', 'board.after', 'board.rt', 'board.tdcc', 'board.line'],
     chart: ['chart.basic', 'chart.tools', 'chart.index'],
-    tw: ['tw.main', 'tw.monitor', 'chart.tools'], us: ['us.main'], screener: ['screener.main'], picks: ['picks.main'], commodity: ['commodity.main'], financials: ['financials.main'], etf: ['etf.main'],
+    tw: ['tw.main', 'tw.monitor', 'chart.tools'], us: ['us.main'], screener: ['screener.main'], picks: ['picks.main'], commodity: ['commodity.main'], financials: ['financials.main'], etf: ['etf.main'], fear: ['fear.main'],
     portfolio: ['portfolio.main'], account: ['account.main'], admin: ['admin.main'],
   };
 

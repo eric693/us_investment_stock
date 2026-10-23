@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>恐慌指標</title>
+<link rel="stylesheet" href="/static/css/style.css?v=12">
+{% include "_head.html" %}
+<script src="https://cdn.plot.ly/plotly-2.26.0.min.js"></script>
+<style>
+.fw { max-width: 1240px; margin: 0 auto; padding: 16px; display: flex; flex-direction: column; gap: 14px; }
+.fw > *, .grid2 > * { min-width: 0; }
+.card2 { background: var(--card-bg); border: 1px solid var(--card-bd); border-radius: 18px; box-shadow: var(--shadow); }
+.box { padding: 18px 20px; }
+.box h3 { font-size: 1rem; margin: 0 0 12px; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.box h3 small { font-weight: 400; color: var(--text-dim); font-size: .74rem; margin-left: auto; }
+.hint { font-size: .78rem; color: var(--text-dim); line-height: 1.7; margin: 0; }
+.up { color: var(--red); } .dn { color: var(--green); }
+.mono { font-family: 'JetBrains Mono', ui-monospace, monospace; }
+.hero { display: grid; grid-template-columns: 1fr 1fr 1fr; }
+.hero > div { padding: 20px 22px; }
+.hero > div + div { border-left: 1px solid var(--line); }
+.big { font: 800 2.4rem/1 'JetBrains Mono', monospace; margin: 6px 0; }
+.lbl { font-size: .8rem; color: var(--text-dim); }
+.pill { display: inline-block; font-size: .78rem; font-weight: 700; padding: 3px 10px; border-radius: 999px; }
+.p-greed-hi, .p-greed { background: rgba(5,150,105,.12); color: var(--green); }
+.p-neutral-m { background: rgba(217,119,6,.12); color: #d97706; }
+.p-fear, .p-fear-hi { background: var(--red-soft); color: var(--red); }
+.gauge { position: relative; height: 12px; border-radius: 999px; background: linear-gradient(90deg, #e11d48, #f59e0b 40%, #a3a3a3 50%, #22c55e 75%, #059669); margin: 14px 0 6px; }
+.gauge i { position: absolute; top: -5px; width: 4px; height: 22px; border-radius: 2px; background: var(--text); transform: translateX(-50%); }
+.gl { display: flex; justify-content: space-between; font-size: .68rem; color: var(--text-dim); }
+.sig { padding: 12px 14px; border-radius: 12px; background: var(--surface-1); font-size: .9rem; line-height: 1.7; }
+.ind { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+.ic { padding: 12px 14px; border-radius: 14px; border: 1px solid var(--card-bd); background: var(--surface-1); }
+.ic .t { display: flex; justify-content: space-between; align-items: baseline; gap: 6px; }
+.ic .t span { font-size: .8rem; color: var(--text-mid); }
+.ic .t b { font: 700 1.2rem 'JetBrains Mono', monospace; }
+.pbar { height: 6px; border-radius: 999px; background: var(--card-bd2); margin: 8px 0 4px; overflow: hidden; }
+.pbar i { display: block; height: 100%; border-radius: inherit; }
+.ic p { margin: 4px 0 0; font-size: .72rem; color: var(--text-dim); line-height: 1.5; }
+.grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+.plot { height: 300px; }
+.seg { display: inline-flex; border: 1px solid var(--card-bd2); border-radius: 10px; padding: 3px; background: var(--surface-1); }
+.seg button { border: 0; background: none; color: var(--text-mid); font: inherit; font-size: .8rem; padding: 5px 12px; border-radius: 7px; cursor: pointer; }
+.seg button.on { background: var(--card-bg); color: var(--text); font-weight: 700; box-shadow: 0 1px 3px rgba(0,0,0,.12); }
+.tbl { width: 100%; border-collapse: collapse; font-size: .82rem; }
+.tbl th { color: var(--text-dim); font-weight: 600; font-size: .72rem; text-align: center; padding: 8px 6px; border-bottom: 1px solid var(--line); white-space: nowrap; }
+.tbl td { padding: 8px 6px; text-align: center; border-bottom: 1px solid var(--line); font-family: 'JetBrains Mono', monospace; white-space: nowrap; }
+.tbl th:first-child, .tbl td:first-child { text-align: left; font-family: inherit; }
+.tbl tbody tr { cursor: pointer; }
+.tbl tbody tr:hover td { background: var(--surface-1); }
+.tbl tr.on td { background: rgba(109,93,252,.1); }
+.cell b { display: block; } .cell small { color: var(--text-dim); font-size: .68rem; }
+.scroll { overflow-x: auto; }
+.al { display: flex; gap: 10px 18px; flex-wrap: wrap; align-items: center; font-size: .86rem; }
+.al label { display: inline-flex; gap: 6px; align-items: center; cursor: pointer; }
+.btn { height: 36px; padding: 0 18px; border: 0; border-radius: 10px; background: var(--accent-grad); color: #fff; font: inherit; font-weight: 700; cursor: pointer; }
+.empty { padding: 60px 0; text-align: center; color: var(--text-dim); }
+@media (max-width: 900px) { .hero, .grid2 { grid-template-columns: 1fr; } .hero > div + div { border-left: 0; border-top: 1px solid var(--line); } .ind { grid-template-columns: 1fr 1fr; } }
+@media (max-width: 600px) { .fw { padding: 10px; } .ind { grid-template-columns: 1fr; } .box { padding: 16px; } }
+</style>
+</head>
+<body data-help-page="fear">
+{% include "_appbar.html" %}
+<main class="fw">
+  <div id="root"><div class="card2 empty">讀取中…</div></div>
+
+  <section class="card2 box">
+    <h3>「VIX 飆高加碼」歷史回測 <span class="seg" id="mkt"><button data-v="spx" class="on">買 S&amp;P 500</button><button data-v="twii">買台股加權</button></span><small id="btSince"></small></h3>
+    <div id="bt"><p class="hint">回測中…</p></div>
+  </section>
+
+  <section class="card2 box">
+    <h3>加碼提醒 <small id="alNote"></small></h3>
+    <div class="al">
+      <span>VIX 站上：</span>
+      <label><input type="checkbox" data-t="25">25</label><label><input type="checkbox" data-t="30">30</label><label><input type="checkbox" data-t="40">40</label>
+      <label><input type="checkbox" id="alRet">從高點回落 20%</label>
+      <label><input type="checkbox" id="alTerm">期限結構恢復正常</label>
+      <button class="btn" id="alSave">儲存提醒</button><span id="alMsg" class="hint"></span>
+    </div>
+    <p class="hint" style="margin-top:10px">每 30 分鐘檢查一次，同一波恐慌每個條件只通知一次，送到 LINE／手機通知。回測顯示 VIX 40 與「期限結構恢復」的訊號較可靠，建議至少勾這兩個。</p>
+  </section>
+  <p class="hint" style="text-align:center">恐慌指數來自 Yahoo Finance（美股收盤後更新），CNN 恐懼貪婪指數來自 CNN。回測只算指數價格、不含股息；過去表現不代表未來，僅供參考，非投資建議。</p>
+</main>
+<script>
+(function () {
+  const $ = s => document.querySelector(s);
+  const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;'}[c]));
+  const num = (v, d = 2) => v == null ? '—' : Number(v).toLocaleString('en-US', {minimumFractionDigits: d, maximumFractionDigits: d});
+  const sg = (v, d = 1, u = '%') => v == null ? '—' : `<span class="${v > 0 ? 'up' : v < 0 ? 'dn' : ''}">${v > 0 ? '+' : ''}${num(v, d)}${u}</span>`;
+  const T = c => Theme.css(c);
+  let D = null, BT = {}, MKT = 'spx', SEL = 'touch_40';
+
+  async function load() {
+    try {
+      const r = await fetch('/api/fear');
+      if (r.status === 401) { location.href = '/login?next=/fear'; return; }
+      D = await r.json();
+      if (!r.ok) throw new Error(D.error);
+      render();
+    } catch (e) { $('#root').innerHTML = `<div class="card2 empty">${esc(e.message)}</div>`; }
+  }
+
+  function render() {
+    const vix = D.indicators.find(i => i.sym === '^VIX'), c = D.cnn, t = D.term, s = D.signal;
+    const pc = p => p >= 90 ? 'var(--red)' : p >= 70 ? '#d97706' : 'var(--green)';
+    $('#root').innerHTML = `
+      <section class="card2 hero">
+        <div><div class="lbl">VIX 恐慌指數・${esc(vix.date)}</div><div class="big">${num(vix.value)}</div>
+          <span class="pill p-${D.vix_cls}">${esc(D.vix_label)}</span> <span class="hint">今日 ${sg(vix.chg, 2)}・過去 10 年第 ${vix.pct10y} 百分位・中位數 ${num(vix.med10y)}</span></div>
+        <div><div class="lbl">CNN 恐懼貪婪指數${c ? '・' + esc(c.updated) : ''}</div>
+          ${c ? `<div class="big">${num(c.score, 0)}</div><span class="pill p-${c.score < 45 ? 'fear' : c.score > 55 ? 'greed' : 'neutral-m'}">${esc(c.rating)}</span>
+          <div class="gauge"><i style="left:${c.score}%"></i></div><div class="gl"><span>極度恐懼</span><span>中性</span><span>極度貪婪</span></div>
+          <div class="hint">前一日 ${num(c.prev, 0)}・一週前 ${num(c.week, 0)}・一個月前 ${num(c.month, 0)}・一年前 ${num(c.year, 0)}</div>` : '<p class="hint">暫時讀不到</p>'}</div>
+        <div><div class="lbl">期限結構（VIX ÷ VIX3M）</div><div class="big">${num(t.ratio, 3)}</div>
+          <span class="pill p-${t.inverted ? 'fear' : 'greed'}">${t.inverted ? '倒掛：眼前的恐慌大於長期' : '正常：短期比長期平靜'}</span>
+          <div class="hint" style="margin-top:6px">大於 1 代表倒掛，常出現在急跌當下；近一年倒掛 ${t.inverted_days_1y} 天。VIX9D ÷ VIX = ${num(t.ratio9d, 3)}</div></div>
+      </section>
+      <div class="sig"><b>目前判讀：</b>${esc(s.text)}${s.above.length ? `（已站上 ${s.above.join('、')}）` : ''}</div>
+      <section class="card2 box"><h3>各恐慌指標 <small>色條 = 目前值在過去 10 年的百分位，越高越恐慌</small></h3>
+        <div class="ind">${D.indicators.filter(i => i.value != null).map(i => `<div class="ic"><div class="t"><span>${esc(i.name)}</span><b>${num(i.value)}</b></div>
+          <div class="pbar"><i style="width:${i.pct10y}%;background:${pc(i.pct10y)}"></i></div>
+          <div class="hint">第 ${i.pct10y} 百分位・今日 ${sg(i.chg, 2)}・一年區間 ${num(i.lo1y, 1)}～${num(i.hi1y, 1)}</div><p>${esc(i.note)}</p></div>`).join('')}</div></section>
+      <div class="grid2">
+        <section class="card2 box"><h3>VIX 近兩年</h3><div id="cVix" class="plot"></div></section>
+        <section class="card2 box"><h3>${c && c.history.length ? 'CNN 恐懼貪婪指數近一年' : '期限結構近兩年'}</h3><div id="cTwo" class="plot"></div></section>
+      </div>`;
+    const lay = x => Object.assign({paper_bgcolor: 'rgba(0,0,0,0)', plot_bgcolor: 'rgba(0,0,0,0)', font: {color: T('--text-mid'), size: 11}, margin: {l: 40, r: 12, t: 10, b: 30},
+      xaxis: {gridcolor: T('--grid')}, yaxis: {gridcolor: T('--grid')}, showlegend: false, hovermode: 'x unified'}, x);
+    const hl = (y, color, text) => ({type: 'line', xref: 'paper', x0: 0, x1: 1, y0: y, y1: y, line: {color, width: 1, dash: 'dot'}});
+    const v = D.chart.vix;
+    Plotly.newPlot('cVix', [{type: 'scatter', mode: 'lines', x: v.map(p => p[0]), y: v.map(p => p[1]), line: {color: T('--red'), width: 1.6}, fill: 'tozeroy', fillcolor: 'rgba(225,29,72,.08)'}],
+      lay({shapes: [hl(20, '#a3a3a3'), hl(30, '#d97706'), hl(40, '#e11d48')]}), {responsive: true, displayModeBar: false});
+    if (c && c.history.length) {
+      Plotly.newPlot('cTwo', [{type: 'scatter', mode: 'lines', x: c.history.map(p => p[0]), y: c.history.map(p => p[1]), line: {color: '#6d5dfc', width: 1.8}}],
+        lay({yaxis: {gridcolor: T('--grid'), range: [0, 100]}, shapes: [hl(25, '#e11d48'), hl(75, '#059669')]}), {responsive: true, displayModeBar: false});
+    } else {
+      const r = D.chart.ratio;
+      Plotly.newPlot('cTwo', [{type: 'scatter', mode: 'lines', x: r.map(p => p[0]), y: r.map(p => p[1]), line: {color: '#6d5dfc', width: 1.6}}],
+        lay({shapes: [hl(1, '#e11d48')]}), {responsive: true, displayModeBar: false});
+    }
+  }
+
+  async function loadBT() {
+    $('#bt').innerHTML = '<p class="hint">回測中…</p>';
+    try {
+      if (!BT[MKT]) { const r = await fetch('/api/fear/backtest?market=' + MKT); BT[MKT] = await r.json(); if (!r.ok) throw new Error(BT[MKT].error); }
+      renderBT();
+    } catch (e) { BT[MKT] = null; $('#bt').innerHTML = `<p class="hint">${esc(e.message)}</p>`; }
+  }
+  function renderBT() {
+    const b = BT[MKT];
+    $('#btSince').textContent = `${b.index}・${b.since} 起`;
+    const cell = (c, base) => c.n ? `<div class="cell"><b class="${c.excess >= 0 ? 'up' : 'dn'}">${c.ret >= 0 ? '+' : ''}${num(c.ret, 1)}%</b><small>勝率 ${num(c.win, 0)}%・多 ${c.excess >= 0 ? '+' : ''}${num(c.excess, 1)}</small></div>` : '—';
+    const best = b.table.slice().filter(r => r.n >= 8).sort((x, y) => (y.cells[3].excess || -99) - (x.cells[3].excess || -99))[0];
+    const ev = b.events[SEL] || [], row = b.table.find(r => r.key === SEL);
+    $('#bt').innerHTML = `<div class="scroll"><table class="tbl"><thead><tr><th>加碼時機</th><th>次數</th>${b.base.map(x => `<th>${x.h}後</th>`).join('')}<th>3 個月內最大回落</th></tr>
+        <tr style="cursor:default"><td style="color:var(--text-dim)">任何一天買進（基準）</td><td>—</td>${b.base.map(x => `<td><div class="cell"><b>+${num(x.ret, 1)}%</b><small>勝率 ${num(x.win, 0)}%</small></div></td>`).join('')}<td>—</td></tr></thead>
+      <tbody>${b.table.map(r => `<tr data-k="${r.key}" class="${r.key === SEL ? 'on' : ''}"><td>${esc(r.rule_name)}${r.thr ? `<b> VIX ${r.thr}</b>` : ''}${best && r.key === best.key ? ' <span class="pill p-fear" style="font-size:.68rem">12 個月最佳</span>' : ''}</td>
+        <td>${r.n}</td>${r.cells.map(c => `<td>${cell(c)}</td>`).join('')}<td class="dn">${r.mdd3m == null ? '—' : num(r.mdd3m, 1) + '%'}</td></tr>`).join('')}</tbody></table></div>
+      <p class="hint" style="margin-top:10px">每格：平均報酬（紅＝比任何一天買進好）／勝率（報酬為正的比例）／比基準多幾個百分點。點一列看每次訊號。「3 個月內最大回落」是進場後最慘時會帳面虧多少，用來估計要撐得住多少波動。</p>
+      <h4 style="font-size:.88rem;margin:16px 0 8px">${esc(row.rule_name)}${row.thr ? ' VIX ' + row.thr : ''}：每次訊號（最新在上）</h4>
+      <div class="scroll" style="max-height:360px;overflow-y:auto"><table class="tbl"><thead><tr><th>訊號日</th><th>VIX</th><th>這波高點</th><th>進場日</th><th>指數</th>${b.base.map(x => `<th>${x.h}後</th>`).join('')}<th>3 個月內最大回落</th></tr></thead>
+      <tbody>${ev.map(e => `<tr style="cursor:default"><td>${esc(e.date)}</td><td>${num(e.vix, 1)}</td><td>${num(e.peak, 1)}</td><td>${esc(e.entry)}</td><td>${num(e.price, 0)}</td>
+        <td>${sg(e.r21)}</td><td>${sg(e.r63)}</td><td>${sg(e.r126)}</td><td>${sg(e.r252)}</td><td class="dn">${num(e.mdd3m, 1)}%</td></tr>`).join('') || '<tr><td colspan="10">沒有訊號</td></tr>'}</tbody></table></div>`;
+    $('#bt').querySelectorAll('tr[data-k]').forEach(tr => tr.onclick = () => { SEL = tr.dataset.k; renderBT(); });
+  }
+  $('#mkt').onclick = e => { const b = e.target.closest('button'); if (!b) return; MKT = b.dataset.v; document.querySelectorAll('#mkt button').forEach(x => x.classList.toggle('on', x === b)); loadBT(); };
+
+  async function alerts(body) {
+    const r = await fetch('/api/fear/alerts', body ? {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(body)} : {});
+    const a = await r.json();
+    document.querySelectorAll('[data-t]').forEach(x => x.checked = a.thresholds.includes(+x.dataset.t));
+    $('#alRet').checked = a.retreat; $('#alTerm').checked = a.term;
+    $('#alNote').innerHTML = a.ready ? '送到 LINE／手機通知' : '<a href="/account#notify" style="color:var(--red)">尚未設定通知管道 →</a>';
+    return a;
+  }
+  $('#alSave').onclick = async () => {
+    await alerts({thresholds: [...document.querySelectorAll('[data-t]:checked')].map(x => +x.dataset.t), retreat: $('#alRet').checked, term: $('#alTerm').checked});
+    $('#alMsg').textContent = '已儲存'; setTimeout(() => $('#alMsg').textContent = '', 2000);
+  };
+  window.addEventListener('themechange', () => { if (D) render(); });
+  load(); loadBT(); alerts();
+})();
+</script>
+</body>
+</html>

@@ -185,6 +185,7 @@ import fa_scan
 import portfolio_risk
 import etf_tw
 import tdcc
+import fear
 
 
 def _hist(stock, period='1y', interval='1d', **kw):
@@ -898,12 +899,8 @@ def get_market():
         except:
             result[key] = None
 
-    vix_val = (result.get('vix') or {}).get('v', 20)
-    if   vix_val < 15: label, cls = '極度貪婪', 'greed-hi'
-    elif vix_val < 20: label, cls = '貪婪',     'greed'
-    elif vix_val < 25: label, cls = '中性',     'neutral-m'
-    elif vix_val < 30: label, cls = '恐懼',     'fear'
-    else:              label, cls = '極度恐懼', 'fear-hi'
+    # VIX 分級：20 以下屬正常波動，不代表「貪婪」；與恐慌指標頁同一套
+    label, cls = fear.vix_label((result.get('vix') or {}).get('v'))
     result['vixLabel'] = label
     result['vixCls']   = cls
     _cache_set('market', result, ttl=60)
@@ -1736,12 +1733,8 @@ def get_tw_market():
         except:
             result[key] = None
 
-    vix_val = (result.get('vix') or {}).get('v', 20)
-    if   vix_val < 15: label, cls = '極度貪婪', 'greed-hi'
-    elif vix_val < 20: label, cls = '貪婪',     'greed'
-    elif vix_val < 25: label, cls = '中性',     'neutral-m'
-    elif vix_val < 30: label, cls = '恐懼',     'fear'
-    else:              label, cls = '極度恐懼', 'fear-hi'
+    # VIX 分級：20 以下屬正常波動，不代表「貪婪」；與恐慌指標頁同一套
+    label, cls = fear.vix_label((result.get('vix') or {}).get('v'))
     result['vixLabel'] = label
     result['vixCls']   = cls
     _cache_set('tw_market', result, ttl=60)
@@ -3932,6 +3925,7 @@ fa_scan.init(app, login_required)
 portfolio_risk.init(app, login_required)
 etf_tw.init(app, login_required)
 tdcc.init(app, login_required)
+fear.init(app, login_required)
 app.register_blueprint(notify.bp)
 
 
