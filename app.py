@@ -181,6 +181,7 @@ import tw_board
 import picks
 import commodity
 import financials
+import fa_scan
 
 
 def _hist(stock, period='1y', interval='1d', **kw):
@@ -3924,6 +3925,7 @@ tw_board.init(app, login_required)
 picks.init(app, login_required)
 commodity.init(app, login_required)
 financials.init(app, login_required)
+fa_scan.init(app, login_required)
 app.register_blueprint(notify.bp)
 
 

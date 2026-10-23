@@ -45,9 +45,10 @@ class FakeTicker:
 
 
 @pytest.fixture
-def fa(board, monkeypatch):
+def fa(board, monkeypatch, tmp_path):
     import financials
     financials._cache.clear()
+    monkeypatch.setattr(financials, 'CACHE_DIR', str(tmp_path / 'fa_cache'))
     monkeypatch.setattr(financials, '_us_sector', lambda sector, code: {'name': sector, 'n': 30, 'pe': 25.0, 'fpe': 20.0, 'ev_ebitda': 15.0})
     return financials
 

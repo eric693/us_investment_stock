@@ -14,9 +14,11 @@
 這是規則化的分析，參數是業界常用的經驗值，不是用歷史股價最佳化出來的；財報資料來自 Yahoo Finance，
 台股同業估值來自證交所／櫃買中心。
 """
+import os
 import re
 import time
 import json
+import pickle
 import threading
 from concurrent.futures import ThreadPoolExecutor
 
@@ -35,6 +37,62 @@ _sector_cache = {}
 DISCOUNT = {'tw': 0.085, 'us': 0.09}          # 折現率：無風險利率 + 股權風險溢酬的常用值
 TERMINAL = {'tw': 0.02, 'us': 0.025}          # 永續成長率
 SAFETY = 0.15                                 # 安全邊際：合理價打 85 折以下才叫便宜
+
+
+# ── Yahoo 資料的硬碟快取 ──────────────────────────────────────────────
+# 財報一季才變一次，每晚掃描上千檔時不必每次重抓：財報與月線 7 天、報價與分析師預估 20 小時。
+CACHE_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), '.fa_cache')
+RAW_TTL = {'info': 72000, 'earnings_estimate': 72000, 'eps_trend': 72000, 'earnings_history': 72000,
+           'recommendations_summary': 72000}
+STATEMENT_TTL = 7 * 86400
+
+
+class CachedTicker:
+    """和 yf.Ticker 一樣的用法，但每個欄位先看硬碟快取。"""
+
+    def __init__(self, ticker, fresh=False):
+        self.ticker, self.fresh = ticker, fresh
+        self._t = None
+        os.makedirs(CACHE_DIR, exist_ok=True)
+        self.path = os.path.join(CACHE_DIR, re.sub(r'[^A-Za-z0-9.\-]', '_', ticker) + '.pkl')
+        try:
+            with open(self.path, 'rb') as f:
+                self._d = pickle.load(f)
+        except Exception:
+            self._d = {}
+        self._dirty = False
+
+    @property
+    def yt(self):
+        if self._t is None:
+            self._t = yf.Ticker(self.ticker)
+        return self._t
+
+    def _get(self, name, fetch):
+        ttl = RAW_TTL.get(name, STATEMENT_TTL)
+        hit = self._d.get(name)
+        if hit and not self.fresh and time.time() - hit[0] < ttl:
+            return hit[1]
+        val = fetch()
+        self._d[name] = (time.time(), val)
+        self._dirty = True
+        return val
+
+    def __getattr__(self, name):
+        if name.startswith('_') or name in ('ticker', 'fresh', 'path'):
+            raise AttributeError(name)
+        return self._get(name, lambda: getattr(self.yt, name))
+
+    def history(self, **kw):
+        return self._get('history:' + json.dumps(kw, sort_keys=True), lambda: self.yt.history(**kw))
+
+    def save(self):
+        if not self._dirty:
+            return
+        tmp = self.path + f'.{os.getpid()}.tmp'
+        with open(tmp, 'wb') as f:
+            pickle.dump(self._d, f)
+        os.replace(tmp, self.path)
 
 
 # ── 讀財報 ────────────────────────────────────────────────────────────
@@ -127,7 +185,9 @@ def _us_sector(sector, code):
 
     def info(c):
         try:
-            i = yf.Ticker(c).info
+            ct = CachedTicker(c)
+            i = ct.info
+            ct.save()
             return (i.get('marketCap') or 0, i.get('trailingPE'), i.get('forwardPE'), i.get('priceToBook'),
                     i.get('enterpriseToEbitda'), i.get('priceToSalesTrailing12Months'))
         except Exception:
@@ -162,17 +222,29 @@ def _m(key, label, value, score, fmt, note, good=None):
 
 
 # ── 主分析 ────────────────────────────────────────────────────────────
-def analyze(code):
+def analyze(code, price=None, use_cache=True):
+    """price：批次掃描時用本地資料庫的收盤價（不另外查報價）。"""
     ticker, market, tw_name, tw_ind = _resolve(code)
     if not ticker:
         return None, '代碼格式不正確'
     with _lock:
         hit = _cache.get(ticker)
-        if hit and time.time() - hit[0] < TTL:
+        if use_cache and price is None and hit and time.time() - hit[0] < TTL:
             return hit[1], None
-    t = yf.Ticker(ticker)
+    t = CachedTicker(ticker)
+    try:
+        res, err = _analyze(t, ticker, market, tw_name, tw_ind, price)
+    finally:
+        t.save()
+    if res and price is None:
+        with _lock:
+            _cache[ticker] = (time.time(), res)
+    return res, err
+
+
+def _analyze(t, ticker, market, tw_name, tw_ind, price):
     info = t.info or {}
-    price = info.get('currentPrice') or info.get('regularMarketPrice') or info.get('previousClose')
+    price = price or info.get('currentPrice') or info.get('regularMarketPrice') or info.get('previousClose')
     if not price:
         return None, '查不到這檔股票的報價'
     A_is, Q_is = t.income_stmt, t.quarterly_income_stmt
@@ -465,10 +537,7 @@ def analyze(code):
         'summary': None,
     }
     res['summary'] = _narrative(res, rev_cagr, rev_yoy_q, fwd_growth, roe, om_trend, ocf_ni, nd_ebitda, pe, fpe, peg, dy)
-    res = _clean(res)
-    with _lock:
-        _cache[ticker] = (time.time(), res)
-    return res, None
+    return _clean(res), None
 
 
 def _wavg(pairs):

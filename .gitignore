@@ -19,3 +19,6 @@ user_data.db*
 .vapid.json.lock
 us_market.db*
 .picks_*
+.fa_cache/
+fa_scan.db*
+.fa_scan_status.json

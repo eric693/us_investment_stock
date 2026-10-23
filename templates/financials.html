@@ -90,6 +90,31 @@
 .dist { display: flex; height: 12px; border-radius: 999px; overflow: hidden; margin: 10px 0 6px; }
 .dist i { display: block; height: 100%; }
 .fs { display: grid; grid-template-columns: 1fr 1fr; gap: 4px 14px; font-size: .8rem; margin-top: 10px; }
+.tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--line); }
+.tabs button { border: 0; background: none; color: var(--text-mid); font: inherit; font-size: .92rem; font-weight: 600; padding: 10px 16px; cursor: pointer;
+  border-bottom: 2px solid transparent; margin-bottom: -1px; }
+.tabs button.on { color: var(--text); border-bottom-color: var(--accent); }
+#tab-one { display: flex; flex-direction: column; gap: 14px; }
+#tab-one[hidden] { display: none; }
+.fbar { display: flex; gap: 10px 16px; flex-wrap: wrap; align-items: center; padding: 14px 18px; }
+.fbar label { display: inline-flex; align-items: center; gap: 6px; font-size: .82rem; color: var(--text-mid); }
+.fbar select, .fbar input[type=number] { height: 32px; border-radius: 8px; border: 1px solid var(--card-bd2); background: var(--surface-1); color: var(--text); font: inherit; padding: 0 8px; }
+.fbar .meta { margin-left: auto; font-size: .76rem; color: var(--text-dim); }
+.st { width: 100%; border-collapse: collapse; font-size: .82rem; }
+.st th { color: var(--text-dim); font-weight: 600; font-size: .72rem; text-align: right; padding: 8px; border-bottom: 1px solid var(--line); white-space: nowrap; cursor: pointer; user-select: none; position: sticky; top: 0; background: var(--card-bg); }
+.st th.l, .st td.l { text-align: left; }
+.st td { padding: 8px; text-align: right; border-bottom: 1px solid var(--line); font-family: 'JetBrains Mono', monospace; white-space: nowrap; }
+.st td.l { font-family: inherit; }
+.st tbody tr { cursor: pointer; }
+.st tbody tr:hover td { background: var(--surface-1); }
+.scroll { overflow: auto; max-height: 70vh; }
+.rp { font-family: inherit; font-size: .74rem; font-weight: 700; padding: 2px 8px; border-radius: 6px; }
+.rp.buy { background: var(--red-soft); color: var(--red); } .rp.accumulate { background: rgba(217,119,6,.1); color: #d97706; }
+.rp.hold { background: var(--surface-1); color: var(--text-mid); } .rp.avoid { background: rgba(5,150,105,.1); color: var(--green); }
+.chg { font-size: .7rem; color: var(--text-dim); margin-left: 4px; }
+.tt td, .tt th { text-align: center !important; }
+.tt td:first-child, .tt th:first-child { text-align: left !important; }
+.cell b { display: block; font-size: .9rem; } .cell small { color: var(--text-dim); font-size: .7rem; }
 .empty { padding: 60px 0; text-align: center; color: var(--text-dim); }
 @media (max-width: 900px) {
   .hero, .thesis, .grid2 { grid-template-columns: 1fr; }
@@ -107,12 +132,17 @@
 <body data-help-page="financials">
 {% include "_appbar.html" %}
 <main class="fa-wrap">
+  <nav class="tabs" id="tabs"><button data-t="one">個股分析</button><button data-t="scan">選股掃描</button><button data-t="track">建議成績單</button></nav>
+  <section id="tab-scan" hidden></section>
+  <section id="tab-track" hidden></section>
+  <div id="tab-one">
   <form class="card2 search" id="form">
     <input id="q" placeholder="輸入台股代號或美股代碼，例如 2330、2317、AAPL、NVDA" autocomplete="off" autocapitalize="characters">
     <button type="submit">分析</button>
     <div class="chips" id="chips"></div>
   </form>
   <div id="root"><div class="card2 empty">輸入代號，產生一份財報分析報告。</div></div>
+  </div>
   <p class="hint" style="text-align:center">規則化的基本面分析，財報來自 Yahoo Finance，台股同業估值來自證交所／櫃買中心。合理價是估計，不保證股價會到；僅供參考，非投資建議。</p>
 </main>
 
@@ -308,8 +338,105 @@
   }
 
   window.addEventListener('themechange', () => { if (DATA) charts(); });
-  const qs = new URLSearchParams(location.search).get('ticker');
-  if (qs) { $('#q').value = qs; go(false); }
+
+  // ── 分頁 ──
+  let TAB = 'one';
+  function tab(t, push = true) {
+    TAB = t;
+    document.querySelectorAll('#tabs button').forEach(b => b.classList.toggle('on', b.dataset.t === t));
+    $('#tab-one').hidden = t !== 'one'; $('#tab-scan').hidden = t !== 'scan'; $('#tab-track').hidden = t !== 'track';
+    if (push) history.replaceState(null, '', '/financials' + (t === 'one' ? ($('#q').value ? '?ticker=' + encodeURIComponent($('#q').value) : '') : '?tab=' + t + '&market=' + SC.market));
+    if (t === 'scan') loadScan();
+    if (t === 'track') loadTrack();
+  }
+  $('#tabs').onclick = e => { const b = e.target.closest('button'); if (b) tab(b.dataset.t); };
+  const REC = {buy: '買進', accumulate: '逢低布局', hold: '持有觀望', avoid: '避開'};
+  const recPill = k => k ? `<span class="rp ${k}">${REC[k]}</span>` : '—';
+
+  // ── 選股掃描 ──
+  const SC = Object.assign({market: 'tw', rec: 'buy,accumulate', below: false, min: 0, sector: '', sort: 'score', dir: -1}, (() => { try { return JSON.parse(localStorage.getItem('fa_scan')) || {}; } catch (e) { return {}; } })());
+  const SDATA = {};
+  async function loadScan() {
+    const box = $('#tab-scan');
+    if (!SDATA[SC.market]) {
+      box.innerHTML = '<div class="card2 empty">讀取中…</div>';
+      try { const r = await fetch('/api/fa/screen?market=' + SC.market); SDATA[SC.market] = await r.json(); }
+      catch (e) { box.innerHTML = `<div class="card2 empty">${esc(e.message)}</div>`; return; }
+    }
+    renderScan();
+  }
+  function renderScan() {
+    const d = SDATA[SC.market], box = $('#tab-scan');
+    try { localStorage.setItem('fa_scan', JSON.stringify(SC)); } catch (e) {}
+    const st = d.status;
+    const running = st && st.running ? `掃描中 ${st.done}/${st.total}…` : '';
+    if (!d.date) {
+      box.innerHTML = `${scanBar([])}<div class="card2 empty">${running || '還沒有掃描結果。系統每個交易日收盤後自動掃描（台股約晚上 8 點半後、美股台北清晨），第一次約需 10 分鐘。'}</div>`;
+      bindScan(); return;
+    }
+    const sectors = [...new Set(d.rows.map(r => r.sector).filter(Boolean))].sort();
+    const recs = SC.rec ? SC.rec.split(',') : [];
+    let rows = d.rows.filter(r => (!recs.length || recs.includes(r.rec)) && (!SC.below || r.below_buy) && (r.score || 0) >= SC.min && (!SC.sector || r.sector === SC.sector));
+    rows.sort((a, b) => ((a[SC.sort] ?? -1e9) > (b[SC.sort] ?? -1e9) ? 1 : (a[SC.sort] ?? -1e9) < (b[SC.sort] ?? -1e9) ? -1 : 0) * SC.dir);
+    const cnt = Object.fromEntries(Object.keys(REC).map(k => [k, d.rows.filter(r => r.rec === k).length]));
+    const th = (k, n, l) => `<th class="${l ? 'l' : ''}" data-s="${k}">${n}${SC.sort === k ? (SC.dir < 0 ? ' ▼' : ' ▲') : ''}</th>`;
+    box.innerHTML = `${scanBar(sectors)}
+      <section class="card2"><div class="fbar" style="padding-bottom:0"><span class="hint">共 ${d.rows.length} 檔：${Object.entries(cnt).map(([k, n]) => `${REC[k]} ${n}`).join('・')}。符合條件 <b>${rows.length}</b> 檔，點一列看完整分析。${d.prev_date ? `「原」為前次（${esc(d.prev_date)}）的建議。` : ''}</span></div>
+      <div class="scroll"><table class="st"><thead><tr>${th('code', '代號', 1)}${th('name', '名稱', 1)}${th('sector', '產業', 1)}${th('rec', '建議', 1)}${th('score', '綜合')}${th('quality', '品質')}${th('value', '估值')}${th('price', '收盤')}${th('fair', '合理價')}${th('upside', '空間')}${th('buy_below', '買進價')}</tr></thead>
+      <tbody>${rows.slice(0, 400).map(r => `<tr data-c="${esc(r.code)}"><td class="l">${esc(r.code)}</td><td class="l">${esc(r.name)}</td><td class="l" style="color:var(--text-dim)">${esc((r.sector || '').slice(0, 10))}</td>
+        <td class="l">${recPill(r.rec)}${r.prev_rec && r.prev_rec !== r.rec ? `<span class="chg">原${REC[r.prev_rec]}</span>` : ''}${r.flags ? ' <span title="有財務警訊" style="color:var(--red)">⚠</span>' : ''}</td>
+        <td style="color:${scColor(r.score)};font-weight:700">${r.score ?? '—'}</td><td>${r.quality ?? '—'}</td><td>${r.value ?? '—'}</td><td>${num(r.price)}</td><td>${num(r.fair)}</td>
+        <td class="${(r.upside || 0) >= 0 ? 'up' : 'dn'}">${r.upside == null ? '—' : (r.upside >= 0 ? '+' : '') + r.upside + '%'}</td>
+        <td style="${r.below_buy ? 'color:var(--red);font-weight:700' : ''}">${num(r.buy_below)}</td></tr>`).join('') || '<tr><td colspan="11" class="l" style="text-align:center;color:var(--text-dim)">沒有符合條件的股票</td></tr>'}</tbody></table></div></section>`;
+    bindScan();
+  }
+  function scanBar(sectors) {
+    const d = SDATA[SC.market] || {}, st = d.status;
+    const recs = SC.rec ? SC.rec.split(',') : [];
+    return `<section class="card2 fbar">
+      <span class="seg" id="scMkt"><button data-v="tw" class="${SC.market === 'tw' ? 'on' : ''}">台股</button><button data-v="us" class="${SC.market === 'us' ? 'on' : ''}">美股</button></span>
+      ${Object.entries(REC).map(([k, n]) => `<label><input type="checkbox" data-rec="${k}" ${recs.includes(k) ? 'checked' : ''}>${n}</label>`).join('')}
+      <label><input type="checkbox" id="scBelow" ${SC.below ? 'checked' : ''}>只看低於買進價</label>
+      <label>綜合分數 ≥ <input type="number" id="scMin" value="${SC.min}" min="0" max="100" step="5" style="width:64px"></label>
+      ${sectors.length ? `<label>產業 <select id="scSec"><option value="">全部</option>${sectors.map(x => `<option ${x === SC.sector ? 'selected' : ''}>${esc(x)}</option>`).join('')}</select></label>` : ''}
+      <span class="meta">${d.date ? '資料日 ' + esc(d.date) : ''}${st && st.running ? `・掃描中 ${st.done}/${st.total}` : ''}</span></section>`;
+  }
+  function bindScan() {
+    const box = $('#tab-scan');
+    box.querySelectorAll('#scMkt button').forEach(b => b.onclick = () => { SC.market = b.dataset.v; SC.sector = ''; history.replaceState(null, '', '/financials?tab=scan&market=' + SC.market); loadScan(); });
+    box.querySelectorAll('[data-rec]').forEach(c => c.onchange = () => { SC.rec = [...box.querySelectorAll('[data-rec]:checked')].map(x => x.dataset.rec).join(','); renderScan(); });
+    const bl = box.querySelector('#scBelow'); if (bl) bl.onchange = e => { SC.below = e.target.checked; renderScan(); };
+    const mn = box.querySelector('#scMin'); if (mn) mn.onchange = e => { SC.min = +e.target.value || 0; renderScan(); };
+    const se = box.querySelector('#scSec'); if (se) se.onchange = e => { SC.sector = e.target.value; renderScan(); };
+    box.querySelectorAll('th[data-s]').forEach(h => h.onclick = () => { const k = h.dataset.s; SC.dir = SC.sort === k ? -SC.dir : (['code', 'name', 'sector', 'rec'].includes(k) ? 1 : -1); SC.sort = k; renderScan(); });
+    box.querySelectorAll('tbody tr[data-c]').forEach(tr => tr.onclick = () => { $('#q').value = tr.dataset.c; tab('one'); go(); });
+  }
+
+  // ── 建議成績單 ──
+  async function loadTrack() {
+    const box = $('#tab-track');
+    box.innerHTML = '<div class="card2 empty">讀取中…</div>';
+    let t;
+    try { t = await (await fetch('/api/fa/track?market=' + SC.market)).json(); } catch (e) { box.innerHTML = `<div class="card2 empty">${esc(e.message)}</div>`; return; }
+    const cell = c => c.n ? `<div class="cell"><b class="${(c.excess || 0) >= 0 ? 'up' : 'dn'}">${c.excess >= 0 ? '+' : ''}${c.excess}%</b><small>報酬 ${c.ret >= 0 ? '+' : ''}${c.ret}%・勝率 ${c.win}%・${c.n} 筆</small></div>` : '<span style="color:var(--text-dim)">累積中</span>';
+    box.innerHTML = `<section class="card2 fbar"><span class="seg" id="tkMkt"><button data-v="tw" class="${SC.market === 'tw' ? 'on' : ''}">台股</button><button data-v="us" class="${SC.market === 'us' ? 'on' : ''}">美股</button></span>
+        <span class="meta">${t.since ? `從 ${esc(t.since)} 開始・${t.snapshots} 次掃描` : ''}</span></section>
+      <section class="card2 box">
+        <h3>建議之後的實際表現 <small>超額報酬 = 該組平均報酬 − 同日全部掃描股票平均</small></h3>
+        ${t.note ? `<p class="hint" style="margin-bottom:12px">${esc(t.note)}</p>` : ''}
+        <div class="scroll"><table class="st tt"><thead><tr><th>分組</th>${(t.horizons || ['1 週', '1 個月', '3 個月', '6 個月']).map(h => `<th>${h}後</th>`).join('')}</tr></thead>
+        <tbody>${(t.table || []).map(r => `<tr style="cursor:default"><td class="l">${r.key in REC ? recPill(r.key) : esc(r.name)}</td>${r.cells.map(c => `<td>${cell(c)}</td>`).join('')}</tr>`).join('') || '<tr><td colspan="5" class="l">還沒有資料</td></tr>'}</tbody></table></div>
+        <p class="hint" style="margin-top:12px">怎麼看：如果這套分析有用，「買進」組的超額報酬應該為正、「避開」組為負，且勝率（贏過同日平均的比例）高於 50%。
+          成績只從開始每日掃描那天往後累積，不用今天的財報回推過去（那樣會偷看到未來）。樣本少時波動大，至少累積 3 個月再下結論。</p>
+      </section>`;
+    box.querySelectorAll('#tkMkt button').forEach(b => b.onclick = () => { SC.market = b.dataset.v; history.replaceState(null, '', '/financials?tab=track&market=' + SC.market); loadTrack(); });
+  }
+
+  const QS = new URLSearchParams(location.search);
+  if (['tw', 'us'].includes(QS.get('market'))) SC.market = QS.get('market');
+  const qs = QS.get('ticker');
+  if (qs) { $('#q').value = qs; tab('one', false); go(false); }
+  else tab(['scan', 'track'].includes(QS.get('tab')) ? QS.get('tab') : 'one', false);
 })();
 </script>
 </body>
