@@ -204,13 +204,22 @@ def _hist(stock, period='1y', interval='1d', **kw):
 
 # ── TTL Cache ─────────────────────────────────────────────────────────
 _CACHE = {}
+_CACHE_MAX = 500                 # 上限：過期的項目只在讀取時被略過、不會自動刪除，沒有上限會一直累積
+_CACHE_LOCK = threading.Lock()   # gthread worker 多執行緒同時寫入
 
 def _cache_get(key):
     e = _CACHE.get(key)
     return e['v'] if e and time.time() < e['t'] else None
 
 def _cache_set(key, val, ttl=300):
-    _CACHE[key] = {'v': val, 't': time.time() + ttl}
+    now = time.time()
+    with _CACHE_LOCK:
+        if len(_CACHE) >= _CACHE_MAX:
+            for k in [k for k, e in _CACHE.items() if e['t'] <= now]:
+                del _CACHE[k]
+            while len(_CACHE) >= _CACHE_MAX:     # 仍然太多時，刪除最早放入的項目
+                del _CACHE[next(iter(_CACHE))]
+        _CACHE[key] = {'v': val, 't': now + ttl}
 
 # ── Helpers ───────────────────────────────────────────────────────
 def safe_float(v, default=0.0):
@@ -2654,6 +2663,38 @@ def get_tw_broker_chips(ticker):
     return jsonify(result)
 
 
+def _twse_daily(kind, check_date, headers):
+    """證交所全市場的每日報表（三大法人 T86、融資融券 MI_MARGN），依日期快取。
+    原本每查一檔股票都要重新下載最多 20 天的全市場報表；過去日期的資料不會再變，
+    所以整份快取起來讓所有股票共用，只保留用得到的數字。抓取失敗回傳 None（不快取，下次重試）。"""
+    from datetime import date
+    date_str = check_date.strftime('%Y%m%d')
+    key = f'twse:{kind}:{date_str}'
+    hit = _cache_get(key)
+    if hit is not None:
+        return hit
+    def num(s):
+        try: return int(str(s).replace(',', '').replace(' ', ''))
+        except Exception: return 0
+    try:
+        if kind == 'T86':
+            url = f'https://www.twse.com.tw/rwd/zh/fund/T86?date={date_str}&selectType=ALLBUT0999&response=json'
+            rows = _requests.get(url, headers=headers, timeout=8).json().get('data', []) or []
+            table = {r[0]: {'foreign': num(r[4]), 'trust': num(r[10]), 'dealer': num(r[11]), 'total': num(r[18])} for r in rows if len(r) > 18}
+        else:
+            url = f'https://www.twse.com.tw/rwd/zh/marginTrading/MI_MARGN?date={date_str}&selectType=ALL&response=json'
+            tables = _requests.get(url, headers=headers, timeout=8).json().get('tables', []) or []
+            t = next((t for t in tables if len(t.get('fields', [])) > 8), None)
+            table = {r[0]: {'marginBuy': num(r[2]), 'marginSell': num(r[3]), 'marginBal': num(r[6]),
+                            'shortBuy': num(r[8]), 'shortSell': num(r[9]), 'shortBal': num(r[12])}
+                     for r in (t or {}).get('data', []) if len(r) > 12}
+    except Exception:
+        return None
+    # 今天的報表收盤後才公布，只短暫快取；過去日期（含休市日的空資料）快取 12 小時
+    _cache_set(key, table, ttl=600 if check_date >= date.today() else 43200)
+    return table
+
+
 @app.route('/api/tw/margin/<ticker>')
 def get_tw_margin(ticker):
     if not _valid_tw_ticker(ticker):
@@ -2667,34 +2708,12 @@ def get_tw_margin(ticker):
     headers = {'User-Agent': 'Mozilla/5.0'}
     days_collected = []
     check_date = date.today()
-    def parse_num(s):
-        try: return int(str(s).replace(',','').replace(' ',''))
-        except: return 0
     for _ in range(20):
         if len(days_collected) >= 5:
             break
-        date_str = check_date.strftime('%Y%m%d')
-        try:
-            url = f'https://www.twse.com.tw/rwd/zh/marginTrading/MI_MARGN?date={date_str}&selectType=ALL&response=json'
-            r = _requests.get(url, headers=headers, timeout=8)
-            d = r.json()
-            tables = d.get('tables', [])
-            data_table = next((t for t in tables if len(t.get('fields', [])) > 8), None)
-            if data_table:
-                for row in data_table.get('data', []):
-                    if row[0] == stock_no:
-                        days_collected.append({
-                            'date':       check_date.strftime('%m/%d'),
-                            'marginBuy':  parse_num(row[2]),
-                            'marginSell': parse_num(row[3]),
-                            'marginBal':  parse_num(row[6]),
-                            'shortBuy':   parse_num(row[8]),
-                            'shortSell':  parse_num(row[9]),
-                            'shortBal':   parse_num(row[12]),
-                        })
-                        break
-        except Exception:
-            pass
+        day = _twse_daily('MI_MARGN', check_date, headers)
+        if day and stock_no in day:
+            days_collected.append({'date': check_date.strftime('%m/%d'), **day[stock_no]})
         check_date -= timedelta(days=1)
     days_collected.reverse()
     result = {'stockNo': stock_no, 'days': days_collected}
@@ -2728,23 +2747,9 @@ def get_tw_institutional(ticker):
                     row['date'] = check_date.strftime('%m/%d')
                     days_collected.append(row)
             else:
-                url = f'https://www.twse.com.tw/rwd/zh/fund/T86?date={date_str}&selectType=ALLBUT0999&response=json'
-                r = _requests.get(url, headers=headers, timeout=8)
-                d = r.json()
-                rows = d.get('data', [])
-                for row in rows:
-                    if row[0] == stock_no:
-                        def parse_num(s):
-                            try: return int(s.replace(',','').replace(' ',''))
-                            except: return 0
-                        days_collected.append({
-                            'date':    check_date.strftime('%m/%d'),
-                            'foreign': parse_num(row[4]),
-                            'trust':   parse_num(row[10]),
-                            'dealer':  parse_num(row[11]),
-                            'total':   parse_num(row[18]),
-                        })
-                        break
+                day = _twse_daily('T86', check_date, headers)
+                if day and stock_no in day:
+                    days_collected.append({'date': check_date.strftime('%m/%d'), **day[stock_no]})
         except Exception:
             pass
         check_date -= timedelta(days=1)
