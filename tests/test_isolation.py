@@ -86,3 +86,33 @@ def test_migration_moves_legacy_files(tmp_path, monkeypatch):
     assert (tmp_path / 'tw_watchlist.json.migrated').exists()
     userdata.migrate_shared_files('amy')                 # 只做一次
     assert userdata.get('amy', 'tw_watchlist') is None
+
+
+def test_newer_settings_are_per_user(client, monkeypatch):
+    """每日潛力股、黃金原油通知、恐慌指標提醒、LINE 額度與綁定碼、手機推播訂閱，都只屬於自己的帳號。"""
+    import commodity
+    import notify
+    import userdata
+    monkeypatch.setattr(commodity, 'analyze', lambda k, tf: None)
+    monkeypatch.setattr(notify.requests, 'get', lambda *a, **k: type('R', (), {'ok': True, 'status_code': 200, 'json': lambda s: {}})())
+    amy, boss = two_clients(client)
+    amy.post('/api/picks/daily', json={'tw': True, 'n': 10, 'time': {'tw': '21:00'}})
+    amy.post('/api/commodity/alerts', json={'combo': 'gold:4h', 'on': True})
+    amy.post('/api/fear/alerts', json={'thresholds': [40], 'term': True})
+    amy.post('/api/tw/line/config', json={'line_token': 'amy-tok', 'line_user_id': '', 'line_secret': '0' * 32})
+    amy.post('/api/notify/line/cap', json={'cap': 50})
+    amy.post('/api/notify/line/bind')
+    amy.post('/api/notify/subscribe', json={'endpoint': 'https://push.example/amy', 'keys': {'p256dh': 'x', 'auth': 'y'}})
+
+    b = boss.get('/api/picks/daily').get_json()
+    assert not b['tw'] and b['n'] == 5 and b['time']['tw'] == '20:30'
+    assert boss.get('/api/commodity/alerts').get_json()['items'] == []
+    f = boss.get('/api/fear/alerts').get_json()
+    assert f['thresholds'] == [] and not f['term']
+    assert boss.get('/api/tw/line/config').get_json() == {'has_token': False, 'line_user_id': '', 'has_secret': False}
+    assert boss.get('/api/notify/status').get_json()['web']['devices'] == 0
+    assert userdata.get('boss', notify.BIND_KEY) is None and userdata.get('boss', 'line') is None
+
+    a = amy.get('/api/picks/daily').get_json()
+    assert a['tw'] and a['n'] == 10 and amy.get('/api/commodity/alerts').get_json()['items'] == ['gold:4h']
+    assert userdata.get('amy', 'line')['cap'] == 50 and userdata.get('amy', notify.BIND_KEY)['code']
