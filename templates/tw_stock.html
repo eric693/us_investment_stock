@@ -398,6 +398,7 @@
         <button id="alertBtn" class="alert-btn" onclick="openAlertModal()">提醒 <span id="alertDot" class="alert-dot hidden"></span></button>
         <button id="rtBtn" class="alert-btn" onclick="toggleRealtime()" title="開啟盯盤模式，每60秒自動更新報價">盯盤</button>
         <button class="alert-btn" onclick="location.href='/financials?ticker=' + encodeURIComponent((currentData && (currentData.displayTicker || currentData.ticker)) || '')" title="財報分析與買進建議">財報分析</button>
+        <button class="alert-btn" onclick="(() => { const t = (currentData && currentData.ticker) || ''; const c = t.replace('.TWO', '').replace('.TW', ''); location.href = t.endsWith('.TWO') ? '/tv?symbol=' + c : '/tw/board/chart?code=' + c; })()" title="上櫃股開 TradingView；上市股開技術分析圖（指標參數皆可調）">技術圖</button>
         <span id="rtIndicator" class="rt-indicator rt-off"><span class="rt-dot"></span><span id="rtLabel">停止</span></span>
       </div>
     </div>

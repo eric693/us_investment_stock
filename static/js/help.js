@@ -65,7 +65,7 @@
       '工具列「滾輪」切到「縮放」時，滾輪改為縮放 K 線。', '拖曳圖表左右平移；<kbd>+</kbd><kbd>-</kbd> 縮放；<kbd>Esc</kbd> 回清單。',
       '右側清單可直接點選股票；左上 ☆ 加入／移除自選股。', '滑鼠移到圖上，每個區塊左上角會顯示該根 K 棒的數值。']));
   sec('chart.tools', '週期、均線與副圖', steps(['週期：1 分、15 分、60 分、日、週、月。', '均線：MA5～MA240 個別開關；布林通道開關。',
-      '副圖：成交量、KDJ、RSI、MACD、投信／外資／自營商／法人持股，點一下開或關。',
+      '副圖：成交量、KDJ、RSI、MACD、DMI、ATR、CCI、威廉、乖離、OBV、投信／外資／自營商／法人持股，點一下開或關。',
       '持股均線：法人持股線的均線天數（盤後選股用的就是這條）。', '持股單位：「張」或「%」（佔發行股數的比例）。',
       '選股訊號：在日 K 上標出法人持股線穿越持股均線的位置（B = 向上、S = 向下）。']) +
     note('外資持股是官方公布的實際張數；投信、自營商沒有公開持股，是用每日買賣超累加推估，所以標示「(估)」。持股「變化」三者都是準確的。'));
@@ -141,9 +141,15 @@
       '「加碼提醒」：勾選條件，同一波恐慌每個條件只通知一次。']) +
     note('回測只算指數價格、不含股息。VIX 40 以上與期限結構恢復的訊號較可靠，但 36 年只有十幾次，建議分批加碼、只用閒錢。'));
 
+  sec('tv.main', 'TradingView 圖表', '<p>和 TradingView App 一樣的圖：上方「技術指標」有上百種指標，點指標旁的設定鈕可改所有參數；左側工具列可畫趨勢線、費波那契、水平線；週期可選 1 分到月線。</p>' +
+    steps(['輸入美股代碼（NVDA）、上櫃股代號（6488）、GOLD／OIL，按「開圖」。', '「快速加指標」勾選常用指標，會記在這台裝置，下次打開自動帶入。', '右上角可全螢幕或另開視窗、存成圖片。']) +
+    note('TradingView 嵌入圖不提供台股上市股與各大指數（交易所授權限制）：上市股請用台股技術分析圖（右上「⚙ 指標參數」可調每個參數）；美股大盤用 SPY／QQQ。圖上直接加的指標與畫線，重新整理後不會保留。'));
+  sec('chart.params', '指標參數', steps(['工具列「⚙ 指標參數」：均線 6 條的天數與 SMA／EMA、布林、SAR、唐奇安、成交量均線、KDJ、RSI（兩條）、MACD、DMI、ATR、CCI、威廉、乖離率（三條）、OBV。',
+      '改完按「套用」，記在這台裝置；「恢復預設」回到常用值。']) + note('數值與標準公式（TradingView 同一套算法：RSI／ATR／DMI 用 Wilder 平滑）一致。'));
+
   var PAGES = {
     board: ['board.index', 'board.pulse', 'board.all', 'board.watch', 'board.score', 'board.sector', 'board.rank', 'board.after', 'board.rt', 'board.tdcc', 'board.line'],
-    chart: ['chart.basic', 'chart.tools', 'chart.index'],
+    chart: ['chart.basic', 'chart.tools', 'chart.params', 'chart.index'], tv: ['tv.main'],
     tw: ['tw.main', 'tw.monitor', 'chart.tools'], us: ['us.main'], screener: ['screener.main'], picks: ['picks.main'], commodity: ['commodity.main'], financials: ['financials.main'], etf: ['etf.main'], fear: ['fear.main'],
     portfolio: ['portfolio.main'], account: ['account.main'], admin: ['admin.main'],
   };

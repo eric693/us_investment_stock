@@ -60,6 +60,21 @@ body { display: flex; flex-direction: column; overflow: hidden; }
 /* 圖表 */
 .chart-box { flex: 1; position: relative; min-height: 0; overflow: hidden; }
 #chart { position: absolute; inset: 6px 4px 4px 4px; }
+.pbtn { height: 28px; padding: 0 12px; border-radius: 8px; border: 1px solid var(--card-bd2); background: var(--surface-1); color: var(--text); font: inherit; font-size: .78rem; font-weight: 600; cursor: pointer; }
+.pbtn:hover { border-color: var(--accent); }
+.pmask { position: fixed; inset: 0; background: var(--scrim, rgba(0,0,0,.5)); z-index: 900; display: flex; align-items: center; justify-content: center; padding: 16px; }
+.ppanel { width: min(760px, 100%); max-height: 90vh; display: flex; flex-direction: column; background: var(--card-bg); border: 1px solid var(--card-bd2); border-radius: 18px; box-shadow: 0 20px 60px rgba(0,0,0,.35); }
+.phead { display: flex; align-items: baseline; gap: 12px; padding: 16px 20px; border-bottom: 1px solid var(--line); flex-wrap: wrap; }
+.pbody { overflow-y: auto; padding: 14px 20px; display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 12px; }
+.pg { border: 1px solid var(--card-bd); border-radius: 12px; padding: 10px 12px; background: var(--surface-1); }
+.pg h4 { margin: 0 0 8px; font-size: .84rem; }
+.pf { display: flex; justify-content: space-between; align-items: center; gap: 8px; font-size: .76rem; color: var(--text-mid); margin-bottom: 6px; flex-wrap: wrap; }
+.pf input, .pf select { width: 70px; height: 28px; border-radius: 7px; border: 1px solid var(--card-bd2); background: var(--card-bg); color: var(--text); font: inherit; font-size: .78rem; padding: 0 6px; }
+.pf .pl { display: flex; gap: 4px; flex-wrap: wrap; width: 100%; }
+.pf .pl input { width: 52px; }
+.pfoot { display: flex; gap: 8px; padding: 12px 20px; border-top: 1px solid var(--line); }
+.pb { height: 34px; padding: 0 16px; border: 0; border-radius: 9px; background: var(--accent-grad); color: #fff; font: inherit; font-weight: 700; cursor: pointer; }
+.pb.ghost { background: var(--surface-1); color: var(--text); border: 1px solid var(--card-bd2); }
 .legend { position: absolute; left: 14px; z-index: 3; font-size: .72rem; pointer-events: none; font-family: 'JetBrains Mono', monospace;
           display: flex; gap: 12px; flex-wrap: wrap; max-width: calc(100% - 100px); }
 .legend .n { color: var(--text-dim); font-family: 'Inter', 'Noto Sans TC', sans-serif; font-weight: 600; }
@@ -111,6 +126,7 @@ body.embed::before { display: none; }
       <div class="grp" id="maToggles"></div>
       <div class="grp" id="mainToggles"></div>
       <div class="grp" id="paneToggles"></div>
+      <div class="grp"><button class="pbtn" id="paramBtn" title="修改每個指標的參數">⚙ 指標參數</button></div>
       <div class="grp" id="unitGrp"><b>持股單位</b><span class="seg"><button data-unit="lots">張</button><button data-unit="pct">%</button></span></div>
       <div class="grp"><b>持股均線</b><input class="inp" id="holdN" type="number" min="2" max="60" title="法人持股均線天數（3 或 5，可自訂）"><span>日</span></div>
       <div class="grp"><button class="help-btn" data-help="chart.basic"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><circle cx="12" cy="12" r="9.5"/><path d="M9.3 9.2a2.8 2.8 0 0 1 5.4 1c0 1.9-2.7 2.4-2.7 4"/><path d="M12 17.3h.01"/></svg>操作說明</button></div>
@@ -154,27 +170,45 @@ const PALETTE = {
 function themeColors() {
   UP = Theme.css('--red'); DN = Theme.css('--green');
   const pal = PALETTE[Theme.mode()] || PALETTE.dark;
-  MAS = [5, 10, 20, 60, 120, 240].map((n, i) => [n, pal.ma[i]]);
+  MAS = (typeof cfg !== 'undefined' ? cfg.p.ma : [5, 10, 20, 60, 120, 240]).map((n, i) => [n, pal.ma[i]]);
   HOLD_COLOR = {trust: pal.hold[0], foreign: pal.hold[1], dealer: pal.hold[2], total: pal.hold[3]};
   KDJ_C = pal.kdj;
 }
-themeColors();
 var MAS;
 const PANES = [
   ['vol','成交量'], ['kdj','KDJ'], ['rsi','RSI'], ['macd','MACD'],
+  ['dmi','DMI'], ['atr','ATR'], ['cci','CCI'], ['wr','威廉'], ['bias','乖離'], ['obv','OBV'],
   ['trust','投信持股'], ['foreign','外資持股'], ['dealer','自營商持股'], ['total','法人持股'],
 ];
+// 每個指標的參數（可在「指標參數」面板修改，存在這台瀏覽器）
+const DEF_P = {ma: [5, 10, 20, 60, 120, 240], maType: 'SMA', boll: {n: 20, k: 2}, sar: {step: 0.02, max: 0.2}, dc: {n: 20},
+  vol: {a: 5, b: 20}, kdj: {n: 9, m1: 3, m2: 3, hi: 80, lo: 20}, rsi: {a: 6, b: 12, hi: 70, lo: 30}, macd: {f: 12, s: 26, sig: 9},
+  dmi: {n: 14, adx: 14}, atr: {n: 14}, cci: {n: 20}, wr: {n: 14}, bias: {a: 6, b: 12, c: 24}, obv: {ma: 20}};
+const P_LABEL = {
+  ma: ['均線', [['ma', '週期（6 條）', 'list']], ['maType', '計算方式', ['SMA', 'EMA']]],
+  boll: ['布林通道', [['n', '週期'], ['k', '標準差倍數', 'f']]], sar: ['SAR 拋物線', [['step', '加速因子', 'f'], ['max', '上限', 'f']]],
+  dc: ['唐奇安通道', [['n', '週期']]], vol: ['成交量均線', [['a', '均量 1'], ['b', '均量 2']]],
+  kdj: ['KDJ', [['n', 'RSV 週期'], ['m1', 'K 平滑'], ['m2', 'D 平滑'], ['hi', '超買線'], ['lo', '超賣線']]],
+  rsi: ['RSI', [['a', '週期 1'], ['b', '週期 2（0 = 不畫）'], ['hi', '超買線'], ['lo', '超賣線']]],
+  macd: ['MACD', [['f', '快線'], ['s', '慢線'], ['sig', '訊號線']]], dmi: ['DMI', [['n', 'DI 週期'], ['adx', 'ADX 平滑']]],
+  atr: ['ATR', [['n', '週期']]], cci: ['CCI', [['n', '週期']]], wr: ['威廉 %R', [['n', '週期']]],
+  bias: ['乖離率', [['a', '週期 1'], ['b', '週期 2'], ['c', '週期 3']]], obv: ['OBV', [['ma', '均線（0 = 不畫）']]],
+};
 var HOLD_COLOR, KDJ_C;
 
 const QS = new URLSearchParams(location.search);
 const EMBED = QS.get('embed') === '1';
 const CFG_KEY = EMBED ? 'twChartCfgEmbed' : 'twChartCfg';
 const INTRADAY = ['1', '15', '60'];
-const cfg = Object.assign({period:'D', ma:[5,10,20,60,120,240], boll:true, signals:true,
+const cfg = Object.assign({period:'D', ma:[5,10,20,60,120,240], boll:true, sar:false, dc:false, signals:true,
   panes:['vol','kdj','trust','foreign'], holdN:5, holdUnit:'lots', wheel: EMBED ? 'zoom' : 'switch', bars:120}, ls.get(CFG_KEY, {}));
+cfg.p = Object.assign(JSON.parse(JSON.stringify(DEF_P)), cfg.p || {});
+// 均線開關存的是「第幾條」：舊設定存的是天數，換成索引
+cfg.maOn = Array.isArray(cfg.maOn) ? cfg.maOn : cfg.p.ma.map((n, i) => (cfg.ma || []).includes(n) ? i : -1).filter(i => i >= 0);
 if (EMBED) { cfg.wheel = 'zoom'; document.body.classList.add('embed'); }
 if (QS.get('period') && ['1','15','60','D','W','M'].includes(QS.get('period'))) cfg.period = QS.get('period');
 const saveCfg = () => ls.set(CFG_KEY, cfg);
+themeColors();
 
 let code = QS.get('code') || '2330';
 const INDEX_CODES = ['TAIEX', 'TPEX'];
@@ -215,13 +249,13 @@ function boll(c, n=20, k=2) {
   }
   return {mid, up, dn};
 }
-function kdj(h, l, c, n=9) {
+function kdj(h, l, c, n=9, m1=3, m2=3) {
   const K = [], D = [], J = []; let pk = 50, pd = 50;
   for (let i = 0; i < c.length; i++) {
     const s = Math.max(0, i - n + 1);
     const hh = Math.max(...h.slice(s, i + 1)), ll = Math.min(...l.slice(s, i + 1));
     const rsv = hh === ll ? 50 : (c[i] - ll) / (hh - ll) * 100;
-    pk = pk * 2 / 3 + rsv / 3; pd = pd * 2 / 3 + pk / 3;
+    pk = pk * (m1 - 1) / m1 + rsv / m1; pd = pd * (m2 - 1) / m2 + pk / m2;
     K.push(pk); D.push(pd); J.push(3 * pk - 2 * pd);
   }
   return {K, D, J};
@@ -244,6 +278,57 @@ function rsi(c, n=14) {
 function macd(c, f=12, s=26, sig=9) {
   const ef = ema(c, f), es = ema(c, s), dif = c.map((_, i) => ef[i] - es[i]), dea = ema(dif, sig);
   return {dif, dea, hist: dif.map((v, i) => (v - dea[i]) * 2)};
+}
+// Wilder 平滑（RSI、ATR、DMI 用）
+function rma(a, n) {
+  const out = new Array(a.length).fill(null); let prev = null, s = 0, cnt = 0;
+  for (let i = 0; i < a.length; i++) {
+    if (a[i] == null) continue;
+    if (prev == null) { s += a[i]; cnt++; if (cnt === n) { prev = s / n; out[i] = prev; } continue; }
+    prev = (prev * (n - 1) + a[i]) / n; out[i] = prev;
+  }
+  return out;
+}
+const trueRange = (h, l, c) => c.map((_, i) => i ? Math.max(h[i] - l[i], Math.abs(h[i] - c[i-1]), Math.abs(l[i] - c[i-1])) : h[i] - l[i]);
+function atr(h, l, c, n=14) { return rma(trueRange(h, l, c), n); }
+function dmi(h, l, c, n=14, m=14) {
+  const pdm = h.map((_, i) => { if (!i) return 0; const u = h[i] - h[i-1], d = l[i-1] - l[i]; return u > d && u > 0 ? u : 0; });
+  const ndm = h.map((_, i) => { if (!i) return 0; const u = h[i] - h[i-1], d = l[i-1] - l[i]; return d > u && d > 0 ? d : 0; });
+  const tr = rma(trueRange(h, l, c), n), p = rma(pdm, n), q = rma(ndm, n);
+  const pdi = tr.map((t, i) => t ? p[i] / t * 100 : null), ndi = tr.map((t, i) => t ? q[i] / t * 100 : null);
+  const dx = pdi.map((v, i) => v == null || ndi[i] == null || v + ndi[i] === 0 ? null : Math.abs(v - ndi[i]) / (v + ndi[i]) * 100);
+  return {pdi, ndi, adx: rma(dx, m)};
+}
+function cci(h, l, c, n=20) {
+  const tp = c.map((v, i) => (h[i] + l[i] + v) / 3), m = sma(tp, n);
+  return tp.map((v, i) => { if (m[i] == null) return null; let d = 0; for (let j = i - n + 1; j <= i; j++) d += Math.abs(tp[j] - m[i]); return d ? (v - m[i]) / (0.015 * d / n) : 0; });
+}
+function willr(h, l, c, n=14) {
+  return c.map((v, i) => { if (i < n - 1) return null; const hh = Math.max(...h.slice(i - n + 1, i + 1)), ll = Math.min(...l.slice(i - n + 1, i + 1)); return hh === ll ? -50 : (hh - v) / (hh - ll) * -100; });
+}
+function biasOf(c, n) { const m = sma(c, n); return c.map((v, i) => m[i] ? (v / m[i] - 1) * 100 : null); }
+function obv(c, v) { let s = 0; return c.map((x, i) => { if (i) s += x > c[i-1] ? v[i] : x < c[i-1] ? -v[i] : 0; return s; }); }
+function donchian(h, l, n=20) {
+  const up = h.map((_, i) => i < n - 1 ? null : Math.max(...h.slice(i - n + 1, i + 1))), dn = l.map((_, i) => i < n - 1 ? null : Math.min(...l.slice(i - n + 1, i + 1)));
+  return {up, dn, mid: up.map((u, i) => u == null ? null : (u + dn[i]) / 2)};
+}
+function psar(h, l, step=0.02, max=0.2) {
+  const out = new Array(h.length).fill(null); if (h.length < 2) return out;
+  let up = h[1] >= h[0], af = step, ep = up ? h[0] : l[0], sar = up ? l[0] : h[0];
+  for (let i = 1; i < h.length; i++) {
+    sar = sar + af * (ep - sar);
+    if (up) {
+      sar = Math.min(sar, l[i-1], i > 1 ? l[i-2] : l[i-1]);
+      if (l[i] < sar) { up = false; sar = ep; ep = l[i]; af = step; }
+      else if (h[i] > ep) { ep = h[i]; af = Math.min(af + step, max); }
+    } else {
+      sar = Math.max(sar, h[i-1], i > 1 ? h[i-2] : h[i-1]);
+      if (h[i] > sar) { up = true; sar = ep; ep = h[i]; af = step; }
+      else if (l[i] < ep) { ep = l[i]; af = Math.min(af + step, max); }
+    }
+    out[i] = sar;
+  }
+  return out;
 }
 const crossUp = (a, b, i) => i > 0 && a[i-1] != null && b[i-1] != null && a[i] != null && b[i] != null && a[i-1] <= b[i-1] && a[i] > b[i];
 const crossDn = (a, b, i) => i > 0 && a[i-1] != null && b[i-1] != null && a[i] != null && b[i] != null && a[i-1] >= b[i-1] && a[i] < b[i];
@@ -296,15 +381,26 @@ function build() {
   // 主圖
   const candle = chart.addSeries(LC.CandlestickSeries, {upColor: UP, downColor: DN, borderUpColor: UP, borderDownColor: DN, wickUpColor: UP, wickDownColor: DN, priceLineVisible: true});
   candle.setData(bars.map(b => ({time: b.time, open: b.open, high: b.high, low: b.low, close: b.close})));
-  const maVals = {};
-  MAS.forEach(([n, color]) => {
-    if (!cfg.ma.includes(n)) return;
-    maVals[n] = sma(C, n);
-    chart.addSeries(LC.LineSeries, line(color)).setData(toSeries(bars, maVals[n]));
+  const maVals = {}, P = cfg.p, maF = P.maType === 'EMA' ? ema : sma, maN = P.maType === 'EMA' ? 'EMA' : 'MA';
+  MAS.forEach(([n, color], k) => {
+    if (!cfg.maOn.includes(k) || !n) return;
+    maVals[k] = maF(C, n);
+    if (P.maType === 'EMA') maVals[k] = maVals[k].map((v, i) => i < n - 1 ? null : v);
+    chart.addSeries(LC.LineSeries, line(color)).setData(toSeries(bars, maVals[k]));
   });
-  let bb = null;
+  let bb = null, sarV = null, dcV = null;
+  if (cfg.sar) {
+    sarV = psar(H, L, P.sar.step, P.sar.max);
+    chart.addSeries(LC.LineSeries, line(Theme.css('--accent'), 1, {lineVisible: false, pointMarkersVisible: true, pointMarkersRadius: 1.5})).setData(toSeries(bars, sarV));
+  }
+  if (cfg.dc) {
+    dcV = donchian(H, L, P.dc.n);
+    const o = {lineStyle: LC.LineStyle.Solid};
+    chart.addSeries(LC.LineSeries, line('#38bdf8', 1, o)).setData(toSeries(bars, dcV.up));
+    chart.addSeries(LC.LineSeries, line('#38bdf8', 1, o)).setData(toSeries(bars, dcV.dn));
+  }
   if (cfg.boll) {
-    bb = boll(C);
+    bb = boll(C, P.boll.n, P.boll.k);
     const o = {lineStyle: LC.LineStyle.Dashed};
     chart.addSeries(LC.LineSeries, line(Theme.css('--text-dim'), 1, o)).setData(toSeries(bars, bb.up));
     chart.addSeries(LC.LineSeries, line(Theme.css('--text-dim'), 1, {lineStyle: LC.LineStyle.Dotted})).setData(toSeries(bars, bb.mid));
@@ -315,8 +411,10 @@ function build() {
     return `<span class="n">${fmtTime(b.time)}</span>` +
       `<span>開 <b class="${cc}">${fmt(b.open)}</b></span><span>高 <b class="${cc}">${fmt(b.high)}</b></span>` +
       `<span>低 <b class="${cc}">${fmt(b.low)}</b></span><span>收 <b class="${cc}">${fmt(b.close)}</b></span>` +
-      MAS.filter(([n]) => maVals[n]).map(([n, c]) => `<span style="color:${c}">MA${n} ${fmt(maVals[n][i])}</span>`).join('') +
-      (bb ? `<span style="color:var(--text-mid)">BOLL ${fmt(bb.up[i])} / ${fmt(bb.mid[i])} / ${fmt(bb.dn[i])}</span>` : '');
+      MAS.map(([n, c], k) => maVals[k] ? `<span style="color:${c}">${maN}${n} ${fmt(maVals[k][i])}</span>` : '').join('') +
+      (bb ? `<span style="color:var(--text-mid)">BOLL(${P.boll.n},${P.boll.k}) ${fmt(bb.up[i])} / ${fmt(bb.mid[i])} / ${fmt(bb.dn[i])}</span>` : '') +
+      (sarV ? `<span style="color:${Theme.css('--accent')}">SAR ${fmt(sarV[i])}</span>` : '') +
+      (dcV ? `<span style="color:#38bdf8">DC(${P.dc.n}) ${fmt(dcV.up[i])} / ${fmt(dcV.dn[i])}</span>` : '');
   });
 
   // 副圖
@@ -330,33 +428,65 @@ function build() {
     if (key === 'vol') {
       const vs = chart.addSeries(LC.HistogramSeries, {priceFormat: {type: 'volume'}, priceLineVisible: false, lastValueVisible: true}, p);
       vs.setData(bars.map((b, i) => ({time: b.time, value: b.volume, color: (b.close >= (i ? bars[i-1].close : b.open)) ? alpha(UP, .55) : alpha(DN, .55)})));
-      const v5 = sma(V, 5), v20 = sma(V, 20);
+      const v5 = sma(V, P.vol.a), v20 = sma(V, P.vol.b);
       chart.addSeries(LC.LineSeries, line(KDJ_C[0]), p).setData(toSeries(bars, v5));
       chart.addSeries(LC.LineSeries, line(KDJ_C[1]), p).setData(toSeries(bars, v20));
-      addLegend(p, i => `<span class="n">${IS_INDEX() ? '成交金額(億)' : '成交量(張)'}</span><span>${fmt(V[i], 0)}</span><span style="color:${KDJ_C[0]}">MA5 ${fmt(v5[i], 0)}</span><span style="color:${KDJ_C[1]}">MA20 ${fmt(v20[i], 0)}</span>`);
+      addLegend(p, i => `<span class="n">${IS_INDEX() ? '成交金額(億)' : '成交量(張)'}</span><span>${fmt(V[i], 0)}</span><span style="color:${KDJ_C[0]}">MA${P.vol.a} ${fmt(v5[i], 0)}</span><span style="color:${KDJ_C[1]}">MA${P.vol.b} ${fmt(v20[i], 0)}</span>`);
     } else if (key === 'rsi') {
-      const r = rsi(C);
-      const rs = chart.addSeries(LC.LineSeries, line(KDJ_C[2], 1.5), p);
+      const r = rsi(C, P.rsi.a), r2 = P.rsi.b ? rsi(C, P.rsi.b) : null;
+      const rs = chart.addSeries(LC.LineSeries, line(KDJ_C[0], 1.5), p);
       rs.setData(toSeries(bars, r));
-      rs.createPriceLine({price: 70, color: alpha(UP, .35), lineStyle: LC.LineStyle.Dashed, axisLabelVisible: false});
-      rs.createPriceLine({price: 30, color: alpha(DN, .35), lineStyle: LC.LineStyle.Dashed, axisLabelVisible: false});
-      addLegend(p, i => `<span class="n">RSI(14)</span><span style="color:${KDJ_C[2]}">${fmt(r[i])}</span>`);
+      if (r2) chart.addSeries(LC.LineSeries, line(KDJ_C[1], 1.5), p).setData(toSeries(bars, r2));
+      rs.createPriceLine({price: P.rsi.hi, color: alpha(UP, .35), lineStyle: LC.LineStyle.Dashed, axisLabelVisible: false});
+      rs.createPriceLine({price: P.rsi.lo, color: alpha(DN, .35), lineStyle: LC.LineStyle.Dashed, axisLabelVisible: false});
+      addLegend(p, i => `<span class="n">RSI</span><span style="color:${KDJ_C[0]}">RSI${P.rsi.a} ${fmt(r[i])}</span>` + (r2 ? `<span style="color:${KDJ_C[1]}">RSI${P.rsi.b} ${fmt(r2[i])}</span>` : ''));
     } else if (key === 'macd') {
-      const m = macd(C);
+      const m = macd(C, P.macd.f, P.macd.s, P.macd.sig);
       chart.addSeries(LC.HistogramSeries, {priceLineVisible: false, lastValueVisible: false}, p)
         .setData(bars.map((b, i) => ({time: b.time, value: m.hist[i], color: m.hist[i] >= 0 ? alpha(UP, .55) : alpha(DN, .55)})));
       chart.addSeries(LC.LineSeries, line(KDJ_C[1], 1.5), p).setData(toSeries(bars, m.dif));
       chart.addSeries(LC.LineSeries, line(KDJ_C[0], 1.5), p).setData(toSeries(bars, m.dea));
-      addLegend(p, i => `<span class="n">MACD(12,26,9)</span><span style="color:${KDJ_C[1]}">DIF ${fmt(m.dif[i])}</span><span style="color:${KDJ_C[0]}">DEA ${fmt(m.dea[i])}</span><span class="${m.hist[i] >= 0 ? 'up' : 'dn'}">OSC ${fmt(m.hist[i])}</span>`);
+      addLegend(p, i => `<span class="n">MACD(${P.macd.f},${P.macd.s},${P.macd.sig})</span><span style="color:${KDJ_C[1]}">DIF ${fmt(m.dif[i])}</span><span style="color:${KDJ_C[0]}">DEA ${fmt(m.dea[i])}</span><span class="${m.hist[i] >= 0 ? 'up' : 'dn'}">OSC ${fmt(m.hist[i])}</span>`);
     } else if (key === 'kdj') {
-      kd = kd || kdj(H, L, C);
+      kd = kd || kdj(H, L, C, P.kdj.n, P.kdj.m1, P.kdj.m2);
       chart.addSeries(LC.LineSeries, line(KDJ_C[0], 1.5), p).setData(toSeries(bars, kd.K));
       chart.addSeries(LC.LineSeries, line(KDJ_C[1], 1.5), p).setData(toSeries(bars, kd.D));
       const js = chart.addSeries(LC.LineSeries, line(KDJ_C[2]), p);
       js.setData(toSeries(bars, kd.J));
-      js.createPriceLine({price: 80, color: alpha(UP, .35), lineStyle: LC.LineStyle.Dashed, axisLabelVisible: false});
-      js.createPriceLine({price: 20, color: alpha(DN, .35), lineStyle: LC.LineStyle.Dashed, axisLabelVisible: false});
-      addLegend(p, i => `<span class="n">KDJ(9,3,3)</span><span style="color:${KDJ_C[0]}">K ${fmt(kd.K[i])}</span><span style="color:${KDJ_C[1]}">D ${fmt(kd.D[i])}</span><span style="color:${KDJ_C[2]}">J ${fmt(kd.J[i])}</span>`);
+      js.createPriceLine({price: P.kdj.hi, color: alpha(UP, .35), lineStyle: LC.LineStyle.Dashed, axisLabelVisible: false});
+      js.createPriceLine({price: P.kdj.lo, color: alpha(DN, .35), lineStyle: LC.LineStyle.Dashed, axisLabelVisible: false});
+      addLegend(p, i => `<span class="n">KDJ(${P.kdj.n},${P.kdj.m1},${P.kdj.m2})</span><span style="color:${KDJ_C[0]}">K ${fmt(kd.K[i])}</span><span style="color:${KDJ_C[1]}">D ${fmt(kd.D[i])}</span><span style="color:${KDJ_C[2]}">J ${fmt(kd.J[i])}</span>`);
+    } else if (key === 'dmi') {
+      const d = dmi(H, L, C, P.dmi.n, P.dmi.adx);
+      chart.addSeries(LC.LineSeries, line(UP, 1.5), p).setData(toSeries(bars, d.pdi));
+      chart.addSeries(LC.LineSeries, line(DN, 1.5), p).setData(toSeries(bars, d.ndi));
+      chart.addSeries(LC.LineSeries, line(KDJ_C[0], 1.5), p).setData(toSeries(bars, d.adx));
+      addLegend(p, i => `<span class="n">DMI(${P.dmi.n},${P.dmi.adx})</span><span class="up">+DI ${fmt(d.pdi[i])}</span><span class="dn">-DI ${fmt(d.ndi[i])}</span><span style="color:${KDJ_C[0]}">ADX ${fmt(d.adx[i])}</span>`);
+    } else if (key === 'atr') {
+      const a = atr(H, L, C, P.atr.n);
+      chart.addSeries(LC.LineSeries, line(KDJ_C[1], 1.5), p).setData(toSeries(bars, a));
+      addLegend(p, i => `<span class="n">ATR(${P.atr.n})</span><span style="color:${KDJ_C[1]}">${fmt(a[i])}</span><span>${a[i] ? fmt(a[i] / C[i] * 100) + '%' : ''}</span>`);
+    } else if (key === 'cci') {
+      const v = cci(H, L, C, P.cci.n);
+      const cs = chart.addSeries(LC.LineSeries, line(KDJ_C[2], 1.5), p); cs.setData(toSeries(bars, v));
+      cs.createPriceLine({price: 100, color: alpha(UP, .35), lineStyle: LC.LineStyle.Dashed, axisLabelVisible: false});
+      cs.createPriceLine({price: -100, color: alpha(DN, .35), lineStyle: LC.LineStyle.Dashed, axisLabelVisible: false});
+      addLegend(p, i => `<span class="n">CCI(${P.cci.n})</span><span style="color:${KDJ_C[2]}">${fmt(v[i])}</span>`);
+    } else if (key === 'wr') {
+      const v = willr(H, L, C, P.wr.n);
+      const ws = chart.addSeries(LC.LineSeries, line(KDJ_C[0], 1.5), p); ws.setData(toSeries(bars, v));
+      ws.createPriceLine({price: -20, color: alpha(UP, .35), lineStyle: LC.LineStyle.Dashed, axisLabelVisible: false});
+      ws.createPriceLine({price: -80, color: alpha(DN, .35), lineStyle: LC.LineStyle.Dashed, axisLabelVisible: false});
+      addLegend(p, i => `<span class="n">%R(${P.wr.n})</span><span style="color:${KDJ_C[0]}">${fmt(v[i])}</span>`);
+    } else if (key === 'bias') {
+      const ns = [P.bias.a, P.bias.b, P.bias.c].filter(Boolean), vs = ns.map(n => biasOf(C, n));
+      vs.forEach((v, k) => chart.addSeries(LC.LineSeries, line(KDJ_C[k], 1.5), p).setData(toSeries(bars, v)));
+      addLegend(p, i => `<span class="n">乖離率</span>` + ns.map((n, k) => `<span style="color:${KDJ_C[k]}">BIAS${n} ${fmt(vs[k][i])}%</span>`).join(''));
+    } else if (key === 'obv') {
+      const v = obv(C, V), m = P.obv.ma ? sma(v, P.obv.ma) : null;
+      chart.addSeries(LC.LineSeries, line(KDJ_C[1], 1.5, {priceFormat: {type: 'volume'}}), p).setData(toSeries(bars, v));
+      if (m) chart.addSeries(LC.LineSeries, line(Theme.css('--text-mid'), 1, {lineStyle: LC.LineStyle.Dashed, priceFormat: {type: 'volume'}}), p).setData(toSeries(bars, m));
+      addLegend(p, i => `<span class="n">OBV</span><span style="color:${KDJ_C[1]}">${fmt(v[i], 0)}</span>` + (m ? `<span>MA${P.obv.ma} ${fmt(m[i], 0)}</span>` : ''));
     } else {
       // 持股比例（%）= 持股張數 ÷ 發行張數；投信／自營商的持股為累計買賣超估計，比例的「變化」才精確
       const asPct = cfg.holdUnit === 'pct' && DATA.issued && !IS_INDEX();
@@ -560,8 +690,11 @@ function renderTools() {
   document.querySelectorAll('[data-wheel]').forEach(b => b.classList.toggle('on', b.dataset.wheel === cfg.wheel));
   document.querySelectorAll('[data-unit]').forEach(b => b.classList.toggle('on', b.dataset.unit === cfg.holdUnit));
   $('#unitGrp').style.display = IS_INDEX() ? 'none' : '';
-  $('#maToggles').innerHTML = '<b>均線</b>' + MAS.map(([n, c]) => `<span class="tg${cfg.ma.includes(n) ? ' on' : ''}" data-ma="${n}"><i style="background:${c}"></i>MA${n}</span>`).join('');
+  const mn = cfg.p.maType === 'EMA' ? 'EMA' : 'MA';
+  $('#maToggles').innerHTML = '<b>均線</b>' + MAS.map(([n, c], k) => n ? `<span class="tg${cfg.maOn.includes(k) ? ' on' : ''}" data-ma="${k}"><i style="background:${c}"></i>${mn}${n}</span>` : '').join('');
   $('#mainToggles').innerHTML = `<span class="tg${cfg.boll ? ' on' : ''}" data-flag="boll"><i style="background:var(--text-dim)"></i>布林</span>` +
+    `<span class="tg${cfg.sar ? ' on' : ''}" data-flag="sar"><i style="background:var(--accent)"></i>SAR</span>` +
+    `<span class="tg${cfg.dc ? ' on' : ''}" data-flag="dc"><i style="background:#38bdf8"></i>唐奇安</span>` +
     `<span class="tg${cfg.signals ? ' on' : ''}" data-flag="signals" title="在日 K 上標示：法人持股線穿越持股均線">選股訊號</span>`;
   $('#paneToggles').innerHTML = '<b>副圖</b>' + PANES.map(([k, l]) => `<span class="tg${cfg.panes.includes(k) ? ' on' : ''}" data-pane="${k}">${HOLD_COLOR[k] ? `<i style="background:${HOLD_COLOR[k]}"></i>` : ''}${IS_INDEX() ? l.replace('持股', '買賣超') : l}</span>`).join('');
   $('#holdN').value = cfg.holdN;
@@ -572,7 +705,7 @@ document.querySelector('.tools').addEventListener('click', e => {
   if (t.dataset.period) { cfg.period = t.dataset.period; saveCfg(); renderTools(); return load(); }
   if (t.dataset.wheel) { cfg.wheel = t.dataset.wheel; }
   if (t.dataset.unit) { cfg.holdUnit = t.dataset.unit; }
-  if (t.dataset.ma) { const n = +t.dataset.ma; cfg.ma = cfg.ma.includes(n) ? cfg.ma.filter(x => x !== n) : cfg.ma.concat(n); }
+  if (t.dataset.ma) { const k = +t.dataset.ma; cfg.maOn = cfg.maOn.includes(k) ? cfg.maOn.filter(x => x !== k) : cfg.maOn.concat(k); }
   if (t.dataset.flag) cfg[t.dataset.flag] = !cfg[t.dataset.flag];
   if (t.dataset.pane) { const k = t.dataset.pane; cfg.panes = cfg.panes.includes(k) ? cfg.panes.filter(x => x !== k) : PANES.map(p => p[0]).filter(x => x === k || cfg.panes.includes(x)); }
   saveCfg(); renderTools();
@@ -582,6 +715,40 @@ $('#holdN').onchange = e => {
   cfg.holdN = Math.max(2, Math.min(60, +e.target.value || 5)); saveCfg(); renderTools();
   if (DATA) { cfg._keepRange = true; build(); }
 };
+
+// ── 指標參數面板 ──
+function openParams() {
+  const P = cfg.p;
+  const field = (grp, key, label, kind) => {
+    const v = grp === 'ma' || grp === 'maType' ? P[grp] : P[grp][key];
+    if (kind === 'list') return `<label class="pf">${label}<span class="pl">${P.ma.map((n, k) => `<input type="number" min="0" max="500" data-ma-i="${k}" value="${n}">`).join('')}</span></label>`;
+    if (Array.isArray(kind)) return `<label class="pf">${label}<select data-g="${grp}">${kind.map(o => `<option ${o === v ? 'selected' : ''}>${o}</option>`).join('')}</select></label>`;
+    return `<label class="pf">${label}<input type="number" step="${kind === 'f' ? 'any' : 1}" min="0" data-g="${grp}" data-k="${key}" value="${v}"></label>`;
+  };
+  const html = Object.entries(P_LABEL).map(([g, [title, fields, extra]]) =>
+    `<div class="pg"><h4>${title}</h4>${fields.map(([k, l, kind]) => field(g, k, l, kind)).join('')}${extra ? field(extra[0], null, extra[1], extra[2]) : ''}</div>`).join('');
+  const m = document.createElement('div');
+  m.className = 'pmask';
+  m.innerHTML = `<div class="ppanel"><div class="phead"><b>指標參數</b><span style="color:var(--text-dim);font-size:.76rem">改完按「套用」，設定會記在這台裝置</span></div>
+    <div class="pbody">${html}</div>
+    <div class="pfoot"><button class="pb ghost" data-act="reset">恢復預設</button><span style="flex:1"></span><button class="pb ghost" data-act="close">取消</button><button class="pb" data-act="apply">套用</button></div></div>`;
+  document.body.appendChild(m);
+  m.addEventListener('click', e => {
+    const a = e.target.dataset.act;
+    if (e.target === m || a === 'close') return m.remove();
+    if (a === 'reset') { cfg.p = JSON.parse(JSON.stringify(DEF_P)); }
+    if (a === 'apply') {
+      m.querySelectorAll('[data-ma-i]').forEach(x => { cfg.p.ma[+x.dataset.maI] = Math.max(0, Math.min(500, Math.round(+x.value || 0))); });
+      m.querySelectorAll('input[data-g]').forEach(x => { const v = +x.value; if (!isNaN(v)) cfg.p[x.dataset.g][x.dataset.k] = x.step === 'any' ? v : Math.round(v); });
+      m.querySelectorAll('select[data-g]').forEach(x => { cfg.p[x.dataset.g] = x.value; });
+    }
+    if (a === 'reset' || a === 'apply') {
+      m.remove(); saveCfg(); themeColors(); renderTools();
+      if (DATA) { cfg._keepRange = true; build(); }
+    }
+  });
+}
+$('#paramBtn').onclick = openParams;
 
 window.addEventListener('themechange', () => { themeColors(); renderTools(); if (DATA) { cfg._keepRange = true; build(); } });
 

@@ -1592,6 +1592,12 @@ def gen_tw_catalysts(price, ma5, ma20, ma60, macd, dea, rsi,
 
 
 # ── Taiwan Routes ─────────────────────────────────────────────────────
+@app.route('/tv')
+@login_required
+def tv_page():
+    return render_template('tv.html')
+
+
 @app.route('/portfolio')
 @login_required
 def portfolio():

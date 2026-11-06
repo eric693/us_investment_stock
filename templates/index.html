@@ -23,7 +23,8 @@
 .tv-ind-badge.active { color:var(--accent); background:rgba(61,142,248,.1); border-color:rgba(61,142,248,.3); }
 .tv-ind-badge:hover { color:var(--text); border-color:var(--text-dim); }
 .tv-ind-label { font-size:0.7rem; color:var(--text-dim); margin-right:4px; }
-#tvChartContainer { width:100%; height:560px; }
+#tvChartContainer { width:100%; height:640px; }
+@media (max-width:600px) { #tvChartContainer { height:520px; } }
 #tvChartContainer iframe { border:none !important; }
 /* Welcome card live data */
 .wc-price-row { display:flex; align-items:baseline; gap:6px; margin:2px 0 4px; }
@@ -326,7 +327,8 @@
       <span class="tv-ind-badge" data-study="BB@tv-basicstudies" onclick="toggleTVStudy(this,'BB@tv-basicstudies')">布林</span>
       <span class="tv-ind-badge" data-study="Volume@tv-basicstudies" onclick="toggleTVStudy(this,'Volume@tv-basicstudies')">成交量</span>
       <span class="tv-ind-badge" data-study="Stochastic@tv-basicstudies" onclick="toggleTVStudy(this,'Stochastic@tv-basicstudies')">KD</span>
-      <span style="margin-left:auto;font-size:0.7rem;color:var(--text-dim)">Powered by TradingView · 右鍵可畫線、加指標</span>
+      <span style="margin-left:auto;font-size:0.7rem;color:var(--text-dim)">圖上方「技術指標」可加上百種指標並調參數</span>
+      <a class="tv-ind-badge" style="text-decoration:none;color:var(--accent)" onclick="location.href='/tv?symbol='+encodeURIComponent(_tvSymbol)">全螢幕 ↗</a>
     </div>
     <div id="tvChartContainer"></div>
   </div>
@@ -746,7 +748,8 @@ function changePeriod(period) {
 
 // ── TradingView Chart ───────────────────────────────────────────────────
 let _tvInterval = 'D';
-let _tvStudies  = ['MASimple@tv-basicstudies'];
+// 選過的指標與週期記在這台裝置，下次打開沿用
+let _tvStudies  = (() => { try { return JSON.parse(localStorage.getItem('tvStudies')) || ['MASimple@tv-basicstudies']; } catch (e) { return ['MASimple@tv-basicstudies']; } })();
 let _tvSymbol   = '';
 
 function renderTradingView(d) {
@@ -754,6 +757,7 @@ function renderTradingView(d) {
   card.classList.remove('hidden');
   _tvSymbol = d.ticker.toUpperCase();
   $('tvSymLabel').textContent = _tvSymbol;
+  document.querySelectorAll('.tv-ind-badge[data-study]').forEach(b => b.classList.toggle('active', _tvStudies.includes(b.dataset.study)));
   _buildTVWidget();
 }
 
@@ -774,8 +778,9 @@ function _buildTVWidget() {
     enable_publishing: false,
     withdateranges:  true,
     hide_side_toolbar: false,
-    allow_symbol_change: false,
-    save_image:      false,
+    allow_symbol_change: true,
+    save_image:      true,
+    hide_top_toolbar: false,
     container_id:    'tvChartContainer',
     studies:         [..._tvStudies],
     overrides: Theme.resolveDeep({
@@ -805,6 +810,7 @@ function toggleTVStudy(el, study) {
   const idx = _tvStudies.indexOf(study);
   if (idx >= 0) { _tvStudies.splice(idx, 1); el.classList.remove('active'); }
   else          { _tvStudies.push(study);     el.classList.add('active');    }
+  try { localStorage.setItem('tvStudies', JSON.stringify(_tvStudies)); } catch (e) {}
   _buildTVWidget();
 }
 

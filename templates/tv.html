@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>TradingView 圖表</title>
+<link rel="stylesheet" href="/static/css/style.css?v=12">
+{% include "_head.html" %}
+<script src="https://s3.tradingview.com/tv.js"></script>
+<style>
+html, body { height: 100%; }
+body { display: flex; flex-direction: column; overflow: hidden; }
+.tvw { flex: 1; display: flex; flex-direction: column; min-height: 0; padding: 10px 12px 12px; gap: 8px; }
+.bar { display: flex; gap: 8px 12px; align-items: center; flex-wrap: wrap; }
+.bar form { display: flex; gap: 6px; }
+.bar input { height: 34px; width: 150px; border-radius: 9px; border: 1px solid var(--card-bd2); background: var(--surface-1); color: var(--text); padding: 0 10px; font: inherit; text-transform: uppercase; }
+.bar button, .chip { height: 34px; padding: 0 12px; border-radius: 9px; border: 1px solid var(--card-bd2); background: var(--surface-1); color: var(--text-mid); font: inherit; font-size: .8rem; font-weight: 600; cursor: pointer; white-space: nowrap; }
+.bar .go { background: var(--accent-grad); color: #fff; border: 0; }
+.chips { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; font-size: .76rem; color: var(--text-dim); }
+.chip { height: 28px; padding: 0 10px; font-size: .74rem; }
+.chip.on { border-color: var(--accent); color: var(--text); background: rgba(109,93,252,.14); }
+.sym { font: 700 .9rem 'JetBrains Mono', monospace; color: var(--accent); }
+.box { flex: 1; min-height: 420px; border-radius: 14px; overflow: hidden; border: 1px solid var(--card-bd); background: var(--card-bg); }
+#tv { height: 100%; }
+.note { font-size: .74rem; color: var(--text-dim); line-height: 1.6; }
+.msg { margin: auto; max-width: 520px; text-align: center; padding: 40px 20px; color: var(--text-mid); line-height: 1.8; }
+.msg a { color: var(--accent); font-weight: 700; }
+details.more summary { cursor: pointer; font-size: .76rem; color: var(--text-dim); }
+@media (max-width: 600px) { .tvw { padding: 8px; } .bar input { width: 110px; } .box { min-height: 360px; } }
+</style>
+</head>
+<body data-help-page="tv">
+{% include "_appbar.html" %}
+<main class="tvw">
+  <div class="bar">
+    <form id="f"><input id="q" placeholder="AAPL、6488、GOLD" autocomplete="off"><button class="go">開圖</button></form>
+    <span class="sym" id="symLabel"></span>
+    <div class="chips" id="quick">常用：</div>
+  </div>
+  <details class="more"><summary>快速加指標（記住你的選擇；更多指標與參數請點圖上方的「技術指標」）</summary>
+    <div class="chips" id="studies" style="margin-top:8px"></div>
+  </details>
+  <div class="box" id="box"><div id="tv"></div></div>
+  <div class="note">圖上方「技術指標」可加上百種指標，點指標名稱旁的設定鈕可調所有參數；左側工具列可畫趨勢線、費波那契、水平線等。圖上加的指標與畫線在重新整理後不會保留，常用的請在上方「快速加指標」勾選。
+    TradingView 嵌入圖不提供台股上市股與各大指數，上市股請用 <a href="/tw/board/chart?code=2330" style="color:var(--accent)">台股技術分析圖</a>（指標參數皆可調）。</div>
+</main>
+<script>
+(function () {
+  const $ = s => document.querySelector(s);
+  const store = {get(k, d) { try { return JSON.parse(localStorage.getItem(k)) ?? d; } catch (e) { return d; } }, set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) {} }};
+  const STUDIES = [
+    ['MASimple@tv-basicstudies', '均線 MA'], ['MAExp@tv-basicstudies', 'EMA'], ['BB@tv-basicstudies', '布林'], 
+    ['RSI@tv-basicstudies', 'RSI'], ['MACD@tv-basicstudies', 'MACD'], ['Stochastic@tv-basicstudies', 'KD'], ['StochasticRSI@tv-basicstudies', 'Stoch RSI'],
+    ['PSAR@tv-basicstudies', 'SAR'], ['IchimokuCloud@tv-basicstudies', '一目均衡'], ['DM@tv-basicstudies', 'DMI'], ['ATR@tv-basicstudies', 'ATR'],
+    ['CCI@tv-basicstudies', 'CCI'], ['WilliamR@tv-basicstudies', '威廉'], ['OBV@tv-basicstudies', 'OBV'], ['VWAP@tv-basicstudies', 'VWAP'],
+    ['MF@tv-basicstudies', 'MFI'], ['PivotPointsStandard@tv-basicstudies', '樞紐點'], ['KLTNR@tv-basicstudies', '肯特納'], ['DonchianChannels@tv-basicstudies', '唐奇安'],
+  ];
+  const QUICK = [['NVDA', 'NVDA'], ['AAPL', 'AAPL'], ['TSLA', 'TSLA'], ['SPY', 'SPY（標普 500）'], ['QQQ', 'QQQ（那斯達克）'], ['TVC:GOLD', '黃金'], ['TVC:USOIL', '原油'], ['6488', '環球晶（上櫃）']];
+  const st = Object.assign({studies: ['MASimple@tv-basicstudies', 'RSI@tv-basicstudies', 'MACD@tv-basicstudies'], interval: 'D'}, store.get('tvPage', {}));   // 成交量 TradingView 會自動畫在主圖
+  let cur = new URLSearchParams(location.search).get('symbol') || store.get('tvLast', 'NVDA');
+
+  $('#quick').innerHTML = '常用：' + QUICK.map(([s, n]) => `<button class="chip" data-s="${s}">${n}</button>`).join('');
+  $('#quick').onclick = e => { const b = e.target.closest('[data-s]'); if (b) open(b.dataset.s); };
+  function renderStudies() {
+    $('#studies').innerHTML = STUDIES.map(([id, n]) => `<button class="chip ${st.studies.includes(id) ? 'on' : ''}" data-id="${id}">${n}</button>`).join('');
+  }
+  $('#studies').onclick = e => {
+    const b = e.target.closest('[data-id]'); if (!b) return;
+    st.studies = st.studies.includes(b.dataset.id) ? st.studies.filter(x => x !== b.dataset.id) : st.studies.concat(b.dataset.id);
+    store.set('tvPage', st); renderStudies(); draw();
+  };
+  $('#f').onsubmit = e => { e.preventDefault(); open($('#q').value); };
+
+  // 代號 → TradingView 商品；台股上市股與指數嵌入圖不提供
+  async function resolve(raw) {
+    const s = raw.trim().toUpperCase();
+    const alias = {GOLD: 'TVC:GOLD', '黃金': 'TVC:GOLD', OIL: 'TVC:USOIL', '原油': 'TVC:USOIL', XAUUSD: 'OANDA:XAUUSD', SPX: 'SPY', '^GSPC': 'SPY', NDX: 'QQQ', '^IXIC': 'QQQ'};
+    if (alias[s]) return {sym: alias[s]};
+    const tw = s.replace(/\.(TW|TWO)$/, '');
+    if (/^\d{4,6}[A-Z]?$/.test(tw)) {
+      try {
+        const q = await (await fetch('/api/tw/board/quote/' + tw)).json();
+        if (q.market === 'OTC') return {sym: 'TPEX:' + tw, name: q.name};
+        return {tw: tw, name: q.name || tw};
+      } catch (e) { return {tw: tw, name: tw}; }
+    }
+    if (['TAIEX', 'TWII', '^TWII', 'VIX', '^VIX', 'DXY'].includes(s)) return {index: s};
+    return {sym: s};
+  }
+
+  let SYM = null;
+  async function open(raw) {
+    if (!raw) return;
+    const r = await resolve(raw);
+    cur = raw.trim().toUpperCase(); $('#q').value = cur;
+    history.replaceState(null, '', '/tv?symbol=' + encodeURIComponent(cur));
+    if (r.tw) {
+      SYM = null; $('#symLabel').textContent = r.tw + ' ' + r.name;
+      $('#box').innerHTML = `<div class="msg">${r.name}（${r.tw}）是上市股票，TradingView 嵌入圖沒有提供上市股資料（交易所授權限制）。<br>
+        請改用 <a href="/tw/board/chart?code=${r.tw}">台股技術分析圖</a>：有均線／EMA、布林、SAR、唐奇安、KDJ、RSI、MACD、DMI、ATR、CCI、威廉、乖離、OBV 與法人持股，每個參數都能調。</div>`;
+      return;
+    }
+    if (r.index) {
+      SYM = null; $('#symLabel').textContent = r.index;
+      $('#box').innerHTML = `<div class="msg">TradingView 嵌入圖不提供指數報價。美股大盤可用 <a href="/tv?symbol=SPY">SPY</a>（標普 500）、<a href="/tv?symbol=QQQ">QQQ</a>（那斯達克 100）；
+        台股加權請看 <a href="/tw/board/chart?code=TAIEX">加權指數技術圖</a>；VIX 請看 <a href="/fear">恐慌指標</a>。</div>`;
+      return;
+    }
+    store.set('tvLast', cur);
+    SYM = r.sym; $('#symLabel').textContent = r.sym + (r.name ? ' ' + r.name : '');
+    if (!document.getElementById('tv')) $('#box').innerHTML = '<div id="tv"></div>';
+    draw();
+  }
+
+  function draw() {
+    if (!SYM || typeof TradingView === 'undefined') return;
+    $('#tv').innerHTML = '';
+    new TradingView.widget({
+      autosize: true, symbol: SYM, interval: st.interval, timezone: 'Asia/Taipei', locale: 'zh_TW',
+      theme: window.Theme ? Theme.mode() : 'dark', style: '1', container_id: 'tv',
+      hide_top_toolbar: false, hide_legend: false, hide_side_toolbar: false, allow_symbol_change: true,
+      withdateranges: true, save_image: true, details: false, calendar: false, show_popup_button: true,
+      popup_width: '1200', popup_height: '760', studies: st.studies,
+      toolbar_bg: Theme.resolve('var(--surface-1)'),
+      overrides: {'mainSeriesProperties.candleStyle.upColor': '#e84646', 'mainSeriesProperties.candleStyle.downColor': '#00d68f',
+                  'mainSeriesProperties.candleStyle.borderUpColor': '#e84646', 'mainSeriesProperties.candleStyle.borderDownColor': '#00d68f',
+                  'mainSeriesProperties.candleStyle.wickUpColor': '#e84646', 'mainSeriesProperties.candleStyle.wickDownColor': '#00d68f'},
+    });
+  }
+  window.addEventListener('themechange', draw);
+  renderStudies(); open(cur);
+})();
+</script>
+</body>
+</html>

@@ -79,6 +79,7 @@
     <div class="seg" id="sym"><button data-v="gold">黃金</button><button data-v="oil">原油</button></div>
     <div class="seg" id="tf"><button data-v="1h">1 小時</button><button data-v="4h">4 小時</button><button data-v="1d">日線</button></div>
     <div class="px"><b id="last">--</b><span class="chg" id="chg"></span><small id="unit"></small></div>
+    <a class="seg" id="tvLink" style="text-decoration:none;padding:7px 12px;font-size:.82rem;color:var(--text-mid)" href="/tv?symbol=TVC:GOLD" title="用 TradingView 看，可加任意指標">TradingView ↗</a>
     <span class="state" id="state">讀取中…</span>
   </section>
 
@@ -166,6 +167,7 @@
   async function load() {
     segs();
     store.set('commodity', st);
+    document.getElementById('tvLink').href = '/tv?symbol=' + (st.sym === 'gold' ? 'TVC:GOLD' : 'TVC:USOIL');
     history.replaceState(null, '', `/commodity?sym=${st.sym}&tf=${st.tf}`);
     const key = st.sym + st.tf;
     if (!CACHE[key]) {
