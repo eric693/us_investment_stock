@@ -65,3 +65,23 @@ def test_alerts_once_per_wave(client, fr, monkeypatch):
     d['^VIX'] = vix.iloc[:108]                          # 從 50 回落到 38
     fear.run_alerts(); fear.run_alerts()
     assert len(sent) == 2 and '回落' in sent[1]
+
+
+def test_tw_vix_alert_and_parse(fr, client, monkeypatch, tmp_path):
+    fear, d = fr
+    import notify
+    monkeypatch.setattr(fear, 'CACHE_DIR', str(tmp_path / 'fc'))
+    fear._mem.clear()
+    txt = ('交易日期\t時間\t臺指選擇權波動率指數\t收盤前1分鐘平均指數\n--------\n'
+           + ''.join(f'202611{day:02d}\t13450000\t\t\t{v}\t\t{v}\n' for day, v in [(2, 25.0), (3, 26.0), (4, 41.5)])).encode('big5')
+    monkeypatch.setattr(fear.requests, 'get', lambda url, **k: type('R', (), {'content': txt if '202611' in url else b''})())
+    monkeypatch.setattr(fear.pd.Timestamp, 'now', classmethod(lambda cls, tz=None: pd.Timestamp('2026-11-06 15:00', tz=tz)))
+    tv = fear.tw_vix()
+    assert list(tv.values) == [25.0, 26.0, 41.5] and str(tv.index[-1].date()) == '2026-11-04'
+    sent = []
+    monkeypatch.setattr(notify, 'ready', lambda u: True)
+    monkeypatch.setattr(notify, 'send', lambda u, t, url='': sent.append(t) or (True, ''))
+    login(client, 'amy', 'user12345')
+    assert client.post('/api/fear/alerts', json={'tw': [40]}).get_json()['tw'] == [40]
+    fear.run_alerts(); fear.run_alerts()
+    assert len(sent) == 1 and '臺指 VIX 站上 40' in sent[0]

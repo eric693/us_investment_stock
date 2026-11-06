@@ -236,6 +236,14 @@
       <button class="btn btn-primary btn-sm" onclick="runRisk()">↻ 重新分析</button>
       <span id="riskMeta" style="font-size:0.76rem;color:var(--text-dim);margin-left:6px;"></span>
     </div>
+    <div class="card" id="holdAlert" style="display:flex;flex-wrap:wrap;gap:10px 18px;align-items:center;font-size:.86rem">
+      <b>持股提醒</b>
+      <label><input type="checkbox" id="haBuy"> 跌到財報分析買進價以下</label>
+      <label><input type="checkbox" id="haDown"> 財報建議被降評</label>
+      <label><input type="checkbox" id="haDropOn"> 單日跌超過 <input type="number" id="haDrop" min="1" max="50" step="1" value="7" style="width:56px" class="inp inp-sm"> %</label>
+      <button class="btn btn-primary btn-sm" onclick="saveHoldAlert()">儲存</button>
+      <span id="haMsg" style="font-size:.78rem;color:var(--text-dim)"></span>
+    </div>
     <div id="riskRoot"><div class="card" style="color:var(--text-dim);text-align:center;padding:40px">讀取中…</div></div>
   </div>
 
@@ -818,7 +826,21 @@ function riskHoldings() {
   const list = Object.entries(pos).filter(([, p]) => p.shares > 0).map(([t, p]) => ({ticker: t, shares: p.shares, costPrice: p.avgPrice}));
   return {src: '台股分析的持股成本', list};
 }
+async function holdAlert(body) {
+  try {
+    const r = await fetch('/api/portfolio/alerts', body ? {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(body)} : {});
+    const a = await r.json();
+    document.getElementById('haBuy').checked = a.below_buy; document.getElementById('haDown').checked = a.downgrade;
+    document.getElementById('haDropOn').checked = a.drop > 0; if (a.drop) document.getElementById('haDrop').value = a.drop;
+    document.getElementById('haMsg').innerHTML = (body ? '已儲存・' : '') + (a.ready ? `每 30 分鐘檢查帳號裡 ${a.holdings} 檔持股，送到 LINE／手機通知` : '<a href="/account#notify" style="color:var(--red)">尚未設定通知管道 →</a>');
+  } catch (e) {}
+}
+function saveHoldAlert() {
+  holdAlert({below_buy: document.getElementById('haBuy').checked, downgrade: document.getElementById('haDown').checked,
+             drop: document.getElementById('haDropOn').checked ? +document.getElementById('haDrop').value || 7 : 0});
+}
 async function runRisk() {
+  holdAlert();
   const root = document.getElementById('riskRoot');
   const {src, list} = riskHoldings();
   if (!list.length) {

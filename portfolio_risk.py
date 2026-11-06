@@ -8,7 +8,10 @@
 - 建議部位：風險平價（每檔分到相同的波動），以及「每檔最多虧帳戶 1%」的停損張數上限。
 - 每檔附上最新一次財報分析的建議，和前一次比對看是否被降評。
 """
+import os
+import json
 import time
+import fcntl
 import threading
 
 import numpy as np
@@ -19,7 +22,9 @@ from flask import Blueprint, jsonify, request
 import fa_scan
 import financials
 import picks
+import notify
 import tw_board
+import userdata
 
 bp = Blueprint('portfolio_risk', __name__)
 
@@ -281,5 +286,121 @@ def api_risk():
     return (jsonify(error=err), 400) if err else jsonify(res)
 
 
+# ── 持股提醒 ──────────────────────────────────────────────────────────
+# 每 30 分鐘檢查帳號裡的持股（投資組合的持倉 + 台股分析頁記的持股成本）：
+# 跌到財報分析的買進價以下、財報建議被降評、單日跌幅超過設定。同一個狀況只通知一次，合併成一則。
+HOLD_ALERT_KEY, HOLD_ALERT_STATE = 'holding_alerts', 'holding_alerts_state'
+ALERT_LOCK = os.path.join(os.path.dirname(os.path.abspath(__file__)), '.holding_alert.lock')
+SITE_URL = os.environ.get('NOTIFY_SITE_URL', notify.VAPID_SUB)
+
+
+def hold_cfg(user):
+    c = userdata.get(user, HOLD_ALERT_KEY) or {}
+    drop = c.get('drop')
+    return {'below_buy': bool(c.get('below_buy')), 'downgrade': bool(c.get('downgrade')),
+            'drop': drop if isinstance(drop, (int, float)) and 0 < drop <= 50 else 0}
+
+
+def user_holdings(user):
+    """[(代碼, 市場)]：投資組合持倉與台股分析頁的持股成本，去重。"""
+    out = {}
+    raw = userdata.get_many(user, ('pflio_v2', 'positions_tw'))
+    try:
+        for h in json.loads(raw.get('pflio_v2') or '{}').get('holdings', []):
+            if float(h.get('shares') or 0) > 0:
+                t, m, _, _ = financials._resolve(str(h.get('ticker', '')))
+                if t:
+                    out[t.split('.')[0] if m == 'tw' else t] = m
+    except (ValueError, AttributeError):
+        pass
+    try:
+        for t, pos in json.loads(raw.get('positions_tw') or '{}').items():
+            if float((pos or {}).get('shares') or 0) > 0:
+                out[t.replace('.TWO', '').replace('.TW', '')] = 'tw'
+    except (ValueError, AttributeError):
+        pass
+    return list(out.items())
+
+
+def _last_two(code, market):
+    tbl, conf = ('daily', tw_board._db) if market == 'tw' else ('us_daily', picks._us_db)
+    with conf() as con:
+        rows = con.execute(f'SELECT date, close FROM {tbl} WHERE code=? ORDER BY date DESC LIMIT 2', (code,)).fetchall()
+    return rows if len(rows) == 2 else None
+
+
+def run_holding_alerts():
+    for user, _ in userdata.users_with(HOLD_ALERT_KEY):
+        cfg = hold_cfg(user)
+        if not (cfg['below_buy'] or cfg['downgrade'] or cfg['drop']):
+            continue
+        hold = user_holdings(user)
+        if not hold:
+            continue
+        st = userdata.get(user, HOLD_ALERT_STATE) or {}
+        ratings = _ratings([c for c, _ in hold])
+        msgs = []
+        for code, market in hold:
+            rt = ratings.get(code)
+            two = _last_two(code, market)
+            price = two[0][1] if two else None
+            if cfg['below_buy'] and rt and rt.get('buy_below') and price:
+                k = f'below:{code}'
+                if price <= rt['buy_below']:
+                    if not st.get(k):
+                        st[k] = two[0][0]
+                        fair = f"合理價 {rt['fair']:,.2f}，" if rt.get('fair') else ''
+                        msgs.append(f"{code} 收 {price:,.2f}，跌到財報分析的買進價 {rt['buy_below']:,.2f} 以下（{fair}建議「{_lbl(rt['rec'])}」）")
+                else:
+                    st.pop(k, None)                      # 回到買進價之上，下次跌破再通知
+            if cfg['downgrade'] and rt and rt.get('prev') and _rank(rt['rec']) < _rank(rt['prev']):
+                k = f'down:{code}'
+                if st.get(k) != rt['date']:
+                    st[k] = rt['date']
+                    msgs.append(f"{code} 財報建議被降評：{_lbl(rt['prev'])} → {_lbl(rt['rec'])}")
+            if cfg['drop'] and two and two[1][1]:
+                chg = (two[0][1] / two[1][1] - 1) * 100
+                k = f'drop:{code}'
+                if chg <= -cfg['drop'] and st.get(k) != two[0][0]:
+                    st[k] = two[0][0]
+                    msgs.append(f'{code} {two[0][0][5:]} 收盤跌 {chg:.1f}%（{two[0][1]:,.2f}）')
+        if msgs:
+            userdata.put(user, HOLD_ALERT_STATE, st)
+            if notify.ready(user):
+                notify.send(user, f'【StockLens 持股提醒】{len(msgs)} 則\n' + '\n'.join(msgs[:15]) + f'\n風險分析：{SITE_URL}/portfolio?tab=risk',
+                            url='/portfolio?tab=risk')
+        else:
+            userdata.put(user, HOLD_ALERT_STATE, st)
+
+
+def _alert_loop():
+    lock = open(ALERT_LOCK, 'w')
+    try:
+        fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except OSError:
+        lock.close()
+        return
+    time.sleep(240)
+    while True:
+        try:
+            run_holding_alerts()
+        except Exception as e:
+            print(f'[holding alerts] {e}')
+        time.sleep(1800)
+
+
+@bp.route('/api/portfolio/alerts', methods=['GET', 'POST'])
+def api_hold_alerts():
+    user = userdata.current()
+    if request.method == 'POST':
+        b = request.get_json(silent=True) or {}
+        drop = b.get('drop')
+        userdata.put(user, HOLD_ALERT_KEY, {'below_buy': bool(b.get('below_buy')), 'downgrade': bool(b.get('downgrade')),
+                                            'drop': drop if isinstance(drop, (int, float)) and 0 < drop <= 50 else 0})
+    return jsonify(dict(hold_cfg(user), ready=notify.ready(user), holdings=len(user_holdings(user))))
+
+
 def init(app, login_required):
     app.register_blueprint(bp)
+    if not os.environ.get('TW_BOARD_NO_BG'):
+        threading.Thread(target=_alert_loop, daemon=True).start()

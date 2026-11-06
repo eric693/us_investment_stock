@@ -1,4 +1,5 @@
 """投資組合風險：權重、集中度與相關性警示、風險平價、停損上限。"""
+import json
 import sqlite3
 
 import numpy as np
@@ -56,3 +57,22 @@ def test_risk_api(client, pr):
     assert client.post('/api/portfolio/risk', json={'holdings': []}).status_code == 400
     j = client.post('/api/portfolio/risk', json={'holdings': [{'ticker': '3333', 'shares': 100, 'costPrice': 10}]}).get_json()
     assert j['n'] == 1 and j['rows'][0]['weight'] == 100
+
+
+def test_holding_alerts(client, pr, monkeypatch):
+    m, series = pr
+    import notify
+    import userdata
+    import fa_scan
+    sent = []
+    monkeypatch.setattr(notify, 'ready', lambda u: True)
+    monkeypatch.setattr(notify, 'send', lambda u, t, url='': sent.append(t) or (True, ''))
+    last = float(series['1111'][-1])
+    with fa_scan._db() as c:                 # 最新一筆：買進價高於現價、從 buy 降為 hold（fixture 已有兩筆）
+        c.execute('UPDATE snaps SET buy_below=?, fair=? WHERE code=?', (last * 1.1, last * 1.3, '1111'))
+    userdata.put('amy', 'pflio_v2', json.dumps({'holdings': [{'ticker': '1111', 'shares': 10, 'costPrice': 1}]}))
+    login(client, 'amy', 'user12345')
+    r = client.post('/api/portfolio/alerts', json={'below_buy': True, 'downgrade': True, 'drop': 99}).get_json()
+    assert r['below_buy'] and r['downgrade'] and r['drop'] == 0 and r['holdings'] == 1      # 跌幅超過 50% 視為關閉
+    m.run_holding_alerts(); m.run_holding_alerts()
+    assert len(sent) == 1 and '買進價' in sent[0] and '降評' in sent[0]

@@ -76,6 +76,7 @@
       <span>VIX 站上：</span>
       <label><input type="checkbox" data-t="25">25</label><label><input type="checkbox" data-t="30">30</label><label><input type="checkbox" data-t="40">40</label>
       <label><input type="checkbox" id="alRet">從高點回落 20%</label>
+      <span>臺指 VIX 站上：</span><label><input type="checkbox" data-tw="30">30</label><label><input type="checkbox" data-tw="40">40</label>
       <label><input type="checkbox" id="alTerm">期限結構恢復正常</label>
       <button class="btn" id="alSave">儲存提醒</button><span id="alMsg" class="hint"></span>
     </div>
@@ -118,6 +119,7 @@
           <div class="hint" style="margin-top:6px">大於 1 代表倒掛，常出現在急跌當下；近一年倒掛 ${t.inverted_days_1y} 天。VIX9D ÷ VIX = ${num(t.ratio9d, 3)}</div></div>
       </section>
       <div class="sig"><b>目前判讀：</b>${esc(s.text)}${s.above.length ? `（已站上 ${s.above.join('、')}）` : ''}</div>
+      ${twHtml(D.tw)}
       <section class="card2 box"><h3>各恐慌指標 <small>色條 = 目前值在過去 10 年的百分位，越高越恐慌</small></h3>
         <div class="ind">${D.indicators.filter(i => i.value != null).map(i => `<div class="ic"><div class="t"><span>${esc(i.name)}</span><b>${num(i.value)}</b></div>
           <div class="pbar"><i style="width:${i.pct10y}%;background:${pc(i.pct10y)}"></i></div>
@@ -129,6 +131,13 @@
     const lay = x => Object.assign({paper_bgcolor: 'rgba(0,0,0,0)', plot_bgcolor: 'rgba(0,0,0,0)', font: {color: T('--text-mid'), size: 11}, margin: {l: 40, r: 12, t: 10, b: 30},
       xaxis: {gridcolor: T('--grid')}, yaxis: {gridcolor: T('--grid')}, showlegend: false, hovermode: 'x unified'}, x);
     const hl = (y, color, text) => ({type: 'line', xref: 'paper', x0: 0, x1: 1, y0: y, y1: y, line: {color, width: 1, dash: 'dot'}});
+    const tv = D.tw && D.tw.vix;
+    if (tv && document.getElementById('cTw')) {
+      Plotly.newPlot('cTw', [
+        {type: 'scatter', mode: 'lines', name: '臺指 VIX', x: tv.chart.map(p => p[0]), y: tv.chart.map(p => p[1]), line: {color: T('--red'), width: 2}},
+        {type: 'scatter', mode: 'lines', name: '美股 VIX', x: tv.chart.map(p => p[0]), y: tv.chart.map(p => p[2]), line: {color: '#6d5dfc', width: 1.4, dash: 'dot'}},
+      ], lay({showlegend: true, legend: {orientation: 'h', y: 1.15, x: 0}, shapes: [hl(30, '#d97706'), hl(40, '#e11d48')]}), {responsive: true, displayModeBar: false});
+    }
     const v = D.chart.vix;
     Plotly.newPlot('cVix', [{type: 'scatter', mode: 'lines', x: v.map(p => p[0]), y: v.map(p => p[1]), line: {color: T('--red'), width: 1.6}, fill: 'tozeroy', fillcolor: 'rgba(225,29,72,.08)'}],
       lay({shapes: [hl(20, '#a3a3a3'), hl(30, '#d97706'), hl(40, '#e11d48')]}), {responsive: true, displayModeBar: false});
@@ -140,6 +149,24 @@
       Plotly.newPlot('cTwo', [{type: 'scatter', mode: 'lines', x: r.map(p => p[0]), y: r.map(p => p[1]), line: {color: '#6d5dfc', width: 1.6}}],
         lay({shapes: [hl(1, '#e11d48')]}), {responsive: true, displayModeBar: false});
     }
+  }
+
+  function twHtml(tw) {
+    if (!tw || (!tw.vix && !tw.pcr)) return '';
+    const v = tw.vix, p = tw.pcr;
+    const oiTxt = !p ? '' : p.oi >= 120 ? '賣權未平倉明顯多於買權，台股習慣解讀為下檔有支撐、偏多' : p.oi >= 100 ? '賣權略多於買權，偏多'
+      : p.oi >= 80 ? '買權略多，中性偏空' : '買權未平倉遠多於賣權，台股習慣解讀為上檔壓力大、偏空';
+    return `<section class="card2 box"><h3>台股恐慌指標 <small>期交所</small></h3>
+      <div class="grid2">
+        <div>${v ? `<div class="lbl">臺指 VIX・${esc(v.date)}</div><div class="big">${num(v.value)}</div>
+          <span class="pill p-${v.cls}">${esc(v.label)}</span> <span class="hint">今日 ${sg(v.chg, 2)}・比美股 VIX ${v.spread >= 0 ? '高' : '低'} ${num(Math.abs(v.spread), 1)} 點</span>
+          <div id="cTw" class="plot" style="height:220px;margin-top:8px"></div>
+          <p class="hint">臺指選擇權的隱含波動率，算法與美股 VIX 相同。期交所只公開近 3 個月，系統從 ${esc(v.since)} 起每天累積，資料滿一年後會加上百分位與回測。</p>` : '<p class="hint">臺指 VIX 暫時讀不到</p>'}</div>
+        <div>${p ? `<div class="lbl">臺指選擇權 Put/Call 比・${esc(p.date)}</div>
+          <div class="big">${num(p.oi, 1)}%</div><span class="hint">未平倉量（賣權 ${p.put_oi.toLocaleString()}／買權 ${p.call_oi.toLocaleString()} 口）・近 20 日平均 ${num(p.avg20, 1)}%</span>
+          <div class="sig" style="margin:10px 0">${oiTxt}</div>
+          <div class="hint">成交量 Put/Call ${num(p.vol, 1)}%${p.prev ? `（前一日 ${num(p.prev.vol, 1)}%）` : ''}。成交量比偏高代表當天買保護的人多、情緒恐慌；未平倉比反映部位，台股通常以 100% 為多空分界。選擇權多為避險部位，僅供參考。</div>` : '<p class="hint">Put/Call 比暫時讀不到</p>'}</div>
+      </div></section>`;
   }
 
   async function loadBT() {
@@ -173,11 +200,13 @@
     const a = await r.json();
     document.querySelectorAll('[data-t]').forEach(x => x.checked = a.thresholds.includes(+x.dataset.t));
     $('#alRet').checked = a.retreat; $('#alTerm').checked = a.term;
+    document.querySelectorAll('[data-tw]').forEach(x => x.checked = (a.tw || []).includes(+x.dataset.tw));
     $('#alNote').innerHTML = a.ready ? '送到 LINE／手機通知' : '<a href="/account#notify" style="color:var(--red)">尚未設定通知管道 →</a>';
     return a;
   }
   $('#alSave').onclick = async () => {
-    await alerts({thresholds: [...document.querySelectorAll('[data-t]:checked')].map(x => +x.dataset.t), retreat: $('#alRet').checked, term: $('#alTerm').checked});
+    await alerts({thresholds: [...document.querySelectorAll('[data-t]:checked')].map(x => +x.dataset.t), tw: [...document.querySelectorAll('[data-tw]:checked')].map(x => +x.dataset.tw),
+      retreat: $('#alRet').checked, term: $('#alTerm').checked});
     $('#alMsg').textContent = '已儲存'; setTimeout(() => $('#alMsg').textContent = '', 2000);
   };
   window.addEventListener('themechange', () => { if (D) render(); });

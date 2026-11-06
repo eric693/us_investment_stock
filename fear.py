@@ -95,6 +95,89 @@ def _download(sym, period):
     return s
 
 
+# ── 期交所：臺指 VIX 與選擇權 Put/Call 比 ─────────────────────────────
+TAIFEX_UA = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/124 Safari/537.36'}
+
+
+def tw_vix():
+    """臺指選擇權波動率指數每日收盤。期交所只公開近 3 個月（每月一檔），所以每次抓到的月份都存在硬碟，
+    從開始使用那天起累積歷史；當月與上月每 30 分鐘更新。"""
+    with _lock:
+        hit = _mem.get('twvix')
+        if hit and time.time() - hit[0] < 1800:
+            return hit[1]
+    os.makedirs(CACHE_DIR, exist_ok=True)
+    path = os.path.join(CACHE_DIR, 'twvix.pkl')
+    try:
+        with open(path, 'rb') as f:
+            months = pickle.load(f)
+    except Exception:
+        months = {}
+    now = pd.Timestamp.now(tz='Asia/Taipei')
+    cur, last_m = now.strftime('%Y%m'), (now - pd.DateOffset(months=1)).strftime('%Y%m')
+    need = [ym for ym in pd.period_range((now - pd.DateOffset(months=3)).strftime('%Y-%m'), now.strftime('%Y-%m'), freq='M').strftime('%Y%m')
+            if ym not in months or not months[ym] or ym in (cur, last_m)]
+
+    def get(ym):
+        try:
+            r = requests.get(f'https://www.taifex.com.tw/file/taifex/Dailydownload/vix/log2data/{ym}new.txt', headers=TAIFEX_UA, timeout=15)
+            rows = {}
+            for line in r.content.decode('big5', 'ignore').splitlines():
+                parts = line.split()
+                if len(parts) >= 3 and parts[0].isdigit() and len(parts[0]) == 8:
+                    try:
+                        rows[parts[0]] = float(parts[2])
+                    except ValueError:
+                        pass
+            return ym, rows
+        except Exception as e:
+            print(f'[fear] twvix {ym}: {e}')
+            return ym, None
+    from concurrent.futures import ThreadPoolExecutor
+    with ThreadPoolExecutor(6) as ex:
+        for ym, rows in ex.map(get, need):
+            if rows:
+                months[ym] = rows
+    with open(path + '.tmp', 'wb') as f:
+        pickle.dump(months, f)
+    os.replace(path + '.tmp', path)
+    allrows = {d: v for m in months.values() for d, v in m.items()}
+    s = pd.Series(allrows, dtype=float)
+    s.index = pd.to_datetime(s.index, format='%Y%m%d')
+    s = s.sort_index()
+    with _lock:
+        _mem['twvix'] = (time.time(), s)
+    return s
+
+
+def tw_pcr():
+    """臺指選擇權 Put/Call 比（期交所開放資料，近 20 個交易日；每天累積存起來）。"""
+    with _lock:
+        hit = _mem.get('twpcr')
+        if hit and time.time() - hit[0] < 1800:
+            return hit[1]
+    path = os.path.join(CACHE_DIR, 'twpcr.json')
+    try:
+        with open(path, encoding='utf-8') as f:
+            hist = json.load(f)
+    except Exception:
+        hist = {}
+    try:
+        for r in requests.get('https://openapi.taifex.com.tw/v1/PutCallRatio', headers=TAIFEX_UA, timeout=20).json():
+            hist[r['Date']] = {'vol': float(r['PutCallVolumeRatio%']), 'oi': float(r['PutCallOIRatio%']),
+                               'put_oi': int(r['PutOI']), 'call_oi': int(r['CallOI'])}
+        os.makedirs(CACHE_DIR, exist_ok=True)
+        with open(path + '.tmp', 'w', encoding='utf-8') as f:
+            json.dump(hist, f)
+        os.replace(path + '.tmp', path)
+    except Exception as e:
+        print(f'[fear] pcr: {e}')
+    rows = [dict(date=f'{d[:4]}-{d[4:6]}-{d[6:]}', **v) for d, v in sorted(hist.items())]
+    with _lock:
+        _mem['twpcr'] = (time.time(), rows)
+    return rows
+
+
 def vix_label(v):
     if v is None:
         return '—', 'neutral-m'
@@ -158,6 +241,27 @@ def dashboard():
             'ratio9d': round(float((v9d / vix).dropna().iloc[-1]), 3),
             'inverted_days_1y': int((ratio.iloc[-252:] > 1).sum())}
     lbl, cls = vix_label(float(vix.iloc[-1]))
+    # 台股：臺指 VIX（與美股 VIX 同一套分級）與 Put/Call 比
+    tw = {}
+    try:
+        tv = tw_vix()
+        if len(tv) > 5:
+            last = float(tv.iloc[-1])
+            us = vix.reindex(tv.index, method='ffill')
+            tw['vix'] = {'value': round(last, 2), 'date': str(tv.index[-1].date()), 'chg': round((last / float(tv.iloc[-2]) - 1) * 100, 2),
+                         'since': str(tv.index[0].date()), 'n': len(tv), 'hi': round(float(tv.max()), 2), 'lo': round(float(tv.min()), 2),
+                         'spread': round(last - float(vix.iloc[-1]), 2),
+                         'label': vix_label(last)[0], 'cls': vix_label(last)[1],
+                         'chart': [[str(d.date()), round(float(v), 2), round(float(u), 2)] for (d, v), u in zip(tv.items(), us.values)]}
+    except Exception as e:
+        print(f'[fear] tw vix: {e}')
+    try:
+        pcr = tw_pcr()
+        if pcr:
+            tw['pcr'] = dict(pcr[-1], prev=pcr[-2] if len(pcr) > 1 else None, avg20=round(float(np.mean([x['oi'] for x in pcr[-20:]])), 2),
+                             history=pcr[-60:])
+    except Exception as e:
+        print(f'[fear] tw pcr: {e}')
     cnn, sig = _cnn(), current_signal()
     # CNN 綜合了動能、新高新低家數、垃圾債利差等，常比 VIX 早反映情緒；兩者不一致時一起說明
     if cnn and cnn['score'] < 45 and sig['vix'] < 25:
@@ -165,7 +269,7 @@ def dashboard():
                              '屬一般修正而非恐慌。可小量分批，回測顯示 VIX 40 以上或期限結構恢復時才是較可靠的大舉加碼點')
     elif cnn and cnn['score'] >= 75 and sig['vix'] < 15:
         sig = dict(sig, text=f"CNN 恐懼貪婪指數 {cnn['score']:.0f}（{cnn['rating']}）且 VIX 偏低，市場樂觀，不宜追高加碼")
-    return {'indicators': out, 'term': term, 'vix_label': lbl, 'vix_cls': cls, 'cnn': cnn,
+    return {'indicators': out, 'term': term, 'vix_label': lbl, 'vix_cls': cls, 'cnn': cnn, 'tw': tw,
             'chart': {'vix': [[str(d.date()), round(float(v), 2)] for d, v in vix[vix.index >= two].items()],
                       'ratio': [[str(d.date()), round(float(v), 3)] for d, v in ratio[ratio.index >= two].items()]},
             'signal': sig}
@@ -307,7 +411,8 @@ def current_signal():
 def alert_cfg(user):
     c = userdata.get(user, ALERT_KEY) or {}
     thr = [t for t in (c.get('thresholds') or []) if t in THRESHOLDS]
-    return {'thresholds': thr, 'retreat': bool(c.get('retreat')), 'term': bool(c.get('term'))}
+    tw = [t for t in (c.get('tw') or []) if t in THRESHOLDS]
+    return {'thresholds': thr, 'tw': tw, 'retreat': bool(c.get('retreat')), 'term': bool(c.get('term'))}
 
 
 def run_alerts():
@@ -331,6 +436,17 @@ def run_alerts():
         if cfg['term'] and sig['term_normalized'] and st.get('term') != day:
             st['term'] = day
             msgs.append('VIX 期限結構從倒掛恢復正常，恐慌高峰可能已過')
+        if cfg['tw']:
+            try:
+                tv = tw_vix()
+                tday, tvv, tprev = str(tv.index[-1].date()), float(tv.iloc[-1]), tv.iloc[-21:-1]
+                for t in cfg['tw']:
+                    k = f'tw{t}'
+                    if tvv >= t and (tprev < t).all() and st.get(k) != tday:
+                        st[k] = tday
+                        msgs.append(f'臺指 VIX 站上 {t}（目前 {tvv:.1f}），台股恐慌升溫')
+            except Exception as e:
+                print(f'[fear] tw alert: {e}')
         if msgs:
             userdata.put(user, ALERT_STATE, st)
             if notify.ready(user):
@@ -346,6 +462,10 @@ def _alert_loop():
         return
     time.sleep(180)
     while True:
+        try:
+            tw_vix(); tw_pcr()                      # 期交所只公開近 3 個月：每天抓下來累積歷史
+        except Exception as e:
+            print(f'[fear] taifex: {e}')
         try:
             if userdata.users_with(ALERT_KEY):
                 with _lock:
@@ -383,7 +503,8 @@ def api_alerts():
     if request.method == 'POST':
         b = request.get_json(silent=True) or {}
         thr = [t for t in (b.get('thresholds') or []) if t in THRESHOLDS]
-        userdata.put(user, ALERT_KEY, {'thresholds': sorted(set(thr)), 'retreat': bool(b.get('retreat')), 'term': bool(b.get('term'))})
+        tw = [t for t in (b.get('tw') or []) if t in THRESHOLDS]
+        userdata.put(user, ALERT_KEY, {'thresholds': sorted(set(thr)), 'tw': sorted(set(tw)), 'retreat': bool(b.get('retreat')), 'term': bool(b.get('term'))})
     return jsonify(dict(alert_cfg(user), ready=notify.ready(user)))
 
 
