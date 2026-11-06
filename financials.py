@@ -31,7 +31,7 @@ import tw_board
 
 bp = Blueprint('financials', __name__)
 
-TTL = 6 * 3600
+TTL = 15 * 60                   # 結果只快取 15 分鐘（財報在硬碟快取，重算很快），現價才跟得上行情
 _cache, _lock = {}, threading.Lock()
 _sector_cache = {}
 DISCOUNT = {'tw': 0.085, 'us': 0.09}          # 折現率：無風險利率 + 股權風險溢酬的常用值
@@ -113,8 +113,9 @@ def _last(s, k=1):
 
 
 def _ttm(q):
-    q = q.dropna()
-    return float(q.iloc[-4:].sum()) if len(q) >= 4 else None
+    """最近四季加總；四季中有缺就不算（避免跨到第五季），由呼叫端改用年報或 Yahoo 的數字。"""
+    last4 = q.sort_index().iloc[-4:]
+    return float(last4.sum()) if len(last4) == 4 and last4.notna().all() else None
 
 
 def _div(a, b):
@@ -244,7 +245,7 @@ def analyze(code, price=None, use_cache=True):
 
 def _analyze(t, ticker, market, tw_name, tw_ind, price):
     info = t.info or {}
-    price = price or info.get('currentPrice') or info.get('regularMarketPrice') or info.get('previousClose')
+    price = price or _live_price(ticker, market) or info.get('currentPrice') or info.get('regularMarketPrice') or info.get('previousClose')
     if not price:
         return None, '查不到這檔股票的報價'
     A_is, Q_is = t.income_stmt, t.quarterly_income_stmt
@@ -469,7 +470,8 @@ def _analyze(t, ticker, market, tw_name, tw_ind, price):
     ref_pe = peer.get('pe') if peer else None
     v_metrics.append(_m('pe', '本益比（近四季）', None if pe is None else round(pe, 1),
                         None if pe is None else _band(pe / ref_pe if ref_pe else pe / 18, [(0.5, 100), (0.8, 80), (1, 60), (1.3, 35), (2, 10)]),
-                        '倍', f"同{'產業' if market == 'tw' else '類股'}中位數 {ref_pe} 倍" if ref_pe else '沒有同業資料，以 18 倍為基準'))
+                        '倍', (f"同{'產業' if market == 'tw' else '類股'}中位數 {ref_pe} 倍" if ref_pe else '沒有同業資料，以 18 倍為基準')
+                        + ('；EPS 含最新公布的一季，證交所本益比用已申報財報，新財報剛公布時兩者會不同' if market == 'tw' else '')))
     if fpe is not None:
         ref_f = (peer.get('fpe') if peer else None) or ref_pe
         v_metrics.append(_m('fpe', '預估本益比（未來 12 個月）', round(fpe, 1), _band(fpe / ref_f if ref_f else fpe / 16, [(0.5, 100), (0.8, 80), (1, 60), (1.3, 35), (2, 10)]),
@@ -538,6 +540,35 @@ def _analyze(t, ticker, market, tw_name, tw_ind, price):
     }
     res['summary'] = _narrative(res, rev_cagr, rev_yoy_q, fwd_growth, roe, om_trend, ocf_ni, nd_ebitda, pe, fpe, peg, dy)
     return _clean(res), None
+
+
+_px_mem = {}
+
+
+def _live_price(ticker, market):
+    """現價：台股盤中用證交所即時報價、收盤後用當日收盤；美股用 Yahoo 最新成交價（5 分鐘快取）。
+    Yahoo 的 info 會快取一天，大跌時用它算「距合理價」會差很多。"""
+    code = ticker.split('.')[0]
+    if market == 'tw':
+        with tw_board._db() as con:
+            r = con.execute('SELECT date, close FROM daily WHERE code=? ORDER BY date DESC LIMIT 1', (code,)).fetchone()
+        today = tw_board._now().strftime('%Y-%m-%d')
+        if r and r[0] == today and r[1]:
+            return float(r[1])                                              # 今天已收盤：用官方收盤價
+        q = ((tw_board._rt_today() or {}).get('quotes') or {}).get(code)      # 盤中：證交所即時成交價
+        if q and q.get('price'):
+            return float(q['price'])
+        if r and r[1]:
+            return float(r[1])
+    hit = _px_mem.get(ticker)
+    if hit and time.time() - hit[0] < 300:
+        return hit[1]
+    try:
+        p = float(yf.Ticker(ticker).fast_info['lastPrice'])
+        _px_mem[ticker] = (time.time(), p)
+        return p
+    except Exception:
+        return None
 
 
 def _wavg(pairs):

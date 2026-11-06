@@ -53,34 +53,45 @@ _mem, _lock = {}, threading.Lock()
 
 
 def _hist(sym):
-    """日收盤（全部歷史），硬碟快取 6 小時。"""
+    """日收盤（全部歷史）。完整歷史在硬碟快取 12 小時；最近 5 天每 10 分鐘重抓一次接在後面，
+    盤中與收盤後的最新數值才會即時（大跌時 VIX 一天可以差 10 點以上）。"""
     with _lock:
         hit = _mem.get(sym)
-        if hit and time.time() - hit[0] < 1800:
+        if hit and time.time() - hit[0] < 600:
             return hit[1]
     os.makedirs(CACHE_DIR, exist_ok=True)
     path = os.path.join(CACHE_DIR, sym.replace('^', '_') + '.pkl')
-    s = None
+    full = None
     try:
         with open(path, 'rb') as f:
-            ts, s = pickle.load(f)
-        if time.time() - ts > 6 * 3600:
+            ts, full = pickle.load(f)
+        if time.time() - ts > 12 * 3600:
             raise ValueError('stale')
     except Exception:
         try:
-            h = yf.Ticker(sym).history(period='max', interval='1d', auto_adjust=False)
-            if len(h):
-                s = h['Close'].dropna()
-                s.index = pd.to_datetime(s.index.tz_localize(None) if s.index.tz is not None else s.index).normalize()
-                with open(path + '.tmp', 'wb') as f:
-                    pickle.dump((time.time(), s), f)
-                os.replace(path + '.tmp', path)
+            full = _download(sym, 'max')
+            with open(path + '.tmp', 'wb') as f:
+                pickle.dump((time.time(), full), f)
+            os.replace(path + '.tmp', path)
         except Exception as e:
             print(f'[fear] {sym}: {e}')
-            if s is None:
+            if full is None:
                 raise
+    try:
+        recent = _download(sym, '5d')
+        s = pd.concat([full[full.index < recent.index[0]], recent]) if len(recent) else full
+    except Exception as e:
+        print(f'[fear] {sym} recent: {e}')
+        s = full
     with _lock:
         _mem[sym] = (time.time(), s)
+    return s
+
+
+def _download(sym, period):
+    h = yf.Ticker(sym).history(period=period, interval='1d', auto_adjust=False)
+    s = h['Close'].dropna()
+    s.index = pd.to_datetime(s.index.tz_localize(None) if s.index.tz is not None else s.index).normalize()
     return s
 
 
