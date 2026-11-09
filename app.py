@@ -175,7 +175,8 @@ def _server_scan_loop():
             print(f'[Monitor] loop error: {e}')
         time.sleep(300)  # 5 minutes
 
-threading.Thread(target=_server_scan_loop, daemon=True).start()
+if not os.environ.get('TW_BOARD_NO_BG'):  # 網頁 worker 不跑背景工作，交給 bg_worker.py
+    threading.Thread(target=_server_scan_loop, daemon=True).start()
 
 import tw_board
 import picks
