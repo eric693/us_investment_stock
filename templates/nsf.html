@@ -18,7 +18,7 @@
 .up { color: var(--red); } .dn { color: var(--green); }
 .st { display: inline-block; font-size: .78rem; font-weight: 700; padding: 3px 10px; border-radius: 999px; background: var(--red-soft); color: var(--red); }
 .kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px 18px; margin: 12px 0; }
-.kpis span { display: block; font-size: .74rem; color: var(--text-dim); }
+.kpis > div > span { display: block; font-size: .74rem; color: var(--text-dim); }
 .kpis b { font: 700 1.2rem 'JetBrains Mono', monospace; }
 .read { padding: 12px 14px; border-radius: 12px; background: var(--surface-1); font-size: .88rem; line-height: 1.75; }
 .plot { height: 380px; }
@@ -34,6 +34,9 @@
 .fld input { height: 32px; width: 130px; border-radius: 8px; border: 1px solid var(--card-bd2); background: var(--surface-1); color: var(--text); font: inherit; padding: 0 8px; }
 .fld input.s { width: 64px; } .fld input.w { width: 240px; }
 .btn { height: 34px; padding: 0 16px; border: 0; border-radius: 10px; background: var(--accent-grad); color: #fff; font: inherit; font-weight: 700; cursor: pointer; }
+.seg2 { display: inline-flex; gap: 4px; }
+.chipb { height: 28px; padding: 0 10px; border-radius: 8px; border: 1px solid var(--card-bd2); background: var(--surface-1); color: var(--text-mid); font: inherit; font-size: .76rem; cursor: pointer; }
+.chipb.on { border-color: var(--accent); color: var(--text); font-weight: 700; }
 .empty { padding: 60px 0; text-align: center; color: var(--text-dim); }
 @media (max-width: 600px) { .nw { padding: 10px; } .box { padding: 16px; } .plot { height: 300px; } }
 </style>
@@ -48,7 +51,7 @@
   const num = (v, d = 1) => v == null ? '—' : Number(v).toLocaleString('en-US', {minimumFractionDigits: d, maximumFractionDigits: d});
   const sg = (v, d = 1) => v == null ? '—' : `<span class="${v > 0 ? 'up' : v < 0 ? 'dn' : ''}">${v > 0 ? '+' : ''}${num(v, d)}%</span>`;
   const T = c => Theme.css(c);
-  let D = null;
+  let D = null, BK = null, BKT = 'buy';
 
   async function load() {
     try {
@@ -84,6 +87,8 @@
           國安基金進場<b>不等於見底</b>：進場後到退場前，指數平均還會再跌 ${num(Math.abs(L.avg))}%，最低點平均出現在第 ${num(L.avg_day, 0)} 個交易日；最慘的兩次是 ${D.rounds.filter(r => r.status === 'closed').sort((x, y) => x.low_after - y.low_after).slice(0, 2).map(r => `${r.entry.slice(0, 7)} 再跌 ${num(Math.abs(r.low_after), 0)}%`).join('、')}。
           只有 ${y1.n} 次樣本，12 個月的平均又被 2020、2025 兩次大幅拉高，只能當參考。</div>` : ''}</section>
 
+      <section class="card2 box" id="banks"><h3>八大公股行庫買賣超 <span class="st" style="background:var(--surface-1);color:var(--text-mid)">參考指標，不是國安基金</span><small id="bkMeta"></small></h3><div id="bkBody"><p class="hint">讀取中…</p></div></section>
+
       <section class="card2 box"><h3>加權指數與歷次護盤 <small>陰影＝護盤期間，對數座標</small></h3><div id="cIdx" class="plot"></div></section>
       <section class="card2 box"><h3>進場後的走勢比較 <small>以進場日收盤為 0%，前 126 個交易日</small></h3><div id="cPath" class="plot"></div></section>
 
@@ -113,6 +118,37 @@
       } catch (e) { $('#rMsg').textContent = e.message; }
     };
     charts();
+    loadBanks();
+  }
+  async function loadBanks() {
+    try {
+      const r = await fetch('/api/nsf/banks'); const b = await r.json();
+      if (!r.ok) throw new Error(b.error);
+      BK = b; renderBanks();
+    } catch (e) { $('#bkBody').innerHTML = `<p class="hint">${esc(e.message)}</p>`; }
+  }
+  const yi = (v, d = 1) => v == null ? '—' : `<span class="${v > 0 ? 'up' : v < 0 ? 'dn' : ''}">${v > 0 ? '+' : ''}${num(v, d)} 億</span>`;
+  function renderBanks() {
+    const b = BK, list = BKT === 'buy' ? b.buy : b.sell;
+    $('#bkMeta').textContent = `資料日 ${b.date}・${b.fetched} 更新${b.stale ? '（來源暫時讀不到，顯示上次資料）' : ''}`;
+    $('#bkBody').innerHTML = `<div class="kpis">
+        <div><span>${esc(b.date)} 合計</span><b>${yi(b.total)}</b></div>
+        <div><span>連續${b.streak >= 0 ? '買超' : '賣超'}</span><b>${Math.abs(b.streak)} 天</b></div>
+        <div><span>近 5 個交易日</span><b>${yi(b.sum5, 0)}</b></div>
+        <div><span>近 20 個交易日</span><b>${yi(b.sum20, 0)}</b></div>
+        ${b.since ? `<div><span>第 ${b.since.n} 次進場（${esc(b.since.start)}）以來</span><b>${b.since.days ? yi(b.since.sum, 0) : '<small style="font-size:.82rem;font-weight:500;color:var(--text-mid)">今日收盤後才有</small>'}</b></div>` : ''}
+      </div>
+      <div id="cBk" style="height:280px"></div>
+      <div class="al" style="margin:12px 0 8px"><b style="font-size:.88rem">${esc(b.list_date || b.date)} 個股</b>
+        <span class="seg2"><button class="chipb ${BKT === 'buy' ? 'on' : ''}" data-t="buy">買超前 15</button><button class="chipb ${BKT === 'sell' ? 'on' : ''}" data-t="sell">賣超前 15</button></span></div>
+      <div class="scroll"><table class="tbl"><thead><tr><th class="l">股票</th>${b.banks.map(x => `<th>${esc(x)}</th>`).join('')}<th>合計（億）</th></tr></thead>
+        <tbody>${list.map(r => `<tr><td class="l"><a href="/financials?ticker=${esc(r.code)}" style="color:var(--accent)">${esc(r.code)}</a> ${esc(r.name)}</td>${b.banks.map(x => `<td>${num(r.by_bank[x], 2)}</td>`).join('')}<td class="${r.total >= 0 ? 'up' : 'dn'}" style="font-weight:700">${num(r.total, 2)}</td></tr>`).join('') || '<tr><td class="l">沒有資料</td></tr>'}</tbody></table></div>
+      <p class="hint" style="margin-top:10px"><b>這不是國安基金的買賣。</b>國安基金不公布每日交易，市場常用八大行庫（合庫、土銀、台銀、台企銀、彰銀、第一金、兆豐、華南）券商的合計進出推測政府資金動向，但裡面也包含一般客戶委託與其他資金，無法分辨是誰買的。各家統計口徑不同，例如 11/5 媒體報導 206 億、這裡 265 億，看方向與趨勢即可。當日資料收盤後才更新。資料來源：<a href="https://histock.tw/stock/broker8.aspx" target="_blank" rel="noopener" style="color:var(--accent)">HiStock</a>。</p>`;
+    document.querySelectorAll('#bkBody [data-t]').forEach(x => x.onclick = () => { BKT = x.dataset.t; renderBanks(); });
+    Plotly.newPlot('cBk', [{type: 'bar', name: '合計（億）', x: b.series.map(p => p[0]), y: b.series.map(p => p[1]),
+        marker: {color: b.series.map(p => p[1] >= 0 ? T('--red') : T('--green'))}}],
+      {paper_bgcolor: 'rgba(0,0,0,0)', plot_bgcolor: 'rgba(0,0,0,0)', font: {color: T('--text-mid'), size: 11}, margin: {l: 48, r: 10, t: 8, b: 30}, showlegend: false,
+       xaxis: {gridcolor: T('--grid')}, yaxis: {gridcolor: T('--grid'), zerolinecolor: T('--text-dim'), title: {text: '億元', font: {size: 10}}}, hovermode: 'x unified'}, {responsive: true, displayModeBar: false});
   }
   async function post(u, b) {
     const r = await fetch(u, {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(b)});
@@ -134,7 +170,7 @@
               line: {width: r.status === 'open' ? 3 : colors[p.n] ? 1.8 : 1, color: colors[p.n] || 'rgba(148,163,184,.55)'}};
     }), lay({yaxis: {gridcolor: T('--grid'), ticksuffix: '%', zerolinecolor: T('--text-dim')}, xaxis: {gridcolor: T('--grid'), title: {text: '進場後交易日', font: {size: 10}}}, legend: {font: {size: 10}}, hovermode: 'closest'}), cfg);
   }
-  window.addEventListener('themechange', () => { if (D) charts(); });
+  window.addEventListener('themechange', () => { if (D) charts(); if (BK) renderBanks(); });
   load();
 })();
 </script>

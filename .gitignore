@@ -25,3 +25,4 @@ fa_scan.db*
 .etf_cache/
 tdcc.db*
 .fear_cache/
+.nsf_cache/

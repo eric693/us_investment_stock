@@ -9,10 +9,15 @@
 第 1 次的 500 億虧損多數報導寫虧損、部分寫帳面一度虧損，立法院資料只有前三次合計（獲利 61 億）；
 第 8 次淨利有 83、112.96、118.19 億三種說法。表內 note 欄都有標註。
 """
+import os
+import re
+import json
+import time
 import datetime as dt
 
 import numpy as np
 import pandas as pd
+import requests
 from flask import Blueprint, jsonify, request, render_template
 
 import auth
@@ -118,6 +123,90 @@ def analyze():
             'index': [[str(d.date()), round(float(x), 2)] for d, x in px.iloc[::5].items()] + [[str(idx[-1].date()), round(float(v[-1]), 2)]]}
 
 
+# ── 八大公股行庫買賣超（參考指標，不是國安基金的買賣）────────────────
+# 國安基金不公布每日買賣，市場常以八大行庫券商的合計進出推測政府資金動向；任何人都能在這些券商開戶，
+# 所以含一般客戶委託，各家媒體的統計口徑也不同。資料來自 HiStock 的整理頁，30 分鐘最多抓一次，
+# 每日合計累積存在硬碟（來源只給近 120 個交易日）。
+BANKS_URL = 'https://histock.tw/stock/broker8.aspx'
+BANK_NAMES = ['合庫', '土銀', '台銀', '台企銀', '彰銀', '第一金', '兆豐銀', '華南永昌']
+BANKS_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), '.nsf_cache', 'banks.json')
+BANKS_TTL = 1800
+
+
+def _parse_banks(html):
+    i = html.find('loadChart({')
+    if i < 0:
+        raise ValueError('找不到每日合計資料')
+    chart = json.JSONDecoder().raw_decode(html[i + len('loadChart('):])[0]
+    day = lambda ms: dt.datetime.fromtimestamp(ms / 1000, dt.timezone.utc).strftime('%Y-%m-%d')
+    series = {day(t): round(float(v), 2) for t, v in json.loads(chart['SumMoney'])}
+    if not series:
+        raise ValueError('每日合計是空的')
+
+    def top(word):
+        rows, date = [], None
+        for m in re.finditer(r'<li[^>]*title="(\d{4}-\d\d-\d\d) 八大公股行庫合計' + word + r' Top\.(\d+) : (.+?) \((\w+)\) 合計：([-\d,]+)萬元"[^>]*>(.*?)</li>', html, re.S):
+                date = m.group(1)
+                cells = [int(x.replace(',', '')) for x in re.findall(r'<span class="w70">([-\d,]+)</span>', m.group(6))]
+                rows.append({'rank': int(m.group(2)), 'name': m.group(3), 'code': m.group(4), 'total': round(int(m.group(5).replace(',', '')) / 1e4, 2),
+                             'by_bank': dict(zip(BANK_NAMES, [round(c / 1e4, 2) for c in cells[:8]]))})
+        return sorted(rows, key=lambda r: r['rank']), date
+    buy, d1 = top('買超')
+    sell, d2 = top('賣超')
+    return {'series': series, 'buy': buy, 'sell': sell, 'list_date': d1 or d2}
+
+
+def _load_banks():
+    try:
+        with open(BANKS_FILE, encoding='utf-8') as f:
+            return json.load(f)
+    except (OSError, ValueError):
+        return None
+
+
+def banks():
+    """回傳快取資料；過期才向來源抓，抓不到就用舊的並標 stale。"""
+    cached = _load_banks()
+    if cached and time.time() - cached.get('ts', 0) < BANKS_TTL:
+        return cached
+    try:
+        r = requests.get(BANKS_URL, timeout=20, headers={'User-Agent': 'Mozilla/5.0 (compatible; StockLens)'})
+        r.raise_for_status()
+        new = _parse_banks(r.content.decode('utf-8', 'ignore'))
+    except Exception as e:
+        print(f'[nsf] banks: {e}')
+        if cached:
+            return dict(cached, stale=True)
+        raise
+    new['series'] = dict(sorted({**(cached or {}).get('series', {}), **new['series']}.items()))
+    new['ts'] = time.time()
+    os.makedirs(os.path.dirname(BANKS_FILE), exist_ok=True)
+    with open(BANKS_FILE + '.tmp', 'w', encoding='utf-8') as f:
+        json.dump(new, f, ensure_ascii=False)
+    os.replace(BANKS_FILE + '.tmp', BANKS_FILE)
+    return new
+
+
+def banks_summary():
+    b = banks()
+    days = list(b['series'].items())
+    vals = [v for _, v in days]
+    streak = 0
+    for v in reversed(vals):
+        if v == 0 or (streak and (v > 0) != (streak > 0)):
+            break
+        streak += 1 if v > 0 else -1
+    op = next((r for r in rounds() if not r.get('exit')), None)
+    since = None
+    if op:
+        rows = [v for d, v in days if d >= op['entry']]
+        since = {'n': op['n'], 'start': op['entry'], 'days': len(rows), 'sum': round(sum(rows), 1)}
+    return {'date': days[-1][0], 'total': vals[-1], 'streak': streak, 'sum5': round(sum(vals[-5:]), 1), 'sum20': round(sum(vals[-20:]), 1),
+            'since': since, 'series': days[-120:], 'buy': b['buy'][:15], 'sell': b['sell'][:15], 'list_date': b.get('list_date'),
+            'banks': BANK_NAMES, 'stale': bool(b.get('stale')),
+            'fetched': dt.datetime.fromtimestamp(b['ts'], dt.timezone(dt.timedelta(hours=8))).strftime('%m-%d %H:%M')}
+
+
 # ── 記錄新決議與提醒 ──────────────────────────────────────────────────
 def _is_admin():
     u = auth.current_user()
@@ -169,6 +258,14 @@ def api_nsf():
     res['ready'] = notify.ready(user)
     res['admin'] = _is_admin()
     return jsonify(res)
+
+
+@bp.route('/api/nsf/banks')
+def api_banks():
+    try:
+        return jsonify(banks_summary())
+    except Exception as e:
+        return jsonify(error=f'八大行庫資料讀取失敗：{e}'), 503
 
 
 @bp.route('/api/nsf/alert', methods=['POST'])
