@@ -1225,31 +1225,33 @@ def get_stock(ticker):
         return jsonify({'error': str(e)}), 500
 
 
+def _yahoo_news(ticker):
+    """Yahoo 新聞。yfinance 的新聞路徑常壞（會丟 YAHOO! FINANCE IS CURRENTLY DOWN），壞了改用搜尋 API。"""
+    try:
+        out = []
+        for item in (yf.Ticker(ticker).news or []):
+            c = item.get('content', {})
+            if c.get('title'):
+                out.append({'title': c['title'], 'publisher': (c.get('provider') or {}).get('displayName', ''),
+                            'url': (c.get('canonicalUrl') or {}).get('url', ''),
+                            'summary': (c.get('summary', '') or '')[:180], 'pubTime': c.get('pubDate', '')})
+        return out
+    except Exception as e:
+        print(f'[news] yfinance {ticker}: {e}')
+    r = _requests.get('https://query1.finance.yahoo.com/v1/finance/search', timeout=10,
+                      params={'q': ticker, 'newsCount': 12, 'quotesCount': 0}, headers={'User-Agent': 'Mozilla/5.0'})
+    return [{'title': n['title'], 'publisher': n.get('publisher', ''), 'url': n.get('link', ''), 'summary': '',
+             'pubTime': pd.Timestamp(n['providerPublishTime'], unit='s', tz='UTC').strftime('%Y-%m-%dT%H:%M:%SZ') if n.get('providerPublishTime') else ''}
+            for n in r.json().get('news', []) if n.get('title')]
+
+
 @app.route('/api/news/<ticker>')
 def get_news(ticker):
     ticker = ticker.upper().strip()
     cached = _cache_get(f'news:{ticker}')
     if cached: return jsonify(cached)
     try:
-        stock     = yf.Ticker(ticker)
-        raw       = stock.news or []
-        articles  = []
-        for item in raw[:12]:
-            c         = item.get('content', {})
-            title     = c.get('title', '')
-            publisher = (c.get('provider') or {}).get('displayName', '')
-            url       = (c.get('canonicalUrl') or {}).get('url', '')
-            summary   = c.get('summary', '') or ''
-            pub_time  = c.get('pubDate', '')
-            if title:
-                articles.append({
-                    'title':     title,
-                    'publisher': publisher,
-                    'url':       url,
-                    'summary':   summary[:180],
-                    'pubTime':   pub_time,
-                })
-        result = {'ticker': ticker, 'articles': articles}
+        result = {'ticker': ticker, 'articles': _yahoo_news(ticker)[:12]}
         _cache_set(f'news:{ticker}', result, ttl=180)
         return jsonify(result)
     except Exception as e:
@@ -2008,22 +2010,17 @@ def get_tw_news(ticker):
     cached = _cache_get(f'tw_news:{ticker}')
     if cached: return jsonify(cached)
     try:
-        stock    = yf.Ticker(ticker)
-        info     = stock.info
-        raw_news = stock.news or []
         articles = []
         seen_titles = set()
-        for item in raw_news[:12]:
-            c         = item.get('content', {})
-            title     = c.get('title', '')
-            publisher = (c.get('provider') or {}).get('displayName', '')
-            url       = (c.get('canonicalUrl') or {}).get('url', '')
-            summary   = c.get('summary', '') or ''
-            pub_time  = c.get('pubDate', '')
-            if title and title not in seen_titles:
-                seen_titles.add(title)
-                articles.append({'title': title, 'publisher': publisher, 'url': url,
-                                  'summary': summary[:180], 'pubTime': pub_time})
+        try:
+            yahoo = _yahoo_news(ticker)
+        except Exception as e:
+            print(f'[news] {ticker}: {e}')
+            yahoo = []                   # Yahoo 抓不到還有 Google 新聞
+        for a in yahoo[:12]:
+            if a['title'] not in seen_titles:
+                seen_titles.add(a['title'])
+                articles.append(a)
 
         # Supplement with Google News if fewer than 6 articles
         if len(articles) < 6:

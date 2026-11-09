@@ -135,3 +135,21 @@ def test_tdcc_summary_and_ranking(board, tmp_path, monkeypatch):
     r = tdcc.ranking()
     assert r['date'] == '2026-10-22' and r['prev'] == '2026-10-15'
     assert r['up'][0]['code'] == '1101' and r['up'][0]['d1000'] == 1 and r['down'][0]['code'] == '2202'
+
+
+def test_news_falls_back_to_search_api(client, monkeypatch):
+    """yfinance 新聞路徑壞掉時，改用 Yahoo 搜尋 API。"""
+    import app as app_module
+    from conftest import login
+
+    class Broken:
+        @property
+        def news(self):
+            raise Exception('*** YAHOO! FINANCE IS CURRENTLY DOWN! ***')
+    monkeypatch.setattr(app_module.yf, 'Ticker', lambda t: Broken())
+    monkeypatch.setattr(app_module._requests, 'get', lambda url, **k: type('R', (), {'json': lambda s: {'news': [
+        {'title': '新聞', 'publisher': 'X', 'link': 'https://x', 'providerPublishTime': 1794200037}]}})())
+    app_module._cache_set('news:ZZZZ', None, ttl=0)
+    login(client, 'amy', 'user12345')
+    j = client.get('/api/news/ZZZZ').get_json()
+    assert 'error' not in j and j['articles'][0]['title'] == '新聞' and j['articles'][0]['pubTime'].endswith('Z')
