@@ -149,10 +149,14 @@
   sec('chart.params', '指標參數', steps(['工具列「⚙ 指標參數」：均線 6 條的天數與 SMA／EMA、布林、SAR、唐奇安、成交量均線、KDJ、RSI（兩條）、MACD、DMI、ATR、CCI、威廉、乖離率（三條）、OBV。',
       '改完按「套用」，記在這台裝置；「恢復預設」回到常用值。']) + note('數值與標準公式（TradingView 同一套算法：RSI／ATR／DMI 用 Wilder 平滑）一致。'));
 
+  sec('nsf.main', '國安基金', '<p>國安基金歷次進退場紀錄，以及進場後 1 週到 12 個月的大盤表現，和任何一天買進比較。</p>' +
+    steps(['最上方是目前狀態：是否在場內、進場以來指數變化。', '「歷次進場後」統計平均、中位數與最差情況；走勢比較圖可看這次和過去幾次的差異。', '勾選通知：管理員記錄新決議時會推播。加權指數技術圖（日／週／月 K）也會標出進退場。']) +
+    note('國安基金不即時公布買賣，也沒有資料可自動抓，日期與金額整理自媒體報導，新決議由管理員手動記錄。進場不等於見底，歷史上進場後平均還會再跌一段。'));
+
   var PAGES = {
     board: ['board.index', 'board.pulse', 'board.all', 'board.watch', 'board.score', 'board.sector', 'board.rank', 'board.after', 'board.rt', 'board.tdcc', 'board.line'],
     chart: ['chart.basic', 'chart.tools', 'chart.params', 'chart.index'], tv: ['tv.main'],
-    tw: ['tw.main', 'tw.monitor', 'chart.tools'], us: ['us.main'], screener: ['screener.main'], picks: ['picks.main'], commodity: ['commodity.main'], financials: ['financials.main'], etf: ['etf.main'], fear: ['fear.main'],
+    tw: ['tw.main', 'tw.monitor', 'chart.tools'], us: ['us.main'], screener: ['screener.main'], picks: ['picks.main'], commodity: ['commodity.main'], financials: ['financials.main'], etf: ['etf.main'], fear: ['fear.main'], nsf: ['nsf.main'],
     portfolio: ['portfolio.main'], account: ['account.main'], admin: ['admin.main'],
   };
 

@@ -689,6 +689,8 @@ def _rt_loop():
                                                else {})
                     if alerts_on:
                         _check_alerts()
+                elif alerts_on and not _market_open(_now()):
+                    _flush_alert_digest()
             except Exception as e:
                 print(f'[tw_board] rt loop: {e}')
             time.sleep(max(5, 20 - (time.time() - t0)))
@@ -1344,6 +1346,32 @@ def _check_alerts():
                 print(f'[tw_board] alerts {user}: {e}')
 
 
+RT_LINE_PER_DAY = 6          # 即時選股每天最多發幾則 LINE；之後的訊號只送手機推播，收盤後合併成一則摘要
+
+
+def _flush_alert_digest():
+    """收盤後把當天超過上限、沒發 LINE 的訊號合併成一則。"""
+    for user, cfg in userdata.users_with('tw_alerts'):
+        held = cfg.get('held') or []
+        if not held:
+            continue
+        with _alert_lock:
+            cfg = _load_alerts(user)
+            held = cfg.get('held') or []
+            if not held:
+                continue
+            lines = [f"【台股即時選股】今日摘要：另有 {len(held)} 個訊號未逐則推送"]
+            for side, mark in (('buy', '🔴 BUY'), ('sell', '🟢 SELL')):
+                xs = [h for h in held if h['side'] == side]
+                if xs:
+                    names = '、'.join(f"{h['code']} {h['name']}" for h in xs[:40])
+                    lines.append(f"{mark} {len(xs)} 檔：{names}" + ('…' if len(xs) > 40 else ''))
+            if notify.ready(user):
+                notify.send(user, '\n'.join(lines), url='/tw/board', low=True)
+            cfg['held'] = []
+            _save_alerts(user, cfg)
+
+
 def _check_alerts_user(user):
     """新出現的訊號推播到這個帳號的 LINE／手機通知（同一檔同一條件一天只推一次）。"""
     with _alert_lock:
@@ -1378,7 +1406,15 @@ def _check_alerts_user(user):
         if not notify.ready(user):
             ok, err = False, '尚未設定通知管道（LINE 或手機通知）'
         else:
-            ok, err = notify.send(user, '\n'.join(lines), url='/tw/board')
+            day = cfg.get('line_day') or {}
+            n = day.get('n', 0) if day.get('date') == today else 0
+            within = n < RT_LINE_PER_DAY
+            ok, err = notify.send(user, '\n'.join(lines), url='/tw/board', low=True, line=within)
+            if within:
+                cfg['line_day'] = {'date': today, 'n': n + 1}
+            else:
+                cfg['held'] = (cfg.get('held') or []) + [dict(code=r['code'], name=r['name'], side=sig['side']) for r, sig in new]
+                err = err or f'今天已發 {RT_LINE_PER_DAY} 則 LINE，之後的訊號收盤後合併成一則'
         cfg['sent'] = {today: sorted(sent)}
         log = cfg.get('log', [])
         for r, sig in new:

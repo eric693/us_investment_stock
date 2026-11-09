@@ -180,7 +180,7 @@ def test_line_alerts_pipeline(board, monkeypatch):
     board._save_watch('amy', {'groups': [{'name': '自選股', 'codes': watched}]})
     sent = []
     monkeypatch.setattr(board.notify, 'ready', lambda user: True)
-    monkeypatch.setattr(board.notify, 'send', lambda user, text, url='': (sent.append((user, text)), (True, ''))[1])
+    monkeypatch.setattr(board.notify, 'send', lambda user, text, url='', **k: (sent.append((user, text)), (True, ''))[1])
     board._save_alerts('amy', {'enabled': True, 'scope': 'watch', 'rules': ['kdj_buy', 'kdj_sell'],
                         'params': params, 'include_etf': False, 'sent': {}, 'log': []})
     board._check_alerts()

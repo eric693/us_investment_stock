@@ -92,7 +92,7 @@ def _flush_outbox(outbox):
         else:
             text = (f"【StockLens 盯盤通知】{pd.Timestamp.now(tz='Asia/Taipei'):%H:%M}　共 {len(msgs)} 則\n\n"
                     + '\n\n'.join(msgs))
-        ok, err = notify.send(user, text, url='/tw')
+        ok, err = notify.send(user, text, url='/tw', low=True)    # 盯盤訊號多，不佔重要通知的保留額度
         if not ok:
             print(f'[Monitor] notify {user}: {err}')
 
@@ -186,6 +186,7 @@ import portfolio_risk
 import etf_tw
 import tdcc
 import fear
+import nsf
 
 
 def _hist(stock, period='1y', interval='1d', **kw):
@@ -3937,6 +3938,7 @@ portfolio_risk.init(app, login_required)
 etf_tw.init(app, login_required)
 tdcc.init(app, login_required)
 fear.init(app, login_required)
+nsf.init(app, login_required)
 app.register_blueprint(notify.bp)
 
 

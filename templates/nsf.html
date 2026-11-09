@@ -1,0 +1,142 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>國安基金</title>
+<link rel="stylesheet" href="/static/css/style.css?v=13">
+{% include "_head.html" %}
+<script src="https://cdn.plot.ly/plotly-2.26.0.min.js"></script>
+<style>
+.nw { max-width: 1240px; margin: 0 auto; padding: 16px; display: flex; flex-direction: column; gap: 14px; }
+.nw > * { min-width: 0; }
+.card2 { background: var(--card-bg); border: 1px solid var(--card-bd); border-radius: 18px; box-shadow: var(--shadow); }
+.box { padding: 18px 20px; }
+.box h3 { font-size: 1rem; margin: 0 0 12px; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.box h3 small { font-weight: 400; color: var(--text-dim); font-size: .74rem; margin-left: auto; }
+.hint { font-size: .78rem; color: var(--text-dim); line-height: 1.7; margin: 0; }
+.up { color: var(--red); } .dn { color: var(--green); }
+.st { display: inline-block; font-size: .78rem; font-weight: 700; padding: 3px 10px; border-radius: 999px; background: var(--red-soft); color: var(--red); }
+.kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px 18px; margin: 12px 0; }
+.kpis span { display: block; font-size: .74rem; color: var(--text-dim); }
+.kpis b { font: 700 1.2rem 'JetBrains Mono', monospace; }
+.read { padding: 12px 14px; border-radius: 12px; background: var(--surface-1); font-size: .88rem; line-height: 1.75; }
+.plot { height: 380px; }
+.scroll { overflow-x: auto; }
+.tbl { width: 100%; border-collapse: collapse; font-size: .82rem; }
+.tbl th { color: var(--text-dim); font-weight: 600; font-size: .72rem; text-align: right; padding: 8px 6px; border-bottom: 1px solid var(--line); white-space: nowrap; }
+.tbl td { padding: 8px 6px; text-align: right; border-bottom: 1px solid var(--line); font-family: 'JetBrains Mono', monospace; white-space: nowrap; }
+.tbl th.l, .tbl td.l { text-align: left; font-family: inherit; }
+.tbl td.w { white-space: normal; min-width: 150px; color: var(--text-mid); font-family: inherit; }
+.tbl tr.open td { background: var(--red-soft); }
+.al { display: flex; gap: 10px 16px; flex-wrap: wrap; align-items: center; font-size: .86rem; }
+.fld { display: inline-flex; align-items: center; gap: 6px; font-size: .8rem; color: var(--text-mid); }
+.fld input { height: 32px; width: 130px; border-radius: 8px; border: 1px solid var(--card-bd2); background: var(--surface-1); color: var(--text); font: inherit; padding: 0 8px; }
+.fld input.s { width: 64px; } .fld input.w { width: 240px; }
+.btn { height: 34px; padding: 0 16px; border: 0; border-radius: 10px; background: var(--accent-grad); color: #fff; font: inherit; font-weight: 700; cursor: pointer; }
+.empty { padding: 60px 0; text-align: center; color: var(--text-dim); }
+@media (max-width: 600px) { .nw { padding: 10px; } .box { padding: 16px; } .plot { height: 300px; } }
+</style>
+</head>
+<body data-help-page="nsf">
+{% include "_appbar.html" %}
+<main class="nw" id="root"><div class="card2 empty">讀取中…</div></main>
+<script>
+(function () {
+  const $ = s => document.querySelector(s);
+  const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;'}[c]));
+  const num = (v, d = 1) => v == null ? '—' : Number(v).toLocaleString('en-US', {minimumFractionDigits: d, maximumFractionDigits: d});
+  const sg = (v, d = 1) => v == null ? '—' : `<span class="${v > 0 ? 'up' : v < 0 ? 'dn' : ''}">${v > 0 ? '+' : ''}${num(v, d)}%</span>`;
+  const T = c => Theme.css(c);
+  let D = null;
+
+  async function load() {
+    try {
+      const r = await fetch('/api/nsf');
+      if (r.status === 401) { location.href = '/login?next=/nsf'; return; }
+      D = await r.json();
+      if (!r.ok) throw new Error(D.error);
+      render();
+    } catch (e) { $('#root').innerHTML = `<div class="card2 empty">${esc(e.message)}</div>`; }
+  }
+
+  function render() {
+    const o = D.open, L = D.lows, S = D.stats, y1 = S.find(x => x.h === '12 個月'), m3 = S.find(x => x.h === '3 個月');
+    $('#root').innerHTML = `
+      ${o ? `<section class="card2 box"><h3>第 ${o.n} 次護盤進行中 <span class="st">在場內</span><small>${o.decided ? '決議 ' + esc(o.decided) + '・' : ''}進場 ${esc(o.entry)}</small></h3>
+        <div class="kpis">
+          <div><span>原因</span><b style="font:inherit;font-weight:700;font-size:.92rem">${esc(o.reason)}</b></div>
+          <div><span>進場前收盤（距一年高點）</span><b>${num(o.prev_close, 2)}</b> ${sg(o.from_high)}</div>
+          <div><span>加權指數${D.last.live ? '（盤中）' : ''}・${esc(D.last.date)}</span><b>${num(D.last.close, 2)}</b> ${sg((D.last.close / o.prev_close - 1) * 100)}</div>
+          <div><span>動用金額</span><b>${o.amount == null ? '未公布' : num(o.amount, 1) + ' 億'}</b></div>
+        </div>
+        <p class="hint">${esc(o.note)}</p></section>` : `<section class="card2 box"><h3>目前沒有在場內</h3></section>`}
+
+      <section class="card2 box"><h3>歷次進場後，大盤表現如何 <small>共 ${y1.n} 次；只算指數價格，不含股息</small></h3>
+        <div class="scroll"><table class="tbl"><thead><tr><th class="l"></th>${S.map(x => `<th>${x.h}後</th>`).join('')}</tr></thead><tbody>
+          <tr><td class="l">平均報酬</td>${S.map(x => `<td>${sg(x.avg)}</td>`).join('')}</tr>
+          <tr><td class="l">中位數</td>${S.map(x => `<td>${sg(x.median)}</td>`).join('')}</tr>
+          <tr><td class="l">上漲比例</td>${S.map(x => `<td>${num(x.win, 0)}%</td>`).join('')}</tr>
+          <tr><td class="l">最差／最好</td>${S.map(x => `<td>${sg(x.worst)} / ${sg(x.best)}</td>`).join('')}</tr>
+          <tr><td class="l" style="color:var(--text-dim)">任何一天買進（基準）</td>${S.map(x => `<td style="color:var(--text-dim)">+${num(x.base_avg)}%・${num(x.base_win, 0)}%</td>`).join('')}</tr>
+        </tbody></table></div>
+        ${L ? `<div class="read" style="margin-top:12px"><b>怎麼看：</b>12 個月後平均 ${sg(y1.avg)}、中位數 ${sg(y1.median)}，比任何一天買進好，但 3 個月後（${sg(m3.avg)}）和基準差不多。
+          國安基金進場<b>不等於見底</b>：進場後到退場前，指數平均還會再跌 ${num(Math.abs(L.avg))}%，最低點平均出現在第 ${num(L.avg_day, 0)} 個交易日；最慘的兩次是 ${D.rounds.filter(r => r.status === 'closed').sort((x, y) => x.low_after - y.low_after).slice(0, 2).map(r => `${r.entry.slice(0, 7)} 再跌 ${num(Math.abs(r.low_after), 0)}%`).join('、')}。
+          只有 ${y1.n} 次樣本，12 個月的平均又被 2020、2025 兩次大幅拉高，只能當參考。</div>` : ''}</section>
+
+      <section class="card2 box"><h3>加權指數與歷次護盤 <small>陰影＝護盤期間，對數座標</small></h3><div id="cIdx" class="plot"></div></section>
+      <section class="card2 box"><h3>進場後的走勢比較 <small>以進場日收盤為 0%，前 126 個交易日</small></h3><div id="cPath" class="plot"></div></section>
+
+      <section class="card2 box"><h3>歷次紀錄 <small>金額、損益單位：億元；整理自媒體報導，官方未提供同格式的一覽表</small></h3>
+        <div class="scroll"><table class="tbl"><thead><tr><th class="l">次</th><th class="l">原因</th><th>進場</th><th>退場</th><th>天數</th><th>進場時距高點</th><th>進場收盤</th><th>退場收盤</th><th>期間報酬</th><th>期間最低</th><th>動用</th><th>損益</th><th class="l">備註</th></tr></thead>
+        <tbody>${D.rounds.slice().reverse().map(e => `<tr class="${e.status === 'open' ? 'open' : ''}"><td class="l">${e.n}</td><td class="l">${esc(e.reason)}</td><td>${esc(e.entry)}</td><td>${e.exit ? esc(e.exit) : '進行中'}</td><td>${e.days ?? '—'}</td>
+          <td>${sg(e.from_high)}</td><td>${num(e.entry_close, 0)}</td><td>${e.exit ? num(e.exit_close, 0) : '—'}</td><td>${e.exit ? sg(e.ret_hold) : '—'}</td><td>${e.exit ? sg(e.low_after) : '—'}</td>
+          <td>${e.amount == null ? '—' : num(e.amount, e.amount < 100 ? 2 : 0)}</td><td>${e.pnl == null ? '—' : `<span class="${e.pnl > 0 ? 'up' : 'dn'}">${e.pnl > 0 ? '+' : ''}${num(e.pnl, e.pnl % 1 ? 2 : 0)}</span>`}</td><td class="l w">${esc(e.note)}</td></tr>`).join('')}</tbody></table></div>
+        <p class="hint" style="margin-top:10px">損益是國安基金自己的損益，和大盤期間報酬不同：基金通常分批買、之後才慢慢出清。日期與金額各來源略有出入，已標在備註；以官方公告為準。</p></section>
+
+      <section class="card2 box"><h3>通知 <small>${D.ready ? '送到 LINE／手機通知' : '<a href="/account#notify" style="color:var(--red)">尚未設定通知管道 →</a>'}</small></h3>
+        <div class="al"><label><input type="checkbox" id="alOn" ${D.alert ? 'checked' : ''}> 國安基金有新的進場或退場決議時通知我</label><span class="hint" id="alMsg"></span></div>
+        <p class="hint" style="margin-top:8px">國安基金沒有可自動抓取的資料，新決議由管理員在這頁記錄後才會通知，可能比新聞晚。</p>
+        ${D.admin ? `<div class="al" style="margin-top:14px;padding-top:14px;border-top:1px solid var(--line)"><b>管理員：記錄決議</b>
+          <span class="fld">第幾次<input class="s" id="rN" type="number" value="${(o || D.rounds[D.rounds.length - 1]).n}"></span>
+          <span class="fld">進場日<input id="rEntry" type="date"></span><span class="fld">退場日<input id="rExit" type="date"></span>
+          <span class="fld">動用（億）<input class="s" id="rAmt" type="number" step="any"></span><span class="fld">損益（億）<input class="s" id="rPnl" type="number" step="any"></span>
+          <span class="fld">原因<input class="w" id="rReason"></span><span class="fld">備註<input class="w" id="rNote"></span>
+          <button class="btn" id="rSave">儲存</button><span class="hint" id="rMsg"></span></div>` : ''}
+      </section>
+      <p class="hint" style="text-align:center">加權指數來自 Yahoo Finance。歷史表現不代表未來，僅供參考，非投資建議。</p>`;
+    $('#alOn').onchange = async e => { await post('/api/nsf/alert', {on: e.target.checked}); $('#alMsg').textContent = '已儲存'; };
+    if (D.admin) $('#rSave').onclick = async () => {
+      try {
+        await post('/api/nsf/record', {n: +$('#rN').value, entry: $('#rEntry').value, exit: $('#rExit').value, amount: $('#rAmt').value, pnl: $('#rPnl').value, reason: $('#rReason').value, note: $('#rNote').value});
+        load();
+      } catch (e) { $('#rMsg').textContent = e.message; }
+    };
+    charts();
+  }
+  async function post(u, b) {
+    const r = await fetch(u, {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(b)});
+    const j = await r.json(); if (!r.ok) throw new Error(j.error); return j;
+  }
+  function charts() {
+    const lay = x => Object.assign({paper_bgcolor: 'rgba(0,0,0,0)', plot_bgcolor: 'rgba(0,0,0,0)', font: {color: T('--text-mid'), size: 11}, margin: {l: 52, r: 14, t: 10, b: 32},
+      xaxis: {gridcolor: T('--grid')}, yaxis: {gridcolor: T('--grid')}, hovermode: 'x unified'}, x);
+    const cfg = {responsive: true, displayModeBar: false};
+    const lastDay = D.index[D.index.length - 1][0];
+    const shapes = D.rounds.map(r => ({type: 'rect', xref: 'x', yref: 'paper', x0: r.entry, x1: r.exit || lastDay, y0: 0, y1: 1, line: {width: 0}, fillcolor: 'rgba(225,29,72,.22)'}));
+    const notes = D.rounds.map(r => ({x: r.entry, y: 1, yref: 'paper', text: String(r.n), showarrow: false, yanchor: 'bottom', font: {size: 10, color: T('--red')}}));
+    Plotly.newPlot('cIdx', [{type: 'scatter', mode: 'lines', x: D.index.map(p => p[0]), y: D.index.map(p => p[1]), line: {color: '#6d5dfc', width: 1.4}, name: '加權指數'}],
+      lay({yaxis: {gridcolor: T('--grid'), type: 'log', tickvals: [4000, 6000, 8000, 10000, 15000, 20000, 30000, 40000, 50000], tickformat: ','}, shapes, annotations: notes, showlegend: false, margin: {l: 52, r: 14, t: 18, b: 32}}), cfg);
+    const colors = {7: '#22c55e', 8: '#38bdf8', 9: '#f59e0b', 10: T('--red')};
+    Plotly.newPlot('cPath', D.paths.map(p => {
+      const r = D.rounds.find(x => x.n === p.n);
+      return {type: 'scatter', mode: 'lines', name: `${p.n}（${r.entry.slice(0, 7)}）`, x: p.y.map((_, i) => i), y: p.y,
+              line: {width: r.status === 'open' ? 3 : colors[p.n] ? 1.8 : 1, color: colors[p.n] || 'rgba(148,163,184,.55)'}};
+    }), lay({yaxis: {gridcolor: T('--grid'), ticksuffix: '%', zerolinecolor: T('--text-dim')}, xaxis: {gridcolor: T('--grid'), title: {text: '進場後交易日', font: {size: 10}}}, legend: {font: {size: 10}}, hovermode: 'closest'}), cfg);
+  }
+  window.addEventListener('themechange', () => { if (D) charts(); });
+  load();
+})();
+</script>
+</body>
+</html>

@@ -74,6 +74,7 @@ def check_line(token, uid):
 # 用量以 LINE 官方的 quota/consumption 為準（同一個官方帳號其他地方發的也算），
 # 查不到時退回本系統自己的計數。reply（綁定回覆）不算額度。
 LINE_CAP_DEFAULT = 200
+LINE_RESERVE = 50          # 保留給每日潛力股、持股提醒、黃金原油、恐慌指標、國安基金；盤中訊號（low）不能用到這段
 _usage_cache = {}          # token → (查詢時間, 已用, LINE 的上限或 None)
 
 
@@ -115,7 +116,7 @@ def line_usage(user):
             used = max(used, official)
         if limit:
             cap = min(cap, limit)
-    return {'used': used, 'cap': cap, 'month': _month()}
+    return {'used': used, 'cap': cap, 'month': _month(), 'reserve': min(LINE_RESERVE, cap // 4)}
 
 
 def _count_line(user, token):
@@ -127,12 +128,14 @@ def _count_line(user, token):
         _usage_cache[token] = (hit[0], hit[1] + 1, hit[2])
 
 
-def push_line(user, text):
-    """回傳 (是否成功, 錯誤訊息)；沒設定 LINE 回傳 (None, '')。"""
+def push_line(user, text, low=False):
+    """回傳 (是否成功, 錯誤訊息)；沒設定 LINE 回傳 (None, '')。low=True 的盤中訊號碰到保留額度就不送。"""
     token, uid = line_creds(user)
     if not token or not uid:
         return None, ''
     u = line_usage(user)
+    if low and u['cap'] - u['reserve'] <= u['used'] < u['cap']:
+        return None, f"LINE 本月已用 {u['used']} / {u['cap']} 則，剩下的保留給重要通知，盤中訊號這則沒有送 LINE"
     if u['used'] >= u['cap']:
         return False, (f"LINE 本月已發 {u['used']} 則，達每月上限 {u['cap']} 則，這則沒有送 LINE"
                        f"（手機通知照常），下個月 1 日恢復")
@@ -230,11 +233,12 @@ def _record(user, results):
     userdata.put(user, 'notify_status', st)
 
 
-def send(user, text, url='/tw/board'):
+def send(user, text, url='/tw/board', low=False, line=True):
     """送一則通知到這個帳號的所有管道。第一行當標題。
+    low：盤中訊號這類量大的通知，不佔 LINE 保留額度。line=False：只送手機推播（不佔額度）。
     回傳 (是否至少一個管道成功, 錯誤訊息（各管道的失敗原因，用「；」串起來）)。"""
     title, _, body = text.partition('\n')
-    results = {'line': push_line(user, text), 'web': push_web(user, title, body or title, url)}
+    results = {'line': push_line(user, text, low) if line else (None, ''), 'web': push_web(user, title, body or title, url)}
     _record(user, results)
     ok = any(r[0] for r in results.values())
     return ok, '；'.join(r[1] for r in results.values() if r[1])

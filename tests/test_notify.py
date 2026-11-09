@@ -108,7 +108,7 @@ def test_test_without_channels(nclient):
 def test_monitor_outbox_merges_per_user(client, monkeypatch):
     import app as app_module
     sent = []
-    monkeypatch.setattr(notify, 'send', lambda user, text, url='': sent.append((user, text)) or (True, ''))
+    monkeypatch.setattr(notify, 'send', lambda user, text, url='', **k: sent.append((user, text)) or (True, ''))
     app_module._flush_outbox({'amy': ['訊號一', '訊號二', '訊號三'], 'boss': ['只有一則']})
     assert len(sent) == 2
     amy = dict(sent)['amy']
@@ -139,7 +139,7 @@ def _at(ts):
 def daily(nclient, monkeypatch):
     import picks
     sent, data = [], {}
-    monkeypatch.setattr(notify, 'send', lambda user, text, url='': sent.append(text) or (True, ''))
+    monkeypatch.setattr(notify, 'send', lambda user, text, url='', **k: sent.append(text) or (True, ''))
     monkeypatch.setattr(picks, '_cached', lambda m: data.get(m))
     userdata.put('amy', 'line', {'token': 'tok', 'user_id': GOOD_UID})
     return picks, sent, data
@@ -217,7 +217,7 @@ def test_line_monthly_cap(nclient, monkeypatch):
     ok, err = notify.send('amy', '標題\n第 201 則')
     assert not ok and '上限 200' in err and len(posts) == 1
     st = nclient.get('/api/notify/status').get_json()
-    assert st['line_usage'] == {'used': 200, 'cap': 200, 'month': notify._month()}
+    assert st['line_usage'] == {'used': 200, 'cap': 200, 'month': notify._month(), 'reserve': 50}
 
     # 自己設更低的上限（例如留額度給盯盤）
     usage['n'] = 50
@@ -286,3 +286,45 @@ def test_line_token_kept_when_blank_and_page_send_uses_server_creds(nclient, mon
     # 頁面上的「發送通知」只送訊息，金鑰由伺服器帶
     r = nclient.post('/api/tw/notify/line', json={'message': '【測試】\n內容', 'token': 'evil'})
     assert r.status_code == 200 and posts[-1]['headers']['Authorization'] == 'Bearer tok'
+
+
+def test_low_priority_keeps_reserve_for_important(nclient, monkeypatch):
+    posts, usage = [], {'n': 150}
+
+    def get(url, **k):
+        if url.endswith('/consumption'):
+            return Resp(200, data={'totalUsage': usage['n']})
+        return Resp(200, data={'type': 'limited', 'value': 200})
+    monkeypatch.setattr(notify.requests, 'get', get)
+    monkeypatch.setattr(notify.requests, 'post', lambda url, **k: posts.append(url) or Resp(200))
+    userdata.put('amy', 'line', {'token': 'tok', 'user_id': GOOD_UID})
+    ok, err = notify.send('amy', '盤中\n訊號', low=True)          # 已到 200 - 50：盤中訊號不送
+    assert not ok and '保留' in err and posts == []
+    assert 'line' not in (userdata.get('amy', 'notify_status') or {})     # 不算發送失敗，鈴鐺不亮紅
+    assert notify.send('amy', '每日\n潛力股') == (True, '') and len(posts) == 1
+    assert notify.send('amy', '只送\n手機', line=False)[0] is False and len(posts) == 1
+
+
+def test_realtime_daily_line_limit_and_digest(board, nclient, monkeypatch):
+    import pandas as pd
+    sent = []
+    monkeypatch.setattr(board, 'RT_LINE_PER_DAY', 2)
+    monkeypatch.setattr(board, '_now', lambda: pd.Timestamp('2026-11-09 10:00', tz='Asia/Taipei'))
+    monkeypatch.setattr(notify, 'ready', lambda u: True)
+    monkeypatch.setattr(notify, 'send', lambda u, t, url='', low=False, line=True: sent.append((t, low, line)) or (True, ''))
+    rows = [{'code': str(1000 + i), 'name': f'股{i}', 'close': 10.0, 'chg_pct': 1, 'k': 1, 'd': 1, 'signals': [{'rule': 'kdj_buy', 'side': 'buy'}]} for i in range(4)]
+    state = {'i': 0}
+
+    def screen(*a, **k):
+        state['i'] += 1
+        return {'source': 'realtime', 'results': rows[:state['i']]}
+    monkeypatch.setattr(board, 'screen_realtime', screen)
+    userdata.put('amy', 'tw_alerts', dict(board._default_alerts(), enabled=True, scope='all'))
+    for _ in range(4):
+        board._check_alerts_user('amy')
+    assert [x[2] for x in sent] == [True, True, False, False] and all(x[1] for x in sent)
+    assert len(userdata.get('amy', 'tw_alerts')['held']) == 2
+    sent.clear()
+    board._flush_alert_digest(); board._flush_alert_digest()
+    assert len(sent) == 1 and '另有 2 個訊號' in sent[0][0] and '1002 股2' in sent[0][0]
+    assert userdata.get('amy', 'tw_alerts')['held'] == []

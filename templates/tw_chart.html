@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>技術分析</title>
-<link rel="stylesheet" href="/static/css/style.css?v=12">
+<link rel="stylesheet" href="/static/css/style.css?v=13">
 {% include "_head.html" %}
 <script src="https://unpkg.com/lightweight-charts@5.0.9/dist/lightweight-charts.standalone.production.js"></script>
 <style>
@@ -517,6 +517,14 @@ function build() {
       }
     }
   }
+  if (code === 'TAIEX' && NSF_ROUNDS && ['D', 'W', 'M'].includes(cfg.period)) {
+    const at = d => { const b = bars.find(x => x.day >= d); return b ? b.time : null; };
+    NSF_ROUNDS.forEach(r => {
+      const a = at(r.entry), z = r.exit ? at(r.exit) : null;
+      if (a != null) markers.push({time: a, position: 'belowBar', color: UP, shape: 'arrowUp', text: `國安${r.n}進`});
+      if (z != null) markers.push({time: z, position: 'aboveBar', color: DN, shape: 'arrowDown', text: `國安${r.n}退`});
+    });
+  }
   if (markers.length) {
     markers.sort((a, b) => (a.time > b.time) - (a.time < b.time));
     LC.createSeriesMarkers(candle, markers);
@@ -538,6 +546,14 @@ function build() {
     showLegend(Math.min(n - 1, Math.max(0, i)));
   });
   requestAnimationFrame(() => { placeLegends(); showLegend(n - 1); });
+}
+
+let NSF_ROUNDS = null;      // 加權指數圖標出國安基金歷次進退場
+if (code === 'TAIEX') {
+  fetch('/api/nsf').then(r => r.json()).then(j => {
+    NSF_ROUNDS = j.rounds || null;
+    if (DATA && NSF_ROUNDS) { cfg._keepRange = true; build(); }
+  }).catch(() => {});
 }
 
 function addLegend(pane, fn) {
