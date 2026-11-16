@@ -223,6 +223,22 @@ def _cache_set(key, val, ttl=300):
                 del _CACHE[next(iter(_CACHE))]
         _CACHE[key] = {'v': val, 't': now + ttl}
 
+def _quote_2d(sym):
+    """最新收盤與前一日的漲跌幅；抓不到回 None。"""
+    try:
+        h = _hist(yf.Ticker(sym), period='2d')
+        if len(h) >= 2:
+            cur  = safe_float(h['Close'].iloc[-1])
+            prev = safe_float(h['Close'].iloc[-2])
+            pct  = (cur / prev - 1) * 100 if prev else 0
+            return {'v': round(cur, 2), 'pct': round(pct, 2)}
+        if len(h) == 1:
+            return {'v': round(safe_float(h['Close'].iloc[-1]), 2), 'pct': 0}
+    except Exception:
+        pass
+    return None
+
+
 # ── Helpers ───────────────────────────────────────────────────────
 def safe_float(v, default=0.0):
     try:
@@ -895,20 +911,10 @@ def get_market():
         'dxy':    'DX-Y.NYB',
     }
     result = {}
-    for key, sym in syms.items():
-        try:
-            h = _hist(yf.Ticker(sym), period='2d')
-            if len(h) >= 2:
-                cur  = safe_float(h['Close'].iloc[-1])
-                prev = safe_float(h['Close'].iloc[-2])
-                pct  = (cur / prev - 1) * 100 if prev else 0
-                result[key] = {'v': round(cur, 2), 'pct': round(pct, 2)}
-            elif len(h) == 1:
-                result[key] = {'v': round(safe_float(h['Close'].iloc[-1]), 2), 'pct': 0}
-            else:
-                result[key] = None
-        except:
-            result[key] = None
+    # 幾個報價同時抓（原本一個一個排隊）
+    with ThreadPoolExecutor(max_workers=max(1, len(syms))) as ex:
+        for key, val in zip(syms, ex.map(_quote_2d, syms.values())):
+            result[key] = val
 
     # VIX 分級：20 以下屬正常波動，不代表「貪婪」；與恐慌指標頁同一套
     label, cls = fear.vix_label((result.get('vix') or {}).get('v'))
@@ -1711,13 +1717,55 @@ def tw_index():
     return render_template('tw_stock.html')
 
 
+def _tw_index_from_snapshot(now=None, max_age=90):
+    """加權／櫃買指數：背景程式的即時快照（tw_realtime.json）夠新就直接用，不必再打一次證交所 MIS。
+
+    MIS 一次要 1～6 秒，而且這個端點每個頁面都會叫。快照可以用的兩種情況：
+    1. 盤中有人在看盤（背景每幾十秒輪詢一次）：快照在 max_age 秒內。
+    2. 已收盤：指數那一筆的成交時間在 13:30 之後，而且是「最近一個平日」的資料
+       （週末、隔天開盤前都算）。平日遇到休市日判斷不出來，就回 None 照舊打 MIS。
+    兩個指數都要有，缺一個就回 None。
+    """
+    try:
+        snap = tw_board._read_rt() or {}
+        q = snap.get('quotes') or {}
+        now = now or tw_board._now()
+        today = now.strftime('%Y%m%d')
+        fresh = False
+        ts = snap.get('ts')
+        if ts:
+            age = (now.tz_localize(None) - pd.Timestamp(ts)).total_seconds()
+            fresh = 0 <= age <= max_age and snap.get('date') == today
+        # 最近一個「已經收盤」的平日
+        d = now
+        if d.weekday() < 5 and d.hour * 100 + d.minute < 1335:
+            d = d - pd.Timedelta(days=1)
+        while d.weekday() >= 5:
+            d = d - pd.Timedelta(days=1)
+        last_session = d.strftime('%Y%m%d')
+        in_session = now.weekday() < 5 and 900 <= now.hour * 100 + now.minute < 1335
+        out = {}
+        for key, code in (('twii', 't00'), ('twoii', 'o00')):
+            m = q.get(code) or {}
+            cur, prev = safe_float(m.get('price')), safe_float(m.get('prev'))
+            final = (not in_session) and m.get('date') == last_session and (m.get('time') or '') >= '13:30'
+            if cur <= 0 or not (fresh or final):
+                return None
+            out[key] = {'v': round(cur, 2), 'pct': round((cur / prev - 1) * 100, 2) if prev else 0}
+        return out
+    except Exception as e:
+        print(f'[tw_market] snapshot: {e}')
+        return None
+
+
 @app.route('/api/tw/market')
 def get_tw_market():
     cached = _cache_get('tw_market')
     if cached: return jsonify(cached)
     # 加權 / 櫃買指數用證交所 MIS 即時資料（Yahoo 沒有 ^TWOII）
-    result = {}
-    try:
+    result = _tw_index_from_snapshot() or {}
+    if not result:
+      try:
         r = _requests.get('https://mis.twse.com.tw/stock/api/getStockInfo.jsp?json=1&delay=0'
                           '&ex_ch=tse_t00.tw|otc_o00.tw',
                           headers={'User-Agent': 'Mozilla/5.0'}, timeout=8).json()
@@ -1727,7 +1775,7 @@ def get_tw_market():
                 key = 'twii' if m.get('c') == 't00' else 'twoii'
                 result[key] = {'v': round(cur, 2),
                                'pct': round((cur / prev - 1) * 100, 2) if prev else 0}
-    except Exception as e:
+      except Exception as e:
         print(f'[tw_market] MIS index: {e}')
     syms = {
         'usdtwd': 'USDTWD=X',
@@ -1737,20 +1785,10 @@ def get_tw_market():
     }
     if 'twii' not in result:
         syms['twii'] = '^TWII'
-    for key, sym in syms.items():
-        try:
-            h = _hist(yf.Ticker(sym), period='2d')
-            if len(h) >= 2:
-                cur  = safe_float(h['Close'].iloc[-1])
-                prev = safe_float(h['Close'].iloc[-2])
-                pct  = (cur / prev - 1) * 100 if prev else 0
-                result[key] = {'v': round(cur, 2), 'pct': round(pct, 2)}
-            elif len(h) == 1:
-                result[key] = {'v': round(safe_float(h['Close'].iloc[-1]), 2), 'pct': 0}
-            else:
-                result[key] = None
-        except:
-            result[key] = None
+    # 幾個報價同時抓（原本一個一個排隊）
+    with ThreadPoolExecutor(max_workers=max(1, len(syms))) as ex:
+        for key, val in zip(syms, ex.map(_quote_2d, syms.values())):
+            result[key] = val
 
     # VIX 分級：20 以下屬正常波動，不代表「貪婪」；與恐慌指標頁同一套
     label, cls = fear.vix_label((result.get('vix') or {}).get('v'))

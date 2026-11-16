@@ -20,6 +20,8 @@ import json
 import time
 import fcntl
 import sqlite3
+import subprocess
+import sys
 import threading
 import warnings
 
@@ -38,6 +40,7 @@ bp = Blueprint('picks', __name__)
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 US_DB_PATH = os.path.join(BASE_DIR, 'us_market.db')
 CACHE_FILE = os.path.join(BASE_DIR, '.picks_{}.json')
+BUILD_TIMEOUT_S = 600
 LOCK_FILE = os.path.join(BASE_DIR, '.picks_sync.lock')
 
 TOP_N = 20
@@ -533,6 +536,28 @@ def _has_table(con, name):
 _build_lock = threading.Lock()
 
 
+def _build_isolated(market):
+    """在短命的子程序重算（見 picks_build.py）。資料沒準備好或重算失敗都回傳 None，呼叫端沿用舊快取。"""
+    out = CACHE_FILE.format(market) + f'.build{os.getpid()}'
+    cmd = [sys.executable, os.path.join(BASE_DIR, 'picks_build.py'), market, out,
+           tw_board.DB_PATH, US_DB_PATH]   # 路徑明確傳入，子程序才會讀到同一份資料
+    try:
+        rc = subprocess.run(cmd, cwd=BASE_DIR, timeout=BUILD_TIMEOUT_S).returncode
+        if rc == 0:
+            with open(out, encoding='utf-8') as fh:
+                return json.load(fh)
+        if rc != 3:
+            print(f'[picks] build {market}: 子程序結束碼 {rc}')
+    except (OSError, ValueError, subprocess.TimeoutExpired) as e:
+        print(f'[picks] build {market}: {e}')
+    finally:
+        try:
+            os.remove(out)
+        except OSError:
+            pass
+    return None
+
+
 def get_picks(market):
     """讀快取（資料版本相同就沿用），否則重算並寫回檔案供其他 worker 共用。"""
     ver = _version(market)
@@ -545,7 +570,7 @@ def get_picks(market):
     except (OSError, ValueError):
         cached = None
     with _build_lock:
-        res = build(market)
+        res = _build_isolated(market)
     if res is None:
         return cached
     res['version'] = ver

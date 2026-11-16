@@ -218,7 +218,24 @@ def _cnn():
     return v
 
 
+def _prewarm():
+    """dashboard() 要用的資料（14 個指標的行情、臺指 VIX、Put/Call 比、CNN 指數）原本是一個一個排隊抓，
+    冷啟動要 4 秒左右。這裡先同時抓一輪放進各自的快取，後面照原本的順序取用就都是現成的。
+    任何一個失敗都不管它 —— 後面取用時會再試一次，並照原本的方式處理錯誤。"""
+    from concurrent.futures import ThreadPoolExecutor
+    syms = list(dict.fromkeys([s for s, _, _ in INDICATORS] + ['^VIX', '^VIX3M', '^VIX9D']))
+    jobs = [(lambda s=s: _hist(s)) for s in syms] + [tw_vix, tw_pcr, _cnn]
+    def safe(job):
+        try:
+            job()
+        except Exception:
+            pass
+    with ThreadPoolExecutor(max_workers=8) as ex:
+        list(ex.map(safe, jobs))
+
+
 def dashboard():
+    _prewarm()
     out = []
     cut10 = pd.Timestamp.now() - pd.Timedelta(days=3650)
     for sym, name, note in INDICATORS:

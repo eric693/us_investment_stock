@@ -17,6 +17,8 @@ import json
 import time
 import fcntl
 import sqlite3
+import subprocess
+import sys
 import threading
 import datetime as dt
 from concurrent.futures import ThreadPoolExecutor
@@ -705,19 +707,54 @@ def _rt_polled_after_910():
     return (snap.get('ts') or '')[:10] == now.strftime('%Y-%m-%d') and snap.get('ts', '')[11:16] >= '09:10'
 
 
+_rt_read_lock = threading.Lock()
+
+
 def _read_rt():
     try:
         mt = os.path.getmtime(RT_FILE)
     except OSError:
         return None
     if mt != _rt_cache['mtime']:
-        try:
-            with open(RT_FILE) as f:
-                _rt_cache['data'] = json.load(f)
-            _rt_cache['mtime'] = mt
-        except (OSError, ValueError):
-            return _rt_cache['data']
+        # 快照有 300KB 以上：同時進來的請求（/api/compare 一次開 5 條執行緒）只讓一個去解析，其他等它
+        with _rt_read_lock:
+            if mt != _rt_cache['mtime']:
+                try:
+                    with open(RT_FILE) as f:
+                        _rt_cache['data'] = json.load(f)
+                    _rt_cache['mtime'] = mt
+                except (OSError, ValueError):
+                    return _rt_cache['data']
     return _rt_cache['data']
+
+
+# ── 計算結果快取 ──────────────────────────────────────────────────────
+# 類股排行、即時選股每次都要對整張寬表（兩千多檔）重算，一次 0.5～1 秒，而頁面會定時重複叫同一組參數。
+# 結果只跟「參數、每日資料版本、即時快照、今天日期」有關，這幾樣都沒變就直接回上一次的結果。
+# 另外最多只留 RESULT_TTL 秒（概念股分類等不在版本裡的資料改了，一分鐘內也會跟上）。
+RESULT_TTL = 60
+_result_cache = {}
+_result_lock = threading.Lock()
+
+
+def _memo_result(name, args, calc):
+    try:
+        rt_mtime = os.path.getmtime(RT_FILE)
+    except OSError:
+        rt_mtime = 0
+    key = (name, args, tuple(_data_version() or ()), rt_mtime, _now().strftime('%Y-%m-%d'), DB_PATH, RT_FILE)
+    now = time.time()
+    with _result_lock:
+        hit = _result_cache.get(key)
+        if hit and now - hit[0] < RESULT_TTL:
+            return hit[1]
+    val = calc()
+    if val is not None:
+        with _result_lock:
+            if len(_result_cache) > 40:
+                _result_cache.clear()
+            _result_cache[key] = (now, val)
+    return val
 
 
 def _rt_today():
@@ -1090,6 +1127,10 @@ def _group_map(kind, meta):
 
 
 def sector_ranking(days=1, kind='industry'):
+    return _memo_result('sectors', (days, kind), lambda: _sector_ranking(days, kind))
+
+
+def _sector_ranking(days=1, kind='industry'):
     """類股（產業 / 細產業 / 概念股 / 集團股）漲跌與資金流向。
 
     - 漲跌：市值加權（同官方類股指數算法）與等權平均；盤中用即時報價。
@@ -1292,6 +1333,25 @@ def build_scorecard(min_avg_vol=500):
     return out
 
 
+def _build_scorecard_isolated():
+    """在短命的子程序重算（見 picks_build.py）。歷史資料不足回傳 None，重算失敗丟例外。"""
+    out = SCORECARD_FILE + f'.build{os.getpid()}'
+    cmd = [sys.executable, os.path.join(BASE_DIR, 'picks_build.py'), 'scorecard', out, DB_PATH]
+    try:
+        rc = subprocess.run(cmd, cwd=BASE_DIR, timeout=600).returncode
+        if rc == 3:
+            return None
+        if rc != 0:
+            raise RuntimeError(f'子程序結束碼 {rc}')
+        with open(out, encoding='utf-8') as fh:
+            return json.load(fh)
+    finally:
+        try:
+            os.remove(out)
+        except OSError:
+            pass
+
+
 def get_scorecard():
     """讀快取（資料版本相同就沿用），沒有或過期才重算並寫回檔案供其他 worker 共用。"""
     ver = list(_data_version())
@@ -1302,7 +1362,7 @@ def get_scorecard():
             return cached
     except (OSError, ValueError):
         pass
-    res = build_scorecard()
+    res = _build_scorecard_isolated()
     if res:
         with open(SCORECARD_FILE + '.tmp', 'w', encoding='utf-8') as fh:
             json.dump(res, fh, ensure_ascii=False)
@@ -1459,6 +1519,15 @@ RT_RULES = {
 
 
 def screen_realtime(rule_ids, params, include_etf=False):
+    try:
+        args = (tuple(rule_ids), tuple(sorted((k, float(v)) for k, v in params.items())), bool(include_etf))
+    except (TypeError, ValueError):
+        return _screen_realtime(rule_ids, params, include_etf)
+    res = _memo_result('rt', args, lambda: _screen_realtime(rule_ids, params, include_etf))
+    return dict(res) if res is not None else None      # 呼叫端會在最外層加欄位（market_open），給它一份淺複本
+
+
+def _screen_realtime(rule_ids, params, include_etf=False):
     kd_n = int(params.get('kd_n', 9))
     f = _load_frames(kd_n + 60)
     if f is None:

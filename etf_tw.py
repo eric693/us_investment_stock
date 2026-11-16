@@ -191,22 +191,33 @@ def dividend_stats(code, price):
 # ── 除息預告 ──────────────────────────────────────────────────────────
 def upcoming():
     def fetch():
-        out = []
-        try:
-            js = requests.get('https://www.twse.com.tw/rwd/zh/exRight/TWT48U?response=json', headers=HDRS, timeout=15).json()
-            for r in js.get('data', []):
-                if r[1].startswith('00') and '息' in r[3]:
-                    out.append({'date': _roc(r[0]), 'code': r[1], 'name': r[2], 'amount': _num(re.sub(r'<[^>]+>', '', r[7])), 'market': '上市'})
-        except Exception as e:
-            print(f'[etf] TWT48U: {e}')
-        try:
-            js = requests.get('https://www.tpex.org.tw/web/stock/exright/preAnnounce/PrePost_result.php?l=zh-tw&o=json',
-                              headers=HDRS, timeout=15).json()
-            for r in (js.get('tables') or [{}])[0].get('data', []):
-                if r[1].startswith('00') and '息' in r[3]:
-                    out.append({'date': _roc(r[0]), 'code': r[1], 'name': r[2], 'amount': _num(r[7]), 'market': '上櫃'})
-        except Exception as e:
-            print(f'[etf] TPEx: {e}')
+        def twse():
+            rows = []
+            try:
+                js = requests.get('https://www.twse.com.tw/rwd/zh/exRight/TWT48U?response=json', headers=HDRS, timeout=15).json()
+                for r in js.get('data', []):
+                    if r[1].startswith('00') and '息' in r[3]:
+                        rows.append({'date': _roc(r[0]), 'code': r[1], 'name': r[2], 'amount': _num(re.sub(r'<[^>]+>', '', r[7])), 'market': '上市'})
+            except Exception as e:
+                print(f'[etf] TWT48U: {e}')
+            return rows
+
+        def tpex():
+            rows = []
+            try:
+                js = requests.get('https://www.tpex.org.tw/web/stock/exright/preAnnounce/PrePost_result.php?l=zh-tw&o=json',
+                                  headers=HDRS, timeout=15).json()
+                for r in (js.get('tables') or [{}])[0].get('data', []):
+                    if r[1].startswith('00') and '息' in r[3]:
+                        rows.append({'date': _roc(r[0]), 'code': r[1], 'name': r[2], 'amount': _num(r[7]), 'market': '上櫃'})
+            except Exception as e:
+                print(f'[etf] TPEx: {e}')
+            return rows
+        # 上市、上櫃兩個來源同時抓
+        from concurrent.futures import ThreadPoolExecutor
+        with ThreadPoolExecutor(max_workers=2) as ex:
+            a, b = ex.submit(twse), ex.submit(tpex)
+            out = a.result() + b.result()
         today = pd.Timestamp.now(tz='Asia/Taipei').strftime('%Y-%m-%d')
         return sorted([x for x in out if x['date'] and x['date'] >= today], key=lambda x: (x['date'], x['code']))
     return _cached('upcoming', 3600, fetch)
@@ -214,18 +225,26 @@ def upcoming():
 
 # ── 比較 ──────────────────────────────────────────────────────────────
 def compare(codes, weights=None):
-    q = all_etf()
-    up = {u['code']: u for u in upcoming()}
+    # 每檔的成分股（MoneyDJ，一檔 2 秒多）、配息、除息預告原本一個一個排隊抓，三檔要十幾秒；改成同時抓
+    from concurrent.futures import ThreadPoolExecutor
+    with ThreadPoolExecutor(max_workers=8) as ex:
+        f_q, f_up = ex.submit(all_etf), ex.submit(upcoming)
+        f_h = {c: ex.submit(holdings, c) for c in dict.fromkeys(codes)}
+        q = f_q.result()
+        f_dv = {c: ex.submit(dividend_stats, c, q[c]['price'] or q[c]['prev_nav']) for c in f_h if q.get(c)}
+        up = {u['code']: u for u in f_up.result()}
+        hold = {c: f.result() for c, f in f_h.items()}
+        divs = {c: f.result() for c, f in f_dv.items()}
     items, H = [], {}
     for c in codes:
         base = q.get(c)
         if not base:
             continue
-        h = holdings(c) or {'rows': [], 'date': None}
+        h = hold[c] or {'rows': [], 'date': None}
         stocks = [r for r in h['rows'] if r['code']]
         H[c] = {r['code']: r['pct'] for r in stocks}
         price = base['price'] or base['prev_nav']
-        dv = dividend_stats(c, price)
+        dv = divs[c]
         top10 = sum(r['pct'] for r in sorted(stocks, key=lambda r: -r['pct'])[:10])
         inds = _industries([r['code'] for r in stocks])
         sec = {}
